@@ -6,56 +6,69 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE "Release")
 
-set(EXECUTABLE_NAME ${PROJECT_NAME})
-
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 ## 依赖查找
-find_package(ament_cmake  	REQUIRED)
+find_package(OpenCV 4.5 REQUIRED)
+find_package(OpenVINO REQUIRED)
+find_package(Ceres REQUIRED)
 
-find_package(OpenCV 4.5   	REQUIRED)
-find_package(OpenVINO     	REQUIRED)
-find_package(Ceres        	REQUIRED)
-
-find_package(PkgConfig 		REQUIRED)
-pkg_check_modules(FFMPEG  	REQUIRED
-	libavformat
-	libavcodec
-	libavutil
-	libswscale
-)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rmcs_executor REQUIRED)
+find_package(rmcs_msgs REQUIRED)
+find_package(rmcs_description REQUIRED)
+find_package(pluginlib REQUIRED)
 
 ## 目录包含
 include_directories(
 	${PROJECT_SOURCE_DIR}/src
-	${FFMPEG_INCLUDE_DIRS}
+	${rmcs_executor_INCLUDE_DIRS}
+	${rmcs_msgs_INCLUDE_DIRS}
+	${rmcs_description_INCLUDE_DIRS}
 )
 
 ## 代码资源搜索
 file(GLOB_RECURSE AUTO_AIM_SOURCE
 	CONFIGURE_DEPENDS
-	${PROJECT_SOURCE_DIR}/src/*.cpp
-	${PROJECT_SOURCE_DIR}/src/*.cc
+	${PROJECT_SOURCE_DIR}/src/kernel/*.cpp
+	${PROJECT_SOURCE_DIR}/src/kernel/*.cc
 )
 
 ## 构建目标
-find_package (ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies ()
-ament_auto_add_library(
-	${EXECUTABLE_NAME} SHARED
-	${AUTO_AIM_SOURCE}
+add_library(
+	${PROJECT_NAME}_library SHARED
+    ${AUTO_AIM_SOURCE}
 )
-
 target_link_libraries(
-	${EXECUTABLE_NAME}
-	${OpenCV_LIBS}
+	${PROJECT_NAME}_library
 	${HikCameraSDK_LIB}
-	${FFMPEG_LIBRARIES}
+	${OpenCV_LIBS}
 	openvino::runtime
 	Ceres::ceres
-	-lpthread
+	rclcpp::rclcpp
+)
+
+find_package (ament_cmake_auto REQUIRED)
+ament_auto_add_library(
+	${PROJECT_NAME}_component SHARED
+	${PROJECT_SOURCE_DIR}/src/component.cpp
+)
+target_link_libraries(
+	${PROJECT_NAME}_component
+	${PROJECT_NAME}_library
+	${rmcs_executor_LIBRARIES}
+)
+
+add_executable(
+    ${PROJECT_NAME}_runtime
+	${PROJECT_SOURCE_DIR}/src/runtime.cpp
+)
+target_link_libraries(
+	${PROJECT_NAME}_runtime
+	${PROJECT_NAME}_library
 )
 
 ## 安装配置
@@ -65,6 +78,10 @@ pluginlib_export_plugin_description_file(
 install(
     DIRECTORY models/
     DESTINATION share/${PROJECT_NAME}/models
+)
+install(
+  TARGETS ${PROJECT_NAME}_runtime
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
