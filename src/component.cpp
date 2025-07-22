@@ -6,14 +6,14 @@ namespace rmcs {
 
 static auto options = rclcpp::NodeOptions{}.automatically_declare_parameters_from_overrides(true);
 
-class AutoAimComponent
+class AutoAimComponent final
     : public rmcs_executor::Component
     , public rclcpp::Node {
 public:
     explicit AutoAimComponent() noexcept
-        : Node{Component::get_component_name(), options} {
+        : Node{get_component_name(), options} {
 
-        RCLCPP_INFO(get_logger(), "AutoAim Component initializing");
+        RCLCPP_INFO(get_logger(), "AutoAim Component is initializing now");
     }
 
     void update() override {}
