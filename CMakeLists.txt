@@ -20,7 +20,7 @@ find_package(fast_tf REQUIRED)
 
 ## 目录包含
 include_directories(
-	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/
 	${rmcs_executor_INCLUDE_DIRS}
 	${rmcs_msgs_INCLUDE_DIRS}
 	${rmcs_description_INCLUDE_DIRS}
@@ -37,7 +37,7 @@ file(GLOB_RECURSE AUTO_AIM_SOURCE
 ## 构建目标
 add_library(
 	${PROJECT_NAME}_library SHARED
-    ${AUTO_AIM_SOURCE}
+	${AUTO_AIM_SOURCE}
 )
 target_link_libraries(
 	${PROJECT_NAME}_library
@@ -70,15 +70,15 @@ target_link_libraries(
 
 ## 安装配置
 install(
-    DIRECTORY models/
-    DESTINATION share/${PROJECT_NAME}/models
+	DIRECTORY models/
+	DESTINATION share/${PROJECT_NAME}/models
 )
 install(
-  TARGETS
-  ${PROJECT_NAME}_runtime
-  ${PROJECT_NAME}_component
-  DESTINATION
-  lib/${PROJECT_NAME}
+	TARGETS
+	${PROJECT_NAME}_runtime
+	${PROJECT_NAME}_component
+	DESTINATION
+	lib/${PROJECT_NAME}
 )
 
 find_package(pluginlib REQUIRED)
