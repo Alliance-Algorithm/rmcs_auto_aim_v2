@@ -12,6 +12,8 @@ find_package(OpenCV 4.5 REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(Ceres REQUIRED)
 
+## ROS2 相关依赖
+find_package(type_description_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_msgs REQUIRED)
@@ -21,6 +23,8 @@ find_package(fast_tf REQUIRED)
 ## 目录包含
 include_directories(
 	${PROJECT_SOURCE_DIR}/src/
+	${rclcpp_INCLUDE_DIRS}
+	${type_description_interfaces_INCLUDE_DIRS}
 	${rmcs_executor_INCLUDE_DIRS}
 	${rmcs_msgs_INCLUDE_DIRS}
 	${rmcs_description_INCLUDE_DIRS}
@@ -35,6 +39,7 @@ file(GLOB_RECURSE AUTO_AIM_SOURCE
 )
 
 ## 构建目标
+## 核心构建
 add_library(
 	${PROJECT_NAME}_library SHARED
 	${AUTO_AIM_SOURCE}
@@ -45,8 +50,10 @@ target_link_libraries(
 	${OpenCV_LIBS}
 	openvino::runtime
 	Ceres::ceres
+	rclcpp::rclcpp
 )
 
+## 组件构建
 add_library(
 	${PROJECT_NAME}_component SHARED
 	${PROJECT_SOURCE_DIR}/src/component.cpp
@@ -54,10 +61,10 @@ add_library(
 target_link_libraries(
 	${PROJECT_NAME}_component
 	${PROJECT_NAME}_library
-	rclcpp::rclcpp
 	${rmcs_executor_LIBRARIES}
 )
 
+## 运行时构建
 add_executable(
     ${PROJECT_NAME}_runtime
 	${PROJECT_SOURCE_DIR}/src/runtime.cpp
@@ -65,20 +72,21 @@ add_executable(
 target_link_libraries(
 	${PROJECT_NAME}_runtime
 	${PROJECT_NAME}_library
-	rclcpp::rclcpp
 )
 
 ## 安装配置
 install(
-	DIRECTORY models/
-	DESTINATION share/${PROJECT_NAME}/models
+	DIRECTORY 
+		models/
+	DESTINATION 
+		share/
 )
 install(
-	TARGETS
-	${PROJECT_NAME}_runtime
-	${PROJECT_NAME}_component
+	TARGETS 
+		${PROJECT_NAME}_runtime
+		${PROJECT_NAME}_component
 	DESTINATION
-	lib/${PROJECT_NAME}
+		lib/${PROJECT_NAME}
 )
 
 find_package(pluginlib REQUIRED)

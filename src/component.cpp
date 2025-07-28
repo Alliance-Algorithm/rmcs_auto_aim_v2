@@ -13,10 +13,15 @@ public:
     explicit AutoAimComponent() noexcept
         : Node{get_component_name(), options} {
 
-        RCLCPP_INFO(get_logger(), "AutoAim Component is initializing now");
+        rclcpp_info("AutoAim Component is initializing now");
     }
 
     void update() override {}
+
+private:
+    auto rclcpp_info(const std::string& msg) const noexcept -> void {
+        RCLCPP_INFO(get_logger(), "%s", msg.c_str());
+    }
 };
 
 } // namespace rmcs
