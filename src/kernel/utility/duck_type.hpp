@@ -49,7 +49,7 @@ public:
         impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...>{});
     }
 
-    auto foreach (auto&& f) -> void              //]
+    auto foreach (auto&& f) -> void              //
         requires(std::invocable<decltype(f), Ts&> && ...) {
         std::apply([=](auto&... args) { (f(args), ...); }, elements_);
     }
