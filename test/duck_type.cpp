@@ -1,4 +1,4 @@
-#include "kernel/utility/duck_type.hpp"
+#include "utility/duck_type.hpp"
 
 #include <cstddef>
 #include <print>
@@ -67,9 +67,13 @@ TEST(DuckArrayTest, Access) {
             std::println("Has no unique function");
     };
     static auto index = std::size_t{0};
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     duck_array.at(index++, use_element);
     duck_array.at(index++, use_element);
     duck_array.at(index++, use_element);
+#pragma GCC diagnostic pop
 
     EXPECT_EQ(has_unique_count, 1);
 }

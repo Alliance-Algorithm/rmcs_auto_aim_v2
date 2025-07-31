@@ -1,5 +1,4 @@
 #include <rclcpp/executor.hpp>
-#include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/utilities.hpp>
 
