@@ -3,7 +3,7 @@
 #include <chrono>
 #include <opencv2/core/mat.hpp>
 
-namespace rmcs {
+namespace rmcs::capturer {
 
 class VideoCapturer {
     RMCS_PIMPL_DEFINITION(VideoCapturer)
@@ -17,4 +17,4 @@ public:
     auto set_framerate(double hz) noexcept;
 };
 
-} // namespace rmcs
+} // namespace rmcs::capturer

@@ -9,9 +9,9 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
 
-using namespace rmcs;
+using namespace rmcs::capturer;
 
-struct VideoCapturer::Impl {
+struct VideoCapturer::Impl final {
     explicit Impl() noexcept = default;
 
     explicit Impl(const std::string& path) { open(path); }

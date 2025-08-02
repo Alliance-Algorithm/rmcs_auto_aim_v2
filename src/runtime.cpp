@@ -1,15 +1,10 @@
-#include <rclcpp/executor.hpp>
-#include <rclcpp/logging.hpp>
-#include <rclcpp/utilities.hpp>
+#include "kernel/kernel.hpp"
+#include "utility/directory.hpp"
+#include <print>
 
-const auto logger = rclcpp::get_logger("auto-aim-runtime");
+using namespace rmcs;
 
-/// @note 初步决定使用共享内存进行自瞄进程和组件进程的通讯
-///       这两个进程解耦是势在必行的
-auto main(int argc, const char* const* argv) -> int {
-    rclcpp::init(argc, argv);
-
-    RCLCPP_INFO(logger, "Hello World");
-
-    rclcpp::shutdown();
+auto main() -> int {
+    std::println("Hello World!!");
+    std::println("Path: {}", get_directory());
 }

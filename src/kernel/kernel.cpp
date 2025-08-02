@@ -1,39 +1,50 @@
 #include "kernel.impl.hpp"
-
-#include <hikcamera/image_capturer.hpp>
+#include "modules/capturer/hikcamera.hpp"
+#include "modules/capturer/video.hpp"
 
 using namespace rmcs;
 
-namespace v1 {
-using Capturer = hikcamera::ImageCapturer;
-using Identifier = void;
-using Tracker = void;
-using Kernel = internal::Kernel<Capturer, Identifier, Tracker>;
-} // namespace v1
+struct runtime {
+    using capture_t = capturer::CameraCapturer;
+    using identifier_t = void;
+    using tracker_t = void;
+    using kernel_t = Kernel<capture_t, identifier_t, tracker_t>;
 
-namespace v2 {
-using Capturer = hikcamera::ImageCapturer;
-using Identifier = void;
-using Tracker = void;
-using Kernel = internal::Kernel<Capturer, Identifier, Tracker>;
-} // namespace v2
+    static auto setup() -> std::unique_ptr<kernel_t> {
+        auto capturer = std::make_unique<capture_t>();
+
+        return std::make_unique<kernel_t>(std::move(capturer));
+    }
+};
+struct develop {
+    using capture_t = capturer::VideoCapturer;
+    using identifier_t = void;
+    using tracker_t = void;
+    using kernel_t = Kernel<capture_t, identifier_t, tracker_t>;
+
+    static auto setup() -> std::unique_ptr<kernel_t> {
+        auto capturer = std::make_unique<capture_t>();
+
+        return std::make_unique<kernel_t>(std::move(capturer));
+    }
+};
 
 struct AutoAimKernel::Impl {
 public:
-    explicit Impl(rclcpp::Node& node) noexcept
-        : node_{node} {
-        //
-        auto capturer = hikcamera::ImageCapturer{};
+    using mode = runtime;
 
-        rclcpp_info("AutoAim Kernel is initializing now");
-    }
+    explicit Impl() noexcept
+        : kernel_{mode::setup()} {}
+
+    auto run() -> void {}
 
 private:
-    std::unique_ptr<v1::Kernel> kernel_;
-
-    rclcpp::Node& node_;
-
-    auto rclcpp_info(const std::string& msg) const noexcept -> void {
-        RCLCPP_INFO(node_.get_logger(), "%s", msg.c_str());
-    }
+    std::unique_ptr<mode::kernel_t> kernel_;
 };
+
+AutoAimKernel::AutoAimKernel() noexcept
+    : pimpl{std::make_unique<Impl>()} {}
+
+AutoAimKernel::~AutoAimKernel() noexcept = default;
+
+auto AutoAimKernel::run() -> void { pimpl->run(); }
