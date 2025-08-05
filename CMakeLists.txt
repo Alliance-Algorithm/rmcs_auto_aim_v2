@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE "Release")
-add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_options(-Wall -Wextra -Wpedantic -O3)
 
 ## 依赖查找
 find_package(OpenCV 4.5 REQUIRED)
@@ -18,6 +18,8 @@ find_package(Ceres REQUIRED)
 find_package(type_description_interfaces REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_msgs REQUIRED)
 find_package(rmcs_description REQUIRED)
@@ -26,8 +28,11 @@ find_package(fast_tf REQUIRED)
 ## 目录包含
 include_directories(
     ${PROJECT_SOURCE_DIR}/src/
+
     ${type_description_interfaces_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
+    ${sensor_msgs_INCLUDE_DIRS}
+
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_msgs_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
@@ -35,25 +40,38 @@ include_directories(
 )
 
 ## 代码资源搜索
-file(GLOB_RECURSE AUTO_AIM_SOURCE
+file(GLOB_RECURSE AUTO_AIM_KERNEL
     CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/kernel/*.cpp
     ${PROJECT_SOURCE_DIR}/src/kernel/*.cc
+)
+file(GLOB_RECURSE AUTO_AIM_MODULE
+    CONFIGURE_DEPENDS
+    ${PROJECT_SOURCE_DIR}/src/modules/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/modules/*.cc
 )
 
 ## 构建目标
 ## 核心构建
 add_library(
-    ${PROJECT_NAME}_library SHARED
-    ${AUTO_AIM_SOURCE}
+    ${PROJECT_NAME}_kernel SHARED
+    ${AUTO_AIM_KERNEL}
 )
 target_link_libraries(
-    ${PROJECT_NAME}_library
+    ${PROJECT_NAME}_kernel
+    ${OpenCV_LIBS}
+    rclcpp::rclcpp
+)
+add_library(
+    ${PROJECT_NAME}_module SHARED
+    ${AUTO_AIM_MODULE}
+)
+target_link_libraries(
+    ${PROJECT_NAME}_module
     ${HikCameraSDK_LIB}
     ${OpenCV_LIBS}
     openvino::runtime
     Ceres::ceres
-    rclcpp::rclcpp
 )
 
 ## 组件构建
@@ -63,7 +81,8 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}_component
-    ${PROJECT_NAME}_library
+    ${PROJECT_NAME}_kernel
+    ${PROJECT_NAME}_module
     ${rmcs_executor_LIBRARIES}
 )
 
@@ -74,7 +93,8 @@ add_executable(
 )
 target_link_libraries(
     ${PROJECT_NAME}_runtime
-    ${PROJECT_NAME}_library
+    ${PROJECT_NAME}_kernel
+    ${PROJECT_NAME}_module
     ament_index_cpp::ament_index_cpp
 )
 target_compile_definitions(
@@ -90,19 +110,24 @@ if(BUILD_TESTING)
     )
     target_link_libraries(
         test_duck_type
-        ${PROJECT_NAME}_library
+        ${PROJECT_NAME}_kernel
+        ${PROJECT_NAME}_module
     )
 endif()
 
 ## 安装配置
 install(
-    DIRECTORY config/
-    DESTINATION share/
+    DIRECTORY 
+        config/
+    DESTINATION 
+        share/
 )
 install(
-    TARGETS ${PROJECT_NAME}_runtime
-            ${PROJECT_NAME}_component
-    DESTINATION lib/${PROJECT_NAME}
+    TARGETS
+        ${PROJECT_NAME}_runtime
+        ${PROJECT_NAME}_component
+    DESTINATION
+        lib/${PROJECT_NAME}
 )
 
 find_package(pluginlib REQUIRED)

@@ -1,10 +1,14 @@
-#include "kernel/kernel.hpp"
-#include "utility/directory.hpp"
-#include <print>
+#include "modules/debug/visualization/visualization.hpp"
+#include <opencv2/opencv.hpp>
+#include <rclcpp/utilities.hpp>
 
-using namespace rmcs;
+int main(int argc, char** argv) {
+    using namespace rmcs;
 
-auto main() -> int {
-    std::println("Hello World!!");
-    std::println("Path: {}", get_directory());
+    rclcpp::init(argc, argv);
+
+    auto node = utility::Node { "test" };
+    module::Visualization::block_and_test(node);
+
+    return rclcpp::shutdown();
 }

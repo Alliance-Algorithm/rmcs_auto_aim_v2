@@ -30,44 +30,27 @@ public:
     }
 
     template <std::size_t index>
-    [[nodiscard]] auto at() {
-        return std::get<index>(elements_);
-    }
-    template <std::size_t index>
-    [[nodiscard]] auto at() const {
-        return std::get<index>(elements_);
+    [[nodiscard]] auto at(this auto&& self) {
+        return std::get<index>(self.elements_);
     }
 
     [[deprecated("Prefer at<index>() for compile-time access")]]
-    auto at(std::size_t index, auto&& f) -> void //
+    auto at(this auto&& self, std::size_t index, auto&& f) -> void
         requires(std::invocable<decltype(f), Ts&> && ...) {
-        impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...>{});
-    }
-    [[deprecated("Prefer at<index>() for compile-time access")]]
-    auto at(std::size_t index, auto&& f) const -> void
-        requires(std::invocable<decltype(f), Ts&> && ...) {
-        impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...>{});
+        self.impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...>{});
     }
 
-    auto foreach (auto&& f) -> void              //
+    auto foreach (this auto&& self, auto&& f) -> void
         requires(std::invocable<decltype(f), Ts&> && ...) {
-        std::apply([=](auto&... args) { (f(args), ...); }, elements_);
-    }
-    auto foreach (auto&& f) const -> void        //
-        requires(std::invocable<decltype(f), const Ts&> && ...) {
-        std::apply([=](const auto&... args) { (f(args), ...); }, elements_);
+        std::apply([=](auto&... args) { (f(args), ...); }, self.elements_);
     }
 
 private:
     std::tuple<Ts...> elements_;
 
     template <std::size_t... Is>
-    void impl_at(auto&& f, std::size_t index, std::index_sequence<Is...>) {
-        ((index == Is ? (void)f(std::get<Is>(elements_)) : void()), ...);
-    }
-    template <std::size_t... Is>
-    void impl_at(auto&& f, std::size_t index, std::index_sequence<Is...>) const {
-        ((index == Is ? (void)f(std::get<Is>(elements_)) : void()), ...);
+    void impl_at(this auto&& self, auto&& f, std::size_t index, std::index_sequence<Is...>) {
+        ((index == Is ? (void)f(std::get<Is>(self.elements_)) : void()), ...);
     }
 };
 

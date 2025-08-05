@@ -3,7 +3,7 @@
 #include <chrono>
 #include <opencv2/core/mat.hpp>
 
-namespace rmcs::capturer {
+namespace rmcs::module {
 
 class VideoCapturer {
     RMCS_PIMPL_DEFINITION(VideoCapturer)
