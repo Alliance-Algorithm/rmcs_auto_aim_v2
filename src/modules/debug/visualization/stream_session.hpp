@@ -1,4 +1,5 @@
 #pragma once
+#include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/videoio/registry.hpp>
 
@@ -9,55 +10,62 @@
 
 namespace rmcs::module {
 
-// A simple wrapper for pipline string generation
-struct Pipeline final {
-
-    explicit Pipeline(std::string src, const auto&... pipline) noexcept
-        requires(std::is_constructible_v<std::string, decltype(pipline)> && ...)
-        : content(std::move(src)) {
-        (content.append(std::string { " ! " } + pipline), ...);
-    }
-
-    auto append(const std::string& context) noexcept -> Pipeline& {
-        content.append(" ! " + context);
-        return *this;
-    }
-
-    explicit operator std::string() const noexcept { return content; }
-
-    static auto udpsink(const std::string& host, const std::string& port, int w, int h, int fps) {
-        auto pipeline = Pipeline { "appsrc" };
-        {
-            constexpr auto fmt_1 = "video/x-raw,format=YUY2,width={},height={},framerate={}/1";
-            constexpr auto fmt_2 = "udpsink host={} port={}";
-
-            const auto encode = std::format(fmt_1, w, h, fps);
-            const auto server = std::format(fmt_2, host, port);
-
-            pipeline.append("videoconvert");
-            pipeline.append(encode);
-            pipeline.append("jpegenc");
-            pipeline.append("rtpjpegpay");
-            pipeline.append(server);
-        }
-        return pipeline;
-    }
-
-    std::string content;
-};
-
 struct StreamSession {
 
-    explicit StreamSession(const std::string& host, const std::string& port, int w, int h, int fps)
-        : pipeline { Pipeline::udpsink(host, port, w, h, fps) } {
+    static constexpr auto template_rtp = [] {
+        return "appsrc "
+               "! videoconvert "
+               "! video/x-raw,format=YUY2,width={},height={},framerate={}/1 "
+               "! jpegenc "
+               "! rtpjpegpay "
+               "! udpsink host={} port={}";
+    };
+    static constexpr auto template_rtsp = [] {
+        return "appsrc "
+               "! videoconvert "
+               "! video/x-raw,format=YUY2,width={},height={},framerate={}/1 "
+               "! x264enc tune=zerolatency bitrate=600 speed-preset=ultrafast "
+               "! rtph264pay config-interval=1 pt=96 "
+               "! udpsink host={} port={}";
+    };
 
-        sender = std::make_unique<cv::VideoWriter>(
-            std::string { pipeline }, cv::CAP_GSTREAMER, 0, fps, cv::Size(w, h), true);
+    template <auto fmt>
+    auto open(int w, int h, int hz, std::string host, std::string port) noexcept
+        -> std::expected<void, std::string> {
 
-        if (!sender->isOpened()) sender.reset(nullptr);
+        this->pipeline = std::format(fmt(), w, h, hz, host, port);
+        this->host     = std::move(host);
+        this->port     = std::move(port);
+        this->w        = w;
+        this->h        = h;
+        this->hz       = hz;
+
+        this->sender = std::make_unique<cv::VideoWriter>(
+            pipeline, cv::CAP_GSTREAMER, 0, hz, cv::Size(w, h), true);
+
+        if (!sender->isOpened()) {
+            sender.reset(nullptr);
+            return std::unexpected {
+                "Unable to open pipeline, check your pipeline config or dependency in system",
+            };
+        }
+        return {};
+    }
+
+    auto open_rtp(int w, int h, int hz, std::string host, std::string port) noexcept
+        -> std::expected<void, std::string> {
+        return open<template_rtp>(w, h, hz, std::move(host), std::move(port));
+    }
+    auto open_rtsp(int w, int h, int hz, std::string host, std::string port) noexcept
+        -> std::expected<void, std::string> {
+        return open<template_rtsp>(w, h, hz, std::move(host), std::move(port));
     }
 
     auto opened() const noexcept { return bool { sender }; }
+
+    auto send(const cv::Mat& content) const noexcept {
+        if (sender) sender->write(content);
+    }
 
     static auto check_support() -> std::expected<void, std::string> {
         if (!cv::videoio_registry::getBackendName(cv::CAP_GSTREAMER).empty()) {
@@ -72,7 +80,10 @@ struct StreamSession {
     }
 
     std::unique_ptr<cv::VideoWriter> sender;
-    Pipeline pipeline;
+    std::string pipeline;
+
+    int w, h, hz;
+    std::string host, port;
 };
 
 }

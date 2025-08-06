@@ -103,16 +103,7 @@ target_compile_definitions(
 )
 
 if(BUILD_TESTING)
-    find_package(ament_cmake_gtest REQUIRED)
-    ament_add_gtest(
-        test_duck_type
-        test/duck_type.cpp
-    )
-    target_link_libraries(
-        test_duck_type
-        ${PROJECT_NAME}_kernel
-        ${PROJECT_NAME}_module
-    )
+    include(test/test.cmake)
 endif()
 
 ## 安装配置

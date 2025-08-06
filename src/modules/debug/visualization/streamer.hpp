@@ -1,11 +1,12 @@
 #pragma once
+#include "stream_mode.hpp"
 #include "utility/node.hpp"
 #include <opencv2/core/mat.hpp>
 
 namespace rmcs::module {
 
 /// @brief
-/// Use the gstreamer module built into opencv to stream video and visualize some 3d data like
+/// Use the gstreamer module built into opencv to stream video
 /// transform node or armor plate
 ///
 /// @note
@@ -14,13 +15,24 @@ namespace rmcs::module {
 ///      - gstreamer1.0-plugins-base
 ///      - gstreamer1.0-plugins-good
 ///
-class Visualization {
+class Streamer {
 public:
     // Use node to log
-    explicit Visualization(utility::Node&) noexcept;
-    ~Visualization() noexcept;
-    Visualization(const Visualization&)            = delete;
-    Visualization& operator=(const Visualization&) = delete;
+    explicit Streamer(utility::Node&) noexcept;
+    ~Streamer() noexcept;
+    Streamer(const Streamer&)            = delete;
+    Streamer& operator=(const Streamer&) = delete;
+
+    // Real-time Transport Protocol using UDP
+    struct RTP_UDP : public UdpConfig { };
+    // Real-Time Streaming Protocol using UDP
+    struct RTSP_UDP : public UdpConfig { };
+    // Real-Time Streaming Protocol using TCP
+    struct RTSP_TCP : public TcpConfig { };
+
+    auto open(const RTP_UDP& config) -> bool;
+    auto open(const RTSP_UDP& config) -> bool;
+    auto open(const RTSP_TCP& config) -> bool;
 
     /// @brief
     /// Pushes a cv::Mat image into the queue and then streaming.
@@ -37,7 +49,7 @@ public:
     /// @return
     /// true, if the push operation is successful.
     ///
-    auto streaming(const cv::Mat& image) noexcept -> bool;
+    auto send(const cv::Mat& image) noexcept -> bool;
 
     /// @brief
     /// Generates a synthetic test image with a gradually changing hue.
@@ -50,26 +62,6 @@ public:
     /// A cv::Mat containing the generated BGR image.
     ///
     auto generate_test_image(uint8_t& hue) const noexcept -> cv::Mat;
-
-    /// @brief
-    /// Block process and generate a video stream with gradient color
-    ///
-    /// @note
-    /// target: 127.0.0.1:5000
-    /// width : 640
-    /// height: 480
-    /// fps   : 30
-    /// Just for test
-    /// You can use vlc to play this stream:
-    ///
-    ///     v=0
-    ///     m=video 5000 RTP/AVP 26
-    ///     c=IN IP4 127.0.0.1
-    ///     a=rtpmap:26 JPEG/90000
-    ///
-    /// Create streaming.sdp with the above content and open it with vlc
-    ///
-    static auto block_and_test(utility::Node& node) noexcept -> void;
 
 private:
     struct Impl;
