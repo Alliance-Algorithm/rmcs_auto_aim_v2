@@ -9,14 +9,10 @@ namespace rmcs::module {
 /// transform node or armor plate
 ///
 /// @note
-/// depends:
+/// depends, use apt to install them:
 ///      - gstreamer1.0-tools
-///
-/// some tools may be useful:
 ///      - gstreamer1.0-plugins-base
 ///      - gstreamer1.0-plugins-good
-///      - gstreamer1.0-tools
-///      - gstreamer1.0-plugins-ugly
 ///
 class Visualization {
 public:
@@ -80,4 +76,4 @@ private:
     std::unique_ptr<Impl> pimpl;
 };
 
-} // namespace rmcs::debug
+}

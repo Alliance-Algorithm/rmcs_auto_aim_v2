@@ -1,4 +1,5 @@
 #include "visualization.hpp"
+#include "stream_session.hpp"
 
 #include <boost/lockfree/spsc_queue.hpp>
 
@@ -13,26 +14,15 @@
 
 using namespace rmcs::module;
 
-// A simple wrapper for pipline string generation
-struct Pipline final : public std::string {
-    explicit Pipline(const std::string& src, const auto&... pipline) noexcept
-        requires(std::is_constructible_v<std::string, decltype(pipline)> && ...)
-        : std::string(src) {
-        (this->std::string::append(std::string { " ! " } + pipline), ...);
-    }
-    auto append(const std::string& context) noexcept -> Pipline& {
-        std::string::append(" ! " + context);
-        return *this;
-    }
-    auto string() const noexcept { return static_cast<std::string>(*this); }
-};
-
 struct Visualization::Impl final {
 public:
-    explicit Impl(utility::Node& node) noexcept
+    explicit Impl(utility::Node& node, bool use_streaming = false) noexcept
         : node_ { node } {
 
-        streaming_thread_ = std::jthread { [this](const auto& token) { streaming_thread(token); } };
+        if (use_streaming) {
+            streaming_thread_ =
+                std::jthread { [this](const auto& token) { streaming_thread(token); } };
+        }
     }
 
     ~Impl() noexcept {
@@ -72,24 +62,12 @@ private:
 
 private:
     auto streaming_thread(const std::stop_token& token) -> void {
-        auto pipeline = Pipline { "appsrc" };
-        {
-            const auto pipline_encode = //
-                std::format("video/x-raw,format=YUY2,width={},height={},framerate={}/1",
-                    stream_width_, stream_height_, stream_fps_);
 
-            const auto pipline_server =
-                std::format("udpsink host={} port={}", stream_host_, stream_port_);
+        const auto pipeline = Pipeline::udpsink(
+            stream_host_, stream_port_, stream_width_, stream_height_, stream_fps_);
 
-            pipeline.append("videoconvert");
-            pipeline.append(pipline_encode);
-            pipeline.append("jpegenc");
-            pipeline.append("rtpjpegpay");
-            pipeline.append(pipline_server);
-        }
-
-        auto stream_sender = cv::VideoWriter(pipeline, cv::CAP_GSTREAMER, 0, stream_fps_,
-            cv::Size(stream_width_, stream_height_), true);
+        auto stream_sender = cv::VideoWriter(std::string { pipeline }, cv::CAP_GSTREAMER, 0,
+            stream_fps_, cv::Size(stream_width_, stream_height_), true);
         if (!stream_sender.isOpened()) {
             node_.rclcpp_error("Failed to open the stream pipeline, can not show the image");
             return;
@@ -99,7 +77,7 @@ private:
 
         auto timestamp = std::chrono::steady_clock::now();
 
-        node_.rclcpp_info("Streaming thread start: [{}]", pipeline.string());
+        node_.rclcpp_info("Streaming thread start: [{}]", std::string { pipeline });
 
         // Process loop
         while (!token.stop_requested()) {
