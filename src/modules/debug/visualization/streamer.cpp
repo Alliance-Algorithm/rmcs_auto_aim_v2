@@ -60,6 +60,8 @@ public:
         return false;
     }
 
+    auto opened() const noexcept -> bool { return session_->opened(); }
+
     auto send(const cv::Mat& image) noexcept -> bool { return buffer_.push(image); }
 
     static auto generate_test_image(uint8_t& hue) noexcept -> cv::Mat {
@@ -120,6 +122,8 @@ Streamer::~Streamer() noexcept = default;
 auto Streamer::open(const RTP_UDP& config) -> bool { return pimpl->open(config); }
 auto Streamer::open(const RTSP_UDP& config) -> bool { return pimpl->open(config); }
 auto Streamer::open(const RTSP_TCP& config) -> bool { return pimpl->open(config); }
+
+auto Streamer::opened() const noexcept -> bool { return pimpl->opened(); }
 
 auto Streamer::send(const cv::Mat& image) noexcept -> bool { return pimpl->send(image); }
 

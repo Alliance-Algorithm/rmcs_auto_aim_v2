@@ -1,4 +1,5 @@
 #pragma once
+
 #include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/videoio/registry.hpp>
@@ -43,10 +44,13 @@ struct StreamSession {
         this->sender = std::make_unique<cv::VideoWriter>(
             pipeline, cv::CAP_GSTREAMER, 0, hz, cv::Size(w, h), true);
 
-        if (!sender->isOpened()) {
+        if (sender->isOpened() == false) {
             sender.reset(nullptr);
             return std::unexpected {
-                "Unable to open pipeline, check your pipeline config or dependency in system",
+                "[ERROR] Unable to open pipeline.\n"
+                "Please install required packages or check your pipeline config\n"
+                "  sudo apt install "
+                "gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good\n",
             };
         }
         return {};

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "stream_mode.hpp"
 #include "utility/node.hpp"
 #include <opencv2/core/mat.hpp>
@@ -33,6 +34,8 @@ public:
     auto open(const RTP_UDP& config) -> bool;
     auto open(const RTSP_UDP& config) -> bool;
     auto open(const RTSP_TCP& config) -> bool;
+
+    auto opened() const noexcept -> bool;
 
     /// @brief
     /// Pushes a cv::Mat image into the queue and then streaming.

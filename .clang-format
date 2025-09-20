@@ -1,5 +1,5 @@
 Language: Cpp
-
+ 
 BasedOnStyle: WebKit
 
 # 使用空格而不是 Tab
@@ -15,6 +15,9 @@ AlignTrailingComments: true
 
 # 大括号的换行规则
 BreakBeforeBraces: Attach
+
+# 模板定义的换行规则
+BreakTemplateDeclarations: true
 
 # 最大列宽度
 ColumnLimit: 100
