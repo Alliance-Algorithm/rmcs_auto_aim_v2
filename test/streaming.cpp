@@ -26,22 +26,26 @@ int main(int argc, char** argv) {
     constexpr auto w    = int { 1440 };
     constexpr auto h    = int { 1080 };
 
+    // NOTE: Stream Session
     using debug::StreamSession;
     auto stream_session = StreamSession {
         StreamSession::StreamType::RTP_JEPG,
         StreamSession::StreamTarget { host, port },
         StreamSession::VideoFormat { w, h, hz },
     };
-    stream_session.set_notifier(
-        [&](const std::string& msg) { node.rclcpp_info("StreamSession: {}", msg); });
+    stream_session.set_notifier([&](auto msg) { node.rclcpp_info("StreamSession: {}", msg); });
     auto result = stream_session.open();
     if (!result) {
         node.rclcpp_error("{}", result.error());
     }
 
     auto sdp = stream_session.session_description_protocol();
-    if (sdp) node.rclcpp_info("Sdp:\n{}", sdp.value());
-    else node.rclcpp_error("{}", sdp.error());
+    if (sdp) {
+        node.rclcpp_info("Sdp:\n{}", sdp.value());
+    } else {
+        node.rclcpp_error("{}", sdp.error());
+    }
+    // NOTE: End
 
     auto camera  = std::unique_ptr<hikcamera::ImageCapturer> {};
     auto profile = hikcamera::ImageCapturer::CameraProfile {};
@@ -95,9 +99,11 @@ int main(int argc, char** argv) {
             }
         });
 
+        // NOTE: Stream Session
         if (!stream_session.push_frame(current_frame)) {
             node.rclcpp_warn("Frame was pushed failed");
         }
+        // NOTE: End
 
         const auto interval   = std::chrono::steady_clock::now() - timestamp;
         const auto frame_cost = std::chrono::duration<double> { interval };
@@ -105,15 +111,14 @@ int main(int argc, char** argv) {
 
         {
             static auto info_timestamp = std::chrono::steady_clock::now();
-            const auto now             = std::chrono::steady_clock::now();
 
+            const auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - info_timestamp)
                 >= std::chrono::seconds(3)) {
                 node.rclcpp_info("Frame Rate: {}", frame_rate);
                 info_timestamp = now;
             }
         }
-
         timestamp = std::chrono::steady_clock::now();
     }
 
