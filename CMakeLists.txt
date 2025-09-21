@@ -24,6 +24,7 @@ find_package(rmcs_executor REQUIRED)
 find_package(rmcs_msgs REQUIRED)
 find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
+find_package(hikcamera REQUIRED)
 
 ## 目录包含
 include_directories(
@@ -68,8 +69,8 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}_module
-    ${HikCameraSDK_LIB}
     ${OpenCV_LIBS}
+    ${hikcamera_LIBRARIES}
     openvino::runtime
     Ceres::ceres
 )
@@ -108,9 +109,9 @@ endif()
 
 ## 安装配置
 install(
-    DIRECTORY 
+    DIRECTORY
         config/
-    DESTINATION 
+    DESTINATION
         share/
 )
 install(

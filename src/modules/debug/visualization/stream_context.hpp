@@ -26,7 +26,7 @@ public:
     };
 
 public:
-    constexpr explicit StreamContext(StreamType stream_type, const VideoFormat& video_format,
+    explicit StreamContext(StreamType stream_type, const VideoFormat& video_format,
         const StreamTarget& stream_target) noexcept
         : video_format_ { video_format }
         , stream_type_ { stream_type }

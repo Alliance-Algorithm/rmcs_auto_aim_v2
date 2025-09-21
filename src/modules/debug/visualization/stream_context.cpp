@@ -1,5 +1,3 @@
-#pragma once
-
 #include "stream_context.hpp"
 #include <opencv2/videoio/registry.hpp>
 
@@ -23,7 +21,7 @@ constexpr auto make_rtph264 = [](int w, int h, int hz, std::string_view host,
     constexpr auto configuration = std::string_view {
         "appsrc "
         "! videoconvert "
-        "! video/x-raw,format=YUY2,width={},height={},framerate={}/1 "
+        "! video/x-raw,format=I420,width={},height={},framerate={}/1 "
         "! x264enc tune=zerolatency bitrate=600 speed-preset=ultrafast "
         "! rtph264pay config-interval=1 pt=96 "
         "! udpsink host={} port={}",
@@ -110,6 +108,8 @@ auto StreamContext::session_description_protocol(const std::string_view& local_i
     case StreamType::NONE:
         return std::unexpected { "Unexpected stream type" };
     }
+
+    return std::unexpected { "unreachable" };
 }
 
 auto StreamContext::write(FrameRef frame) const noexcept -> void {
