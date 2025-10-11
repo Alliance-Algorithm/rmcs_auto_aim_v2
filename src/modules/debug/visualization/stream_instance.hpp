@@ -1,19 +1,26 @@
 #pragma once
 #include "stream_context.hpp"
 #include <functional>
-#include <memory>
 
 namespace rmcs::debug {
 
+using StreamTarget = StreamContext::StreamTarget;
+using StreamType   = StreamContext::StreamType;
+using VideoFormat  = StreamContext::VideoFormat;
+using FrameRef     = StreamContext::FrameRef;
+
 class StreamSession {
 public:
-    using StreamTarget = StreamContext::StreamTarget;
-    using StreamType   = StreamContext::StreamType;
-    using VideoFormat  = StreamContext::VideoFormat;
-    using FrameRef     = StreamContext::FrameRef;
+    struct Target {
+        StreamTarget target;
+        StreamType type;
+        VideoFormat format;
+    };
 
 public:
     explicit StreamSession(StreamType, const StreamTarget&, const VideoFormat&) noexcept;
+    explicit StreamSession(const Target&) noexcept;
+
     ~StreamSession() noexcept;
 
     StreamSession(const StreamSession&)            = delete;

@@ -1,17 +1,17 @@
+#include "kernel/capturer.hpp"
 #include "modules/debug/visualization/stream_context.hpp"
 #include "modules/debug/visualization/stream_instance.hpp"
+#include "utility/image.hpp"
+#include "utility/image.impl.hpp"
 #include "utility/node.hpp"
 
-#include <hikcamera/image_capturer.hpp>
 #include <opencv2/highgui.hpp>
 #include <rclcpp/utilities.hpp>
 
 #include <chrono>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
-#include <thread>
 
 int main(int argc, char** argv) {
     using namespace rmcs;
@@ -27,68 +27,44 @@ int main(int argc, char** argv) {
     constexpr auto h    = int { 1080 };
 
     // NOTE: Stream Session
-    using debug::StreamSession;
-    auto stream_session = StreamSession {
-        StreamSession::StreamType::RTP_JEPG,
-        StreamSession::StreamTarget { host, port },
-        StreamSession::VideoFormat { w, h, hz },
-    };
-    stream_session.set_notifier([&](auto msg) { node.rclcpp_info("StreamSession: {}", msg); });
-    auto result = stream_session.open();
-    if (!result) {
-        node.rclcpp_error("{}", result.error());
-    }
+    using namespace rmcs::debug;
 
-    auto sdp = stream_session.session_description_protocol();
-    if (sdp) {
-        node.rclcpp_info("Sdp:\n{}", sdp.value());
+    auto check = StreamContext::check_support();
+    if (!check) node.rclcpp_error("{}", check.error());
+
+    auto configuration   = StreamSession::Target {};
+    configuration.target = StreamTarget { host, port };
+    configuration.type   = StreamType::RTP_JEPG;
+    configuration.format = VideoFormat { w, h, hz };
+
+    auto stream_session = StreamSession { configuration };
+    stream_session.set_notifier([&](auto msg) { //
+        node.rclcpp_info("[StreamSession] {}", msg);
+    });
+    if (auto result = stream_session.open(); !result) {
+        node.rclcpp_error("{}", result.error());
+        rclcpp::shutdown();
+    }
+    if (auto sdp = stream_session.session_description_protocol()) {
+        node.rclcpp_info("\n\n\n{}\n\n", sdp.value());
     } else {
         node.rclcpp_error("{}", sdp.error());
     }
     // NOTE: End
 
-    auto camera  = std::unique_ptr<hikcamera::ImageCapturer> {};
-    auto profile = hikcamera::ImageCapturer::CameraProfile {};
-
-    using namespace std::chrono_literals;
-    profile.exposure_time = 2ms;
-    profile.invert_image  = false;
-
-    const auto try_make_hikcamera = [&] {
-        camera.reset();
-        while (rclcpp::ok() && !camera) {
-            try {
-                camera = std::make_unique<hikcamera::ImageCapturer>(profile);
-                camera->set_frame_rate_inner_trigger_mode(hz);
-            } catch (const std::runtime_error& e) {
-
-                node.rclcpp_error("Hikcamera: {}", e.what());
-                std::this_thread::yield();
-
-                using namespace std::chrono_literals;
-                std::this_thread::sleep_for(2s);
-            }
-        }
-    };
-    try_make_hikcamera();
-
-    auto check = debug::StreamContext::check_support();
-    if (!check) node.rclcpp_error("{}", check.error());
+    auto hikcamera = std::make_unique<kernel::Capturer>();
+    if (!hikcamera->initialize()) { }
+    hikcamera->start_working();
 
     auto timestamp = std::chrono::steady_clock::now();
     auto once_flag = std::once_flag {};
 
     while (rclcpp::ok()) {
 
-        auto current_frame = cv::Mat {};
-        try {
-            using namespace std::chrono_literals;
-            current_frame = camera->read(200ms);
-        } catch (const std::runtime_error& error) {
-            node.rclcpp_error("Error while capturing: {}", error.what());
-            try_make_hikcamera();
-        }
+        auto image = hikcamera->fetch();
+        if (!image) continue;
 
+        auto& current_frame = image->details().mat;
         std::call_once(once_flag, [&] {
             const auto frame_w = current_frame.cols;
             const auto frame_h = current_frame.rows;
@@ -108,7 +84,6 @@ int main(int argc, char** argv) {
         const auto interval   = std::chrono::steady_clock::now() - timestamp;
         const auto frame_cost = std::chrono::duration<double> { interval };
         const auto frame_rate = 1. / frame_cost.count();
-
         {
             static auto info_timestamp = std::chrono::steady_clock::now();
 

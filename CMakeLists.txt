@@ -13,6 +13,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -O3)
 find_package(OpenCV 4.5 REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 ## ROS2 相关依赖
 find_package(type_description_interfaces REQUIRED)
@@ -50,6 +51,8 @@ file(GLOB_RECURSE AUTO_AIM_MODULE
     CONFIGURE_DEPENDS
     ${PROJECT_SOURCE_DIR}/src/modules/*.cpp
     ${PROJECT_SOURCE_DIR}/src/modules/*.cc
+    ${PROJECT_SOURCE_DIR}/src/utility/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/utility/*.cc
 )
 
 ## 构建目标
@@ -62,6 +65,7 @@ target_link_libraries(
     ${PROJECT_NAME}_kernel
     ${OpenCV_LIBS}
     rclcpp::rclcpp
+    yaml-cpp::yaml-cpp
 )
 add_library(
     ${PROJECT_NAME}_module SHARED

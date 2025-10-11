@@ -134,6 +134,8 @@ StreamSession::StreamSession(
     : pimpl { std::make_unique<Impl>() } {
     pimpl->initialize(type, target, format);
 }
+StreamSession::StreamSession(const Target& target) noexcept
+    : rmcs::debug::StreamSession { target.type, target.target, target.format } { }
 
 StreamSession::~StreamSession() noexcept = default;
 
