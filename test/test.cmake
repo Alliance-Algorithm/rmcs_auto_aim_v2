@@ -29,3 +29,12 @@ target_link_libraries(
     test_pipeline
     ${PROJECT_NAME}_module
 )
+
+ament_add_gtest(
+    test_hikcamera
+    test/hikcamera.cpp
+)
+target_link_libraries(
+    test_hikcamera
+    ${PROJECT_NAME}_module
+)
