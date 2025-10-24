@@ -38,3 +38,12 @@ target_link_libraries(
     test_hikcamera
     ${PROJECT_NAME}_module
 )
+
+ament_add_gtest(
+    test_serializable
+    test/serializable.cpp
+)
+target_link_libraries(
+    test_serializable
+    ${PROJECT_NAME}_module
+)
