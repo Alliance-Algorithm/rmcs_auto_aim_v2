@@ -1,39 +1,51 @@
+#include "config/config.hpp"
 #include "kernel/capturer.hpp"
 #include "utility/node.hpp"
 
-#include <csignal>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/rate.hpp>
 #include <rclcpp/utilities.hpp>
 
-#include <hikcamera/capturer.hpp>
+#include <csignal>
+
+using namespace rmcs;
 
 auto main(int argc, char* argv[]) -> int {
-    using namespace rmcs;
-
-    rclcpp::init(argc, argv);
     std::signal(SIGINT, [](auto) { rclcpp::shutdown(); });
 
-    auto node = std::make_shared<utility::Node>("AutoAim");
+    rclcpp::init(argc, argv);
 
-    /// 1. Read image from capturer
-    ///     Just one thread for receiving
+    do {
+        auto node = std::make_shared<utility::Node>("AutoAim", utility::options);
 
-    // auto capturer = std::make_unique<kernel::Capturer>();
-    // if (auto result = capturer->initialize(); !result) {
-    //     node->rclcpp_error("Failed to init capturer: {}", result.error());
-    //     rclcpp::shutdown();
-    // }
-    // capturer->start_working();
+        /// 0. Read config from yaml
+        auto config = Config {};
+        if (auto result = config.serialize("", *node); !result) {
+            node->rclcpp_error("Failed to read yaml: {}", result.error());
+            break;
+        }
 
-    /// 2. Identify armors
+        /// 1. Read image from capturer
+        ///     Just one thread for receiving
 
-    /// 3. Transform 2d to 3d
+        auto capturer = std::make_unique<kernel::Capturer>();
+        if (auto result = capturer->initialize(); !result) {
+            node->rclcpp_error("Failed to init capturer: {}", result.error());
+            break;
+        }
+        capturer->start_working();
 
-    /// 4. Update tracker
+        /// 2. Identify armors
 
-    /// 5. Solve tf and send command with fire controller
+        /// 3. Transform 2d to 3d
 
-    rclcpp::spin(node);
+        /// 4. Update tracker
+
+        /// 5. Solve tf and send command with fire controller
+
+        rclcpp::spin(node);
+
+    } while (false);
+
     return rclcpp::shutdown();
 }

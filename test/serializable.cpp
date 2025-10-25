@@ -7,7 +7,7 @@
 constexpr auto kFilePath = __FILE__;
 
 TEST(serializable, rclcpp) {
-    using namespace rmcs::utility;
+    using namespace rmcs::util;
 
     const auto current_file = std::filesystem::path(kFilePath);
     const auto current_path = current_file.parent_path();

@@ -1,0 +1,5 @@
+AutoAim:
+  ros__parameters:
+    image_source: "camera"
+    record_image: false
+    exposure_ms: 2

@@ -5,7 +5,12 @@
 #include <format>
 #include <string>
 
-namespace rmcs::utility {
+namespace rmcs::util {
+
+using integer_t = long;
+using double_t  = double;
+using flag_t    = bool;
+using string_t  = std::string;
 
 template <class Node>
 struct NodeAdapter {

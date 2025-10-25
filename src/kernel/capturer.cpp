@@ -59,7 +59,7 @@ struct Capturer::Impl {
         }
 
         using namespace std::chrono_literals;
-        auto waiting_rate = rclcpp::WallRate { 1s };
+        auto waiting_rate = rclcpp::WallRate { 3s };
 
         while (!capturer->initialized() && rclcpp::ok() && !token.stop_requested()) {
             if (auto result = capturer->initialize(capturer_profile)) {

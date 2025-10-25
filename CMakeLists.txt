@@ -115,8 +115,9 @@ endif()
 install(
     DIRECTORY
         config/
+        launch/
     DESTINATION
-        share/
+        share/${PROJECT_NAME}
 )
 install(
     TARGETS
