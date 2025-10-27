@@ -7,7 +7,6 @@
 #include <rclcpp/logging.hpp>
 #include <rclcpp/rate.hpp>
 #include <rclcpp/utilities.hpp>
-#include <yaml-cpp/node/node.h>
 
 #include <thread>
 
@@ -20,12 +19,8 @@ struct Capturer::Impl {
 
     std::jthread working_thread;
 
-    std::unique_ptr<capturer::HikcameraCap> capturer = //
-        std::make_unique<capturer::HikcameraCap>();
-
-    capturer::HikcameraCap::Profile capturer_profile;
-    std::chrono::milliseconds capturer_timeout;
-    std::float_t capturer_framerate = 80;
+    std::unique_ptr<capturer::Camera> capturer = std::make_unique<capturer::Camera>();
+    capturer::Config config;
 
     rclcpp::Logger logger = rclcpp::get_logger("capturer");
 
@@ -33,17 +28,15 @@ struct Capturer::Impl {
 
     auto initialize() -> std::expected<void, std::string> {
 
-        // TODO:
-
         using namespace std::chrono_literals;
-        capturer_profile.exposure_time = 2ms;
-        capturer_profile.invert_image  = false;
-        capturer_profile.gain          = 16.9807;
+        config.exposure_us  = 2000.;
+        config.invert_image = false;
+        config.gain         = 16.9807;
+        config.framerate    = 80;
 
-        capturer_framerate = 80;
-        capturer_timeout   = 1s;
-
-        blocking_reconnect_capturer();
+        if (auto ret = capturer->initialize(config); !ret) {
+            return std::unexpected { ret.error() };
+        }
         return {};
     }
 
@@ -54,38 +47,50 @@ struct Capturer::Impl {
     }
 
     auto blocking_reconnect_capturer(std::stop_token const& token = {}) const noexcept -> void {
-        if (capturer->initialized()) {
-            capturer->reset();
-        }
+
+        if (capturer->initialized())
+            if (auto ret = capturer->deinitialize(); !ret) {
+                RCLCPP_WARN(logger, "Failed to deinitialize: %s", ret.error().data());
+            }
 
         using namespace std::chrono_literals;
-        auto waiting_rate = rclcpp::WallRate { 3s };
+        auto waiting_rate = rclcpp::WallRate { 1s };
 
-        while (!capturer->initialized() && rclcpp::ok() && !token.stop_requested()) {
-            if (auto result = capturer->initialize(capturer_profile)) {
+        const auto living = bool { rclcpp::ok() && !token.stop_requested() };
+        while (!capturer->initialized() && living) {
+            if (auto result = capturer->initialize(config)) {
                 RCLCPP_INFO(logger, "Successfully re-established connection");
-                capturer->set_frame_rate_inner_trigger_mode(capturer_framerate);
+                RCLCPP_INFO(logger, "\n%s", result.value().c_str());
             } else {
-                RCLCPP_ERROR(logger, "Cap: %s", result.error().data());
+                RCLCPP_ERROR(logger, "Failed to connect: %s", result.error().data());
                 waiting_rate.sleep();
             }
         }
     }
 
+    std::size_t failed_count = 0;
     auto working_task(std::stop_token const& token) noexcept {
         while (rclcpp::ok() && !token.stop_requested()) {
 
-            auto result = capturer->read(capturer_timeout);
-            if (!result.has_value()) {
-                auto error = result.error();
+            auto mat = capturer->read_image();
+            if (!mat.has_value()) {
+
+                auto error = mat.error();
                 RCLCPP_ERROR(logger, "Failed to capture image: %s", error.data());
 
-                blocking_reconnect_capturer(token);
+                if (failed_count++ > 5) {
+                    failed_count = 0;
+                    blocking_reconnect_capturer(token);
+                }
+
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(1s);
+
                 continue;
             }
 
             auto* image { new Image };
-            image->details().mat = std::move(result.value());
+            image->details().mat = *mat;
             if (!buffer.push(image)) {
                 delete image;
                 RCLCPP_WARN(logger, "Failed to push image, the buffer is full");

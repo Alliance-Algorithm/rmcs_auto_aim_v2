@@ -53,7 +53,11 @@ int main(int argc, char** argv) {
     // NOTE: End
 
     auto hikcamera = std::make_unique<kernel::Capturer>();
-    if (!hikcamera->initialize()) { }
+    if (auto ret = hikcamera->initialize(); !ret) {
+        node.rclcpp_error("Failed to init camera: {}", ret.error());
+    } else {
+        node.rclcpp_info("Successfully initialize camera");
+    }
     hikcamera->start_working();
 
     auto timestamp = std::chrono::steady_clock::now();
@@ -70,7 +74,7 @@ int main(int argc, char** argv) {
             const auto frame_h = current_frame.rows;
 
             if (frame_w != w || frame_h != h) {
-                node.rclcpp_error("Given size is not fit with {}x{}", frame_w, frame_h);
+                node.rclcpp_error("Given size {}x{} != {}x{}", frame_w, frame_h, w, h);
                 rclcpp::shutdown();
             }
         });
