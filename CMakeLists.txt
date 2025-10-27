@@ -65,7 +65,6 @@ target_link_libraries(
     ${PROJECT_NAME}_kernel
     ${OpenCV_LIBS}
     rclcpp::rclcpp
-    yaml-cpp::yaml-cpp
 )
 add_library(
     ${PROJECT_NAME}_module SHARED

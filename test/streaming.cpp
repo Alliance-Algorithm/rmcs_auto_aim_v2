@@ -1,14 +1,13 @@
-#include "kernel/capturer.hpp"
-#include "modules/debug/visualization/stream_context.hpp"
+#include "modules/capturer/hikcamera.hpp"
+#include "modules/debug/framerate.hpp"
 #include "modules/debug/visualization/stream_instance.hpp"
-#include "utility/image.hpp"
-#include "utility/image.impl.hpp"
 #include "utility/node.hpp"
 
 #include <opencv2/highgui.hpp>
 #include <rclcpp/utilities.hpp>
 
 #include <chrono>
+#include <csignal>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -17,6 +16,7 @@ int main(int argc, char** argv) {
     using namespace rmcs;
 
     rclcpp::init(argc, argv);
+    std::signal(SIGINT, [](auto) { rclcpp::shutdown(); });
 
     auto node = utility::Node { "streaming_test" };
 
@@ -52,53 +52,56 @@ int main(int argc, char** argv) {
     }
     // NOTE: End
 
-    auto hikcamera = std::make_unique<kernel::Capturer>();
+    auto hikcamera = std::make_unique<capturer::Camera>();
     if (auto ret = hikcamera->initialize(); !ret) {
         node.rclcpp_error("Failed to init camera: {}", ret.error());
     } else {
         node.rclcpp_info("Successfully initialize camera");
     }
-    hikcamera->start_working();
 
-    auto timestamp = std::chrono::steady_clock::now();
     auto once_flag = std::once_flag {};
+    auto framerate = FramerateCounter {};
 
     while (rclcpp::ok()) {
 
-        auto image = hikcamera->fetch();
-        if (!image) continue;
+        auto image = hikcamera->read_image();
+        if (!image.has_value()) {
+            node.rclcpp_error("Failed to read image: {}", image.error());
 
-        auto& current_frame = image->details().mat;
+            if (hikcamera->initialized()) {
+                std::ignore = hikcamera->deinitialize();
+            }
+            if (auto ret = hikcamera->initialize(); !ret) {
+                node.rclcpp_error("Failed to init camera: {}", ret.error());
+                std::this_thread::sleep_for(std::chrono::seconds { 2 });
+            } else {
+                node.rclcpp_info("Successfully initialize camera");
+            }
+
+            continue;
+        }
+
+        auto& current_frame = image.value();
         std::call_once(once_flag, [&] {
             const auto frame_w = current_frame.cols;
             const auto frame_h = current_frame.rows;
 
             if (frame_w != w || frame_h != h) {
-                node.rclcpp_error("Given size {}x{} != {}x{}", frame_w, frame_h, w, h);
+                node.rclcpp_error("Given size {}x{} != target[{}x{}]", frame_w, frame_h, w, h);
                 rclcpp::shutdown();
+            } else {
+                node.rclcpp_info("First frame was received");
             }
         });
+        if (framerate.tick()) {
+            node.rclcpp_info("Framerate: {}", framerate.fps());
+        }
 
         // NOTE: Stream Session
         if (!stream_session.push_frame(current_frame)) {
             node.rclcpp_warn("Frame was pushed failed");
         }
         // NOTE: End
-
-        const auto interval   = std::chrono::steady_clock::now() - timestamp;
-        const auto frame_cost = std::chrono::duration<double> { interval };
-        const auto frame_rate = 1. / frame_cost.count();
-        {
-            static auto info_timestamp = std::chrono::steady_clock::now();
-
-            const auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - info_timestamp)
-                >= std::chrono::seconds(3)) {
-                node.rclcpp_info("Frame Rate: {}", frame_rate);
-                info_timestamp = now;
-            }
-        }
-        timestamp = std::chrono::steady_clock::now();
     }
 
     return rclcpp::shutdown();
