@@ -16,6 +16,9 @@ public:
             node.error("Failed to initialize capturer");
             node.error("- Error: {}", ret.error());
         }
+
+        using namespace std::chrono_literals;
+        timer = node.create_wall_timer(1ms, [this] { timer_callback(); });
     }
 
     auto capturer_runtime() noexcept -> void {
@@ -35,8 +38,11 @@ public:
         while (rclcpp::ok()) { }
     }
 
+    auto timer_callback() noexcept -> void { }
+
 private:
     util::Node& node;
+    std::shared_ptr<rclcpp::TimerBase> timer;
 
     // Modules
     std::unique_ptr<cap::Hikcamera> capturer;

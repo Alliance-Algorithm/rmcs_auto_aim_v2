@@ -12,7 +12,7 @@ struct Channel {
     std::queue<T> items;
     std::optional<T> item;
 
-    struct ReceiveAwaitable {
+    struct AwaitableItem {
         Channel& channel;
         std::optional<T> item;
 
@@ -49,7 +49,7 @@ struct Channel {
         }
     }
 
-    auto recv() noexcept { return ReceiveAwaitable { *this }; }
+    auto recv() noexcept { return AwaitableItem { *this }; }
 };
 
 }

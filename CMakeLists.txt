@@ -13,7 +13,6 @@ add_compile_options(-Wall -Wextra -Wpedantic -O3)
 find_package(OpenCV 4.5 REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(Ceres REQUIRED)
-find_package(yaml-cpp REQUIRED)
 
 ## ROS2 相关依赖
 find_package(type_description_interfaces REQUIRED)
