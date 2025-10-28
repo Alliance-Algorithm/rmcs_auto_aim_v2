@@ -3,17 +3,15 @@
 
 namespace rmcs {
 
-class AutoAimComponent final
-    : public rmcs_executor::Component
-    , public utility::Node {
+class AutoAimComponent final : public rmcs_executor::Component, util::Node {
 public:
     explicit AutoAimComponent() noexcept
-        : Node{get_component_name(), utility::options} {
+        : Node { get_component_name(), util::options } {
 
         rclcpp_info("{}", get_parameter_or<std::string>("msg", ""));
     }
 
-    void update() override {}
+    void update() override { }
 
 private:
 };

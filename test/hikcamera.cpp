@@ -11,7 +11,7 @@ auto main() -> int {
 
     auto camera = hikcamera::Camera {};
     if (auto result = camera.initialize()) {
-        std::println("[hikcamera] Camera init successfully\n{}", *result);
+        std::println("[hikcamera] Camera init successfully\n");
     } else {
         std::println("[hikcamera] {}", result.error());
     }

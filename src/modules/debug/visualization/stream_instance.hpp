@@ -11,7 +11,7 @@ using FrameRef     = StreamContext::FrameRef;
 
 class StreamSession {
 public:
-    struct Target {
+    struct Config {
         StreamTarget target;
         StreamType type;
         VideoFormat format;
@@ -19,7 +19,7 @@ public:
 
 public:
     explicit StreamSession(StreamType, const StreamTarget&, const VideoFormat&) noexcept;
-    explicit StreamSession(const Target&) noexcept;
+    explicit StreamSession(const Config&) noexcept;
 
     ~StreamSession() noexcept;
 

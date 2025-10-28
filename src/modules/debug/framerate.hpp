@@ -11,8 +11,12 @@ public:
 
     std::deque<TimePoint> frame_times;
 
-    TimePoint last_tick_timestamp;
+    TimePoint last_reach_interval_timestamp;
     std::chrono::milliseconds interval = std::chrono::seconds { 2 };
+
+    auto set_intetval(std::chrono::milliseconds ms) noexcept { interval = ms; }
+
+    auto fps() const noexcept { return frame_times.size(); }
 
     auto tick() noexcept -> bool {
         using namespace std::chrono_literals;
@@ -25,17 +29,13 @@ public:
         }
 
         auto is_reach_interval = bool { false };
-        if (interval.count() > 0 && now - last_tick_timestamp > interval) {
-            is_reach_interval   = true;
-            last_tick_timestamp = now;
+        if (interval.count() > 0 && now - last_reach_interval_timestamp > interval) {
+            is_reach_interval             = true;
+            last_reach_interval_timestamp = now;
         }
 
         return is_reach_interval;
     }
-
-    auto fps() const { return frame_times.size(); }
-
-    auto set_intetval(std::chrono::milliseconds ms) { interval = ms; }
 };
 
 }

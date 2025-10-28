@@ -3,9 +3,6 @@
 #include "modules/debug/visualization/stream_instance.hpp"
 #include "utility/node.hpp"
 
-#include <opencv2/highgui.hpp>
-#include <rclcpp/utilities.hpp>
-
 #include <chrono>
 #include <csignal>
 #include <memory>
@@ -18,7 +15,7 @@ int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
     std::signal(SIGINT, [](auto) { rclcpp::shutdown(); });
 
-    auto node = utility::Node { "streaming_test" };
+    auto node = util::Node { "streaming_test" };
 
     constexpr auto host = std::string_view { "127.0.0.1" };
     constexpr auto port = std::string_view { "5000" };
@@ -32,12 +29,12 @@ int main(int argc, char** argv) {
     auto check = StreamContext::check_support();
     if (!check) node.rclcpp_error("{}", check.error());
 
-    auto configuration   = StreamSession::Target {};
-    configuration.target = StreamTarget { host, port };
-    configuration.type   = StreamType::RTP_JEPG;
-    configuration.format = VideoFormat { w, h, hz };
+    auto config   = StreamSession::Config {};
+    config.target = StreamTarget { host, port };
+    config.type   = StreamType::RTP_JEPG;
+    config.format = VideoFormat { w, h, hz };
 
-    auto stream_session = StreamSession { configuration };
+    auto stream_session = StreamSession { config };
     stream_session.set_notifier([&](auto msg) { //
         node.rclcpp_info("[StreamSession] {}", msg);
     });
@@ -52,7 +49,7 @@ int main(int argc, char** argv) {
     }
     // NOTE: End
 
-    auto hikcamera = std::make_unique<capturer::Camera>();
+    auto hikcamera = std::make_unique<cap::Hikcamera>();
     if (auto ret = hikcamera->initialize(); !ret) {
         node.rclcpp_error("Failed to init camera: {}", ret.error());
     } else {
@@ -64,7 +61,7 @@ int main(int argc, char** argv) {
 
     while (rclcpp::ok()) {
 
-        auto image = hikcamera->read_image();
+        auto image = hikcamera->wait_image();
         if (!image.has_value()) {
             node.rclcpp_error("Failed to read image: {}", image.error());
 
@@ -83,8 +80,8 @@ int main(int argc, char** argv) {
 
         auto& current_frame = image.value();
         std::call_once(once_flag, [&] {
-            const auto frame_w = current_frame.cols;
-            const auto frame_h = current_frame.rows;
+            const auto frame_w = current_frame->details().mat.cols;
+            const auto frame_h = current_frame->details().mat.rows;
 
             if (frame_w != w || frame_h != h) {
                 node.rclcpp_error("Given size {}x{} != target[{}x{}]", frame_w, frame_h, w, h);
@@ -94,11 +91,11 @@ int main(int argc, char** argv) {
             }
         });
         if (framerate.tick()) {
-            node.rclcpp_info("Framerate: {}", framerate.fps());
+            node.rclcpp_info("Hz: {}", framerate.fps());
         }
 
         // NOTE: Stream Session
-        if (!stream_session.push_frame(current_frame)) {
+        if (!stream_session.push_frame(current_frame->details().get_mat())) {
             node.rclcpp_warn("Frame was pushed failed");
         }
         // NOTE: End
