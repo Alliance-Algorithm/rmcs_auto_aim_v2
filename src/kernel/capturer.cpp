@@ -18,9 +18,8 @@ struct CapRuntime::Impl {
     FramerateCounter loss_image_framerate {};
 
     std::unique_ptr<Cap> capturer;
-    Cap::Config capturer_config;
+    Cap::Config config;
 
-    std::uint8_t capture_failed_limit = 5;
     std::chrono::seconds reconnect_wait_seconds { 1 };
 
     spsc_queue<Image*, 10> capture_queue;
@@ -35,8 +34,8 @@ struct CapRuntime::Impl {
         capturer = std::make_unique<Cap>();
         {
             // TODO: Switch yaml configutation
-            capturer_config.invert_image = false;
-            capturer_config.timeout_ms   = 1'000 / 30;
+            config.invert_image = false;
+            config.timeout_ms   = 1'000;
         }
 
         runtime_thread = std::jthread {
@@ -61,7 +60,7 @@ struct CapRuntime::Impl {
 
     // TODO: 或许图像池更适合这个场景，毕竟同时处于处理中的图像最多就那么几个
     auto runtime_task(const std::stop_token& token) noexcept -> void {
-        log.info("[Capturer runtime loop] starts");
+        log.info("[Capturer runtime thread] starts");
 
         // Success context
         auto success_callback = [&](std::unique_ptr<Image> image) {
@@ -90,6 +89,7 @@ struct CapRuntime::Impl {
 
         // Failed context
         auto capture_failed_count = std::uint8_t { 0 };
+        auto capture_failed_limit = std::uint8_t { 3 };
 
         auto failed_callback = [&](const std::string& msg) {
             auto& limit = capture_failed_limit;
@@ -111,8 +111,11 @@ struct CapRuntime::Impl {
         auto error_stop  = bool { false };
 
         auto reconnect = [&] {
-            if (auto result = capturer->initialize(capturer_config)) {
-                log.info("Reconnect to capturer successfully");
+            if (!capturer->initialized()) {
+                auto ret = capturer->deinitialize();
+            }
+            if (auto result = capturer->initialize(config)) {
+                log.info("Connect to capturer successfully");
                 error_times = 0;
                 error_stop  = false;
             } else {
@@ -123,7 +126,6 @@ struct CapRuntime::Impl {
                     error_stop = true;
                     log.error("{} times, stop printing errors", error_times);
                 }
-                std::ignore = capturer->deinitialize();
             }
             rclcpp::sleep_for(reconnect_wait_seconds);
         };
