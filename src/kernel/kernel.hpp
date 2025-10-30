@@ -1,15 +1,15 @@
 #include "utility/node.hpp"
 #include <memory>
 
-namespace rmcs {
+namespace rmcs::kernel {
 
-class AutoAimKernel final : public util::Node {
+class AutoAim final : public util::Node {
 public:
-    explicit AutoAimKernel() noexcept;
-    ~AutoAimKernel() noexcept override;
+    explicit AutoAim() noexcept;
+    ~AutoAim() noexcept override;
 
-    AutoAimKernel(const AutoAimKernel&)            = delete;
-    AutoAimKernel& operator=(const AutoAimKernel&) = delete;
+    AutoAim(const AutoAim&)            = delete;
+    AutoAim& operator=(const AutoAim&) = delete;
 
 private:
     struct Impl;

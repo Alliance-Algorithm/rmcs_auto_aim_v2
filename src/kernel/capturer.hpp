@@ -1,17 +1,22 @@
 #pragma once
+#include "capturer.config.hpp"
 #include "utility/image.hpp"
 #include "utility/pimpl.hpp"
+
 #include <expected>
 
 namespace rmcs::kernel {
 
-class CapRuntime final {
-    RMCS_PIMPL_DEFINITION(CapRuntime)
+class Capturer final {
+    RMCS_PIMPL_DEFINITION(Capturer)
 
 public:
     using ImageUnique = std::unique_ptr<Image>;
 
-    auto initialize() noexcept -> std::expected<void, std::string>;
+    static constexpr auto get_prefix() noexcept { return "capturer"; }
+
+    using Config = CapturerConfig;
+    auto initialize(const Config&) noexcept -> std::expected<void, std::string>;
 
     /// @brief
     ///   Fetches an image from the background worker thread.

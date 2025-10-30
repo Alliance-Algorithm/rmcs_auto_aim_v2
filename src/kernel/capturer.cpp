@@ -3,6 +3,7 @@
 #include "modules/debug/framerate.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/thread/spsc_queue.hpp"
+#include "utility/times_limit.hpp"
 
 #include <rclcpp/utilities.hpp>
 #include <thread>
@@ -11,32 +12,30 @@ using Cap = rmcs::cap::Hikcamera;
 
 using namespace rmcs::kernel;
 
-struct CapRuntime::Impl {
+struct Capturer::Impl {
     using RawImage = Image*;
 
-    Printer log { "CapRuntime" };
+    Printer log { "Capturer" };
     FramerateCounter loss_image_framerate {};
 
     std::unique_ptr<Cap> capturer;
-    Cap::Config config;
+    Cap::Config hikcamera_config;
 
     std::chrono::seconds reconnect_wait_seconds { 1 };
 
     spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
 
-    auto initialize() noexcept -> std::expected<void, std::string> {
+    auto initialize(const Config& config) noexcept -> std::expected<void, std::string> {
         using namespace std::chrono_literals;
 
-        loss_image_framerate.set_intetval(10s);
+        loss_image_framerate.enable = config.print_loss_framerate;
+        loss_image_framerate.set_intetval(
+            std::chrono::seconds { config.print_loss_framerate_interval_seconds });
 
         // Not connect here, to quick launch
         capturer = std::make_unique<Cap>();
-        {
-            // TODO: Switch yaml configutation
-            config.invert_image = false;
-            config.timeout_ms   = 1'000;
-        }
+        config.transform_to(hikcamera_config);
 
         runtime_thread = std::jthread {
             [this](auto t) { runtime_task(t); },
@@ -88,43 +87,38 @@ struct CapRuntime::Impl {
         };
 
         // Failed context
-        auto capture_failed_count = std::uint8_t { 0 };
-        auto capture_failed_limit = std::uint8_t { 3 };
+        auto capture_failed_limit = TimesLimit { 3 };
 
         auto failed_callback = [&](const std::string& msg) {
-            auto& limit = capture_failed_limit;
-            auto& count = capture_failed_count;
-            if (count++ >= limit) {
-                count = 0;
-                log.error("Failed to capture image {} times", limit);
+            if (capture_failed_limit.tick() == false) {
+                log.error("Failed to capture image {} times", capture_failed_limit.count);
                 log.error("- Newest error: {}", msg);
                 log.error("- Reconnect capturer now...");
 
                 std::ignore = capturer->deinitialize();
                 rclcpp::sleep_for(reconnect_wait_seconds);
+                capture_failed_limit.reset();
             }
         };
 
         // Reconnect context
-        auto error_times = std::uint8_t { 0 };
-        auto error_limit = std::uint8_t { 3 };
-        auto error_stop  = bool { false };
+        auto error_limit = TimesLimit { 3 };
 
         auto reconnect = [&] {
             if (!capturer->initialized()) {
                 auto ret = capturer->deinitialize();
             }
-            if (auto result = capturer->initialize(config)) {
+            if (auto result = capturer->initialize(hikcamera_config)) {
                 log.info("Connect to capturer successfully");
-                error_times = 0;
-                error_stop  = false;
+                error_limit.reset();
+                error_limit.enable();
             } else {
-                if (error_times++ < error_limit) {
+                if (error_limit.tick()) {
                     log.error("Failed to reconnect to capturer, retry soon");
                     log.error("- Error: {}", result.error());
-                } else if (!error_stop) {
-                    error_stop = true;
-                    log.error("{} times, stop printing errors", error_times);
+                } else if (error_limit.enabled()) {
+                    error_limit.disable();
+                    log.error("{} times, stop printing errors", error_limit.count);
                 }
             }
             rclcpp::sleep_for(reconnect_wait_seconds);
@@ -149,13 +143,13 @@ struct CapRuntime::Impl {
     }
 };
 
-auto CapRuntime::initialize() noexcept -> std::expected<void, std::string> {
-    return pimpl->initialize();
+auto Capturer::initialize(const Config& config) noexcept -> std::expected<void, std::string> {
+    return pimpl->initialize(config);
 }
 
-auto CapRuntime::fetch_image() noexcept -> ImageUnique { return pimpl->fetch_image(); }
+auto Capturer::fetch_image() noexcept -> ImageUnique { return pimpl->fetch_image(); }
 
-CapRuntime::CapRuntime() noexcept
+Capturer::Capturer() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-CapRuntime::~CapRuntime() noexcept = default;
+Capturer::~Capturer() noexcept = default;

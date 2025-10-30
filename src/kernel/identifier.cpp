@@ -1,6 +1,6 @@
 #include "identifier.hpp"
 
-using namespace rmcs::kernal;
+using namespace rmcs::kernel;
 using namespace identifier::details;
 
 struct IdentifierImpl::Impl {

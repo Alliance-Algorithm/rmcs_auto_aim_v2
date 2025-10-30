@@ -7,6 +7,8 @@
 
 namespace rmcs::util {
 
+using SerialResult = std::expected<void, std::string>;
+
 using integer_t = long;
 using double_t  = double;
 using flag_t    = bool;
@@ -76,7 +78,7 @@ struct Serializable final {
 
         const auto deserialize = [&]<typename T>(MemberMeta<Data, T> meta) -> Ret {
             auto& target_member = meta.extract_from(target);
-            return adapter.get_param(std::format("{}{}", prefix, meta.meta_name), target_member);
+            return adapter.get_param(std::format("{}.{}", prefix, meta.meta_name), target_member);
         };
         const auto apply_function = [&]<typename... T>(MemberMeta<Data, T>... meta) {
             auto result = Ret {};
@@ -102,6 +104,35 @@ struct Serializable final {
         std::apply([&](const auto&... meta) { (print_one(meta), ...); }, metas);
 
         return result;
+    }
+};
+
+template <typename T>
+concept serializable_metas_trait = requires { typename std::tuple_size<decltype(T::metas)>::type; }
+    && (std::tuple_size_v<decltype(T::metas)> != 0)
+    && (std::tuple_size_v<decltype(T::metas)> % 2 == 0);
+
+struct SerializableExpansion {
+    template <typename Metas, std::size_t... Idx>
+    constexpr auto make_serializable_impl(Metas metas, std::index_sequence<Idx...>) {
+        return util::Serializable {
+            util::MemberMeta { std::get<Idx * 2>(metas), std::get<Idx * 2 + 1>(metas) }...,
+        };
+    }
+    template <typename Metas>
+    constexpr auto make_serializable(Metas metas) {
+        constexpr auto N = std::tuple_size_v<Metas>;
+        return make_serializable_impl(metas, std::make_index_sequence<N / 2> {});
+    }
+
+    template <typename T>
+    auto serialize(this T& self, std::string_view prefix, auto& source) noexcept
+        -> std::expected<void, std::string> {
+
+        static_assert(serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
+
+        auto s = self.make_serializable(self.metas);
+        return s.serialize(prefix, source, self);
     }
 };
 

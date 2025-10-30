@@ -1,6 +1,6 @@
 #include "modules/capturer/hikcamera.hpp"
 #include "modules/debug/framerate.hpp"
-#include "modules/debug/visualization/stream_instance.hpp"
+#include "modules/debug/visualization/stream_session.hpp"
 #include "utility/node.hpp"
 
 #include <chrono>

@@ -14,11 +14,14 @@ public:
     TimePoint last_reach_interval_timestamp;
     std::chrono::milliseconds interval = std::chrono::seconds { 2 };
 
+    bool enable = true;
+
     auto set_intetval(std::chrono::milliseconds ms) noexcept { interval = ms; }
 
     auto fps() const noexcept { return frame_times.size(); }
 
     auto tick() noexcept -> bool {
+        if (!enable) return false;
         using namespace std::chrono_literals;
 
         const auto now = Clock::now();

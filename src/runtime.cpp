@@ -14,7 +14,7 @@ auto main(int argc, char* argv[]) -> int {
 
     rclcpp::init(argc, argv);
 
-    auto node = std::make_shared<AutoAimKernel>();
+    auto node = std::make_shared<kernel::AutoAim>();
 
     /// 0. Read config from yaml
 

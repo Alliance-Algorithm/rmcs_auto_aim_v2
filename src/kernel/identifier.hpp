@@ -3,7 +3,7 @@
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
 
-namespace rmcs::kernal {
+namespace rmcs::kernel {
 
 namespace identifier::details {
     using ImageUnique = std::unique_ptr<Image>;

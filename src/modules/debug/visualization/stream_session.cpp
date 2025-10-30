@@ -1,4 +1,4 @@
-#include "stream_instance.hpp"
+#include "stream_session.hpp"
 
 #include <functional>
 #include <memory>

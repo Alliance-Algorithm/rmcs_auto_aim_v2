@@ -1,5 +1,20 @@
 AutoAim:
   ros__parameters:
-    image_source: "camera"
-    record_image: false
-    exposure_ms: 2
+
+    capturer:
+      timeout_ms: 2000
+      exposure_us: 2000.0
+      framerate: 100.0
+      gain: 16.9807
+      invert_image: false
+      software_sync: false
+      trigger_mode: false
+      fixed_framerate: true
+
+      print_loss_framerate: true
+      print_loss_framerate_interval_seconds: 5
+
+    visualization:
+      monitor_host: "localhost"
+      monitor_port: "5000"
+      stream_type: "RTP_JEPG"
