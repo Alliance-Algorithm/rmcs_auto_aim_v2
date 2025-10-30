@@ -8,11 +8,14 @@ class Image {
     RMCS_PIMPL_DEFINITION(Image)
 
 public:
+    using Clock = std::chrono::steady_clock;
+    using Stamp = Clock::time_point;
+
     struct Details;
     auto details() noexcept -> Details&;
 
-    using TimePoint = std::chrono::steady_clock::time_point;
-    auto timestamp() const noexcept -> TimePoint;
+    auto get_timestamp() const noexcept -> Stamp;
+    auto set_timestamp(Stamp) noexcept -> void;
 };
 
 }

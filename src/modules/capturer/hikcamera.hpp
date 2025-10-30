@@ -30,8 +30,13 @@ struct HikcameraImpl {
         auto image = std::make_unique<Image>();
         image->details().set_mat(std::move(*mat));
 
+        // TODO: Sync the timestamp
+        image->set_timestamp(Image::Clock::now());
+
         return image;
     }
+
+    static constexpr auto get_prefix() noexcept { return "hikcamera"; }
 };
 
 }

@@ -25,6 +25,8 @@ public:
 
     auto initialized() const noexcept -> bool { return Impl::initialized(); }
 
+    static constexpr auto get_prefix() noexcept { return Impl::get_prefix(); }
+
 private:
     static constexpr auto has_config = requires { typename Impl::Config; };
     static_assert(has_config, "Capturer must has Config type");
@@ -40,6 +42,11 @@ private:
         { i.deinitialize() } -> std::same_as<NormalResult>;
     };
     static_assert(has_initialize, "Capturer must has initialize functions");
+
+    static constexpr auto has_get_prefix = requires(Impl& i) {
+        { i.get_prefix() } -> std::assignable_from<std::string>;
+    };
+    static_assert(has_wait_image, "Capturer must has get prefix function");
 };
 
 }

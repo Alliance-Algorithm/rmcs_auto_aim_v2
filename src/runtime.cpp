@@ -1,5 +1,4 @@
-#include "config/config.hpp"
-#include "utility/node.hpp"
+#include "kernel/kernel.hpp"
 
 #include <rclcpp/executors.hpp>
 #include <rclcpp/rate.hpp>
@@ -11,20 +10,13 @@ using namespace rmcs;
 
 auto main(int argc, char* argv[]) -> int {
     std::signal(SIGINT, [](auto) { rclcpp::shutdown(); });
+    std::signal(SIGKILL, [](auto) { std::exit(0); });
 
     rclcpp::init(argc, argv);
 
-    auto node = std::make_shared<util::Node>("AutoAim", util::options);
+    auto node = std::make_shared<AutoAimKernel>();
 
     /// 0. Read config from yaml
-    auto config = Config {};
-    if (auto result = config.serialize("", *node); !result) {
-        node->rclcpp_error("Failed to read yaml: {}", result.error());
-        return rclcpp::shutdown();
-    }
-
-    // other kernal module initialize
-    // ...
 
     /// 1. Read image from capturer
 
@@ -35,6 +27,8 @@ auto main(int argc, char* argv[]) -> int {
     /// 4. Update tracker
 
     /// 5. Solve tf and send command with fire controller
+
+    rclcpp::spin(node);
 
     return rclcpp::shutdown();
 }
