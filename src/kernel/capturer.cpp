@@ -23,7 +23,7 @@ struct Capturer::Impl {
 
     std::chrono::seconds reconnect_wait_seconds { 1 };
 
-    spsc_queue<Image*, 10> capture_queue;
+    util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
 
     auto initialize(const Config& config) noexcept -> std::expected<void, std::string> {

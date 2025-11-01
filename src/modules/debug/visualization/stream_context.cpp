@@ -63,7 +63,7 @@ auto StreamContext::check_support() noexcept -> std::expected<void, std::string_
     return {};
 }
 
-auto StreamContext::open() noexcept -> std::expected<void, std::string_view> {
+auto StreamContext::open() noexcept -> std::expected<void, std::string> {
     switch (stream_type_) {
     case StreamType::RTP_JEPG:
         pipeline_ = pipeline::make_rtpjepg(video_format_.w, video_format_.h, video_format_.hz,
@@ -83,10 +83,12 @@ auto StreamContext::open() noexcept -> std::expected<void, std::string_view> {
     if (!sender_->isOpened()) {
         sender_.reset();
         return std::unexpected {
-            "[ERROR] Unable to open pipeline.\n"
-            "Please install required packages or check your pipeline config\n"
-            "  sudo apt install "
-            "gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good\n",
+            "\nUnable to open pipeline."
+            "\nPlease install required packages or check your pipeline config"
+            "\n  sudo apt install "
+            "gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good"
+            "\n  current pipeline:\n"
+                + pipeline_,
         };
     }
 
@@ -96,7 +98,7 @@ auto StreamContext::open() noexcept -> std::expected<void, std::string_view> {
 auto StreamContext::opened() const noexcept -> bool { return sender_ && sender_->isOpened(); }
 
 auto StreamContext::session_description_protocol(const std::string_view& local_ip) const noexcept
-    -> std::expected<std::string, std::string_view> {
+    -> std::expected<std::string, std::string> {
 
     if (!opened()) return std::unexpected { "Pipeline is not opened" };
 

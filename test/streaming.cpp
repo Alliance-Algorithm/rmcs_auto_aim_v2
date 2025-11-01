@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
 
     auto node = util::Node { "streaming_test" };
 
-    constexpr auto host = std::string_view { "127.0.0.1" };
-    constexpr auto port = std::string_view { "5000" };
+    constexpr auto host = "127.0.0.1";
+    constexpr auto port = "5000";
     constexpr auto hz   = int { 80 };
     constexpr auto w    = int { 1440 };
     constexpr auto h    = int { 1080 };
@@ -34,11 +34,11 @@ int main(int argc, char** argv) {
     config.type   = StreamType::RTP_JEPG;
     config.format = VideoFormat { w, h, hz };
 
-    auto stream_session = StreamSession { config };
+    auto stream_session = StreamSession {};
     stream_session.set_notifier([&](auto msg) { //
         node.rclcpp_info("[StreamSession] {}", msg);
     });
-    if (auto result = stream_session.open(); !result) {
+    if (auto result = stream_session.open(config); !result) {
         node.rclcpp_error("{}", result.error());
         rclcpp::shutdown();
     }
@@ -80,8 +80,8 @@ int main(int argc, char** argv) {
 
         auto& current_frame = image.value();
         std::call_once(once_flag, [&] {
-            const auto frame_w = current_frame->details().mat.cols;
-            const auto frame_h = current_frame->details().mat.rows;
+            const auto frame_w = current_frame->details().get_cols();
+            const auto frame_h = current_frame->details().get_rows();
 
             if (frame_w != w || frame_h != h) {
                 node.rclcpp_error("Given size {}x{} != target[{}x{}]", frame_w, frame_h, w, h);

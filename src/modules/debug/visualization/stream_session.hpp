@@ -18,9 +18,7 @@ public:
     };
 
 public:
-    explicit StreamSession(StreamType, const StreamTarget&, const VideoFormat&) noexcept;
-    explicit StreamSession(const Config&) noexcept;
-
+    StreamSession() noexcept;
     ~StreamSession() noexcept;
 
     StreamSession(const StreamSession&)            = delete;
@@ -30,7 +28,9 @@ public:
     StreamSession& operator=(StreamSession&&) noexcept = default;
 
     auto set_notifier(std::function<void(const std::string&)>) noexcept -> void;
-    auto open() noexcept -> std::expected<void, std::string_view>;
+
+    auto open(const Config&) noexcept -> std::expected<void, std::string>;
+    auto opened() const noexcept -> bool;
 
     auto push_frame(FrameRef) noexcept -> bool;
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "modules/capturer/common.hpp"
-#include "utility/image.impl.hpp"
+#include "utility/image.details.hpp"
 #include <hikcamera/capturer.hpp>
 
 namespace rmcs::cap::details {

@@ -1,79 +1,60 @@
 #pragma once
 #include <coroutine>
-#include <optional>
+#include <expected>
+#include <string>
 
 namespace rmcs::co {
 
-struct task_extended {
-    auto done(this auto& self) { return self.coroutine.done(); }
-    auto resume(this auto& self) {
-        if (self.coroutine && !self.done()) self.coroutine.resume();
-    }
-};
+template <typename result_type>
+struct task {
 
-template <typename T>
-struct [[nodiscard]] task : public task_extended {
+    auto done() const noexcept { return coroutine_handle.done(); }
+
+    auto destroy() noexcept {
+        if (coroutine_handle) {
+            coroutine_handle.destroy();
+        }
+    }
+
+    auto result() const noexcept -> const result_type& {
+        //
+        return coroutine_handle.promise().result;
+    }
 
     struct promise_type {
-        using coroutine = std::coroutine_handle<promise_type>;
-        std::optional<T> result;
+        result_type result;
 
-        auto get_return_object() noexcept
-            requires std::constructible_from<task, coroutine>
-        {
-            return task { coroutine::from_promise(*this) };
+        auto get_return_object() noexcept {
+            return task { std::coroutine_handle<promise_type>::from_promise(*this) };
+        }
+        auto return_value(result_type _result) noexcept {
+            //
+            result = std::move(_result);
         }
 
-        auto return_value(T value) noexcept {
-            this->result = std::move(value); //
+        auto unhandled_exception() noexcept -> void {
+            using error_type = std::unexpected<std::string>;
+            if constexpr (std::convertible_to<error_type, result_type>) {
+                try {
+                    throw;
+                } catch (const std::exception& e) {
+                    result = std::unexpected { e.what() };
+                } catch (...) {
+                    result = std::unexpected { "Unknown exception" };
+                }
+            }
         }
 
-        static auto initial_suspend() noexcept { return std::suspend_never {}; }
-        static auto final_suspend() noexcept { return std::suspend_never {}; }
-
-        static auto unhandled_exception() { }
+        static constexpr auto initial_suspend() noexcept {
+            // Launch immediately
+            return std::suspend_never {};
+        }
+        static constexpr auto final_suspend() noexcept {
+            // Lazy destory
+            return std::suspend_always {};
+        }
     };
-    using handler = std::coroutine_handle<promise_type>;
-
-    auto result(this auto& self) noexcept -> decltype(auto) {
-        promise_type& promise = self.coroutine.promise();
-        return *promise.result;
-    }
-
-    explicit task(std::coroutine_handle<promise_type> h) noexcept
-        : coroutine { h } { }
-
-    ~task() noexcept {
-        if (coroutine) coroutine.destroy();
-    }
-
-    std::coroutine_handle<promise_type> coroutine;
-};
-
-template <>
-struct [[nodiscard]] task<void> : task_extended {
-
-    struct promise_type {
-        using coroutine = std::coroutine_handle<promise_type>;
-
-        auto get_return_object() noexcept { return task<void> { coroutine::from_promise(*this) }; }
-
-        static auto return_void() noexcept { }
-        static auto unhandled_exception() { }
-
-        static auto initial_suspend() noexcept { return std::suspend_never {}; }
-        static auto final_suspend() noexcept { return std::suspend_never {}; }
-    };
-    using handler = std::coroutine_handle<promise_type>;
-
-    explicit task(std::coroutine_handle<promise_type> co) noexcept
-        : coroutine { co } { }
-
-    ~task() noexcept {
-        if (coroutine) coroutine.destroy();
-    }
-
-    std::coroutine_handle<promise_type> coroutine;
+    std::coroutine_handle<promise_type> coroutine_handle;
 };
 
 }

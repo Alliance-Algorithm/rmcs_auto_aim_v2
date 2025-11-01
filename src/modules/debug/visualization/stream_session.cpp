@@ -30,7 +30,7 @@ public:
 
         const auto result = context->session_description_protocol(*local_ipv4);
         if (!result) {
-            return std::unexpected { std::string { result.error() } };
+            return std::unexpected { result.error() };
         }
 
         return *result;
@@ -44,7 +44,7 @@ public:
             [this](const std::stop_token& token) { streaming_thread(token); });
     }
 
-    auto open() noexcept -> std::expected<void, std::string_view> { return context->open(); }
+    auto open() noexcept -> std::expected<void, std::string> { return context->open(); }
 
     auto opened() const noexcept { return context && context->opened(); }
 
@@ -123,28 +123,25 @@ private:
     std::unique_ptr<StreamContext> context;
     std::unique_ptr<std::jthread> thread;
 
-    static constexpr auto buffer_capacity = std::size_t { 30 };
+    static constexpr auto buffer_capacity = std::size_t { 100 };
     boost::lockfree::spsc_queue<cv::Mat, boost::lockfree::capacity<buffer_capacity>> buffer;
 
     std::function<void(const std::string&)> notifier;
 };
 
-StreamSession::StreamSession(
-    StreamType type, const StreamTarget& target, const VideoFormat& format) noexcept
-    : pimpl { std::make_unique<Impl>() } {
-    pimpl->initialize(type, target, format);
-}
-StreamSession::StreamSession(const Config& target) noexcept
-    : rmcs::debug::StreamSession { target.type, target.target, target.format } { }
+StreamSession::StreamSession() noexcept
+    : pimpl { std::make_unique<Impl>() } { }
 
 StreamSession::~StreamSession() noexcept = default;
 
 auto StreamSession::set_notifier(std::function<void(const std::string&)> f) noexcept -> void {
     pimpl->set_notifier(std::move(f));
 }
-auto StreamSession::open() noexcept -> std::expected<void, std::string_view> {
+auto StreamSession::open(const Config& config) noexcept -> std::expected<void, std::string> {
+    pimpl->initialize(config.type, config.target, config.format);
     return pimpl->open();
 }
+auto StreamSession::opened() const noexcept -> bool { return pimpl->opened(); }
 
 auto StreamSession::push_frame(FrameRef frame) noexcept -> bool { return pimpl->push_frame(frame); }
 

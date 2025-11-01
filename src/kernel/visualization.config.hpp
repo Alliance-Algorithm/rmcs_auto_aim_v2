@@ -9,12 +9,17 @@ constexpr std::array kVideoTypes {
 };
 
 struct VisualizationConfig : util::SerializableExpansion {
+
+    util::integer_t framerate = 80;
+
     util::string_t monitor_host = "localhost";
     util::string_t monitor_port = "5000";
 
     util::string_t stream_type = "RTP_JEPG";
 
     static constexpr auto metas = std::tuple {
+        &VisualizationConfig::framerate,
+        "framerate",
         &VisualizationConfig::monitor_host,
         "monitor_host",
         &VisualizationConfig::monitor_port,

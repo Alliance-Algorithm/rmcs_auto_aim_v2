@@ -1,4 +1,4 @@
-#include "image.impl.hpp"
+#include "image.details.hpp"
 
 using namespace rmcs;
 
@@ -8,6 +8,7 @@ struct Image::Impl {
 };
 
 auto Image::details() noexcept -> Details& { return pimpl->details; }
+auto Image::details() const noexcept -> const Details& { return pimpl->details; }
 
 auto Image::get_timestamp() const noexcept -> Stamp //
 {

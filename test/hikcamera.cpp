@@ -5,9 +5,10 @@
 #include <future>
 #include <print>
 
-auto main() -> int {
+std::atomic<bool> running = true;
 
-    std::signal(SIGINT, [](auto) { std::exit(0); });
+auto main() -> int {
+    std::signal(SIGINT, [](auto) { running = false; });
 
     auto camera = hikcamera::Camera {};
     if (auto result = camera.initialize()) {
@@ -17,7 +18,7 @@ auto main() -> int {
     }
 
     std::size_t count = 0;
-    while (true) {
+    while (running.load(std::memory_order::relaxed)) {
         auto future = std::async(std::launch::async, [&camera] {
             if (auto mat = camera.read_image()) {
                 std::print("[async] Read a image as cv::Mat");

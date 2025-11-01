@@ -78,7 +78,12 @@ struct Serializable final {
 
         const auto deserialize = [&]<typename T>(MemberMeta<Data, T> meta) -> Ret {
             auto& target_member = meta.extract_from(target);
-            return adapter.get_param(std::format("{}.{}", prefix, meta.meta_name), target_member);
+            if (prefix.empty()) {
+                return adapter.get_param(std::string { meta.meta_name }, target_member);
+            } else {
+                return adapter.get_param(
+                    std::format("{}.{}", prefix, meta.meta_name), target_member);
+            }
         };
         const auto apply_function = [&]<typename... T>(MemberMeta<Data, T>... meta) {
             auto result = Ret {};

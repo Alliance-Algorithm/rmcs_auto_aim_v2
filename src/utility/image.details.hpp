@@ -6,7 +6,6 @@
 namespace rmcs {
 
 struct Image::Details {
-    cv::Mat mat;
 
     auto set_mat(cv::Mat mat) noexcept -> void {
         //
@@ -16,6 +15,12 @@ struct Image::Details {
         //
         return self.mat;
     }
+
+    auto get_cols() const noexcept { return mat.cols; }
+    auto get_rows() const noexcept { return mat.rows; }
+
+private:
+    cv::Mat mat;
 };
 
 }

@@ -3,6 +3,7 @@
 #include <expected>
 #include <opencv2/core/mat.hpp>
 #include <opencv2/videoio.hpp>
+#include <utility>
 
 namespace rmcs::debug {
 
@@ -21,25 +22,25 @@ public:
         int hz;
     };
     struct StreamTarget {
-        std::string_view host;
-        std::string_view port;
+        std::string host;
+        std::string port;
     };
 
 public:
     explicit StreamContext(StreamType stream_type, const VideoFormat& video_format,
-        const StreamTarget& stream_target) noexcept
+        StreamTarget stream_target) noexcept
         : video_format_ { video_format }
         , stream_type_ { stream_type }
-        , stream_target_ { stream_target } { }
+        , stream_target_ { std::move(stream_target) } { }
 
     static auto check_support() noexcept -> std::expected<void, std::string_view>;
 
-    auto open() noexcept -> std::expected<void, std::string_view>;
+    auto open() noexcept -> std::expected<void, std::string>;
 
     auto opened() const noexcept -> bool;
 
     auto session_description_protocol(const std::string_view& local_ip) const noexcept
-        -> std::expected<std::string, std::string_view>;
+        -> std::expected<std::string, std::string>;
 
     auto write(FrameRef frame) const noexcept -> void;
 
