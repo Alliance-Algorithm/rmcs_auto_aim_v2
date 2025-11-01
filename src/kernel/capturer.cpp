@@ -38,7 +38,7 @@ struct Capturer::Impl {
         config.transform_to(hikcamera_config);
 
         runtime_thread = std::jthread {
-            [this](auto t) { runtime_task(t); },
+            [this](const auto& t) { runtime_task(t); },
         };
 
         return { /* Successfully initialize */ };

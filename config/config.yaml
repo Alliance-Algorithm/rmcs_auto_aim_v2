@@ -4,7 +4,7 @@ AutoAim:
 
     capturer:
       # int
-      timeout_ms: 100
+      timeout_ms: 500
       # float
       exposure_us: 2000.0
       # float

@@ -21,7 +21,6 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
 find_package(rmcs_executor REQUIRED)
-find_package(rmcs_msgs REQUIRED)
 find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
 find_package(hikcamera REQUIRED)
@@ -36,7 +35,6 @@ include_directories(
     ${sensor_msgs_INCLUDE_DIRS}
 
     ${rmcs_executor_INCLUDE_DIRS}
-    ${rmcs_msgs_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
 )
@@ -99,16 +97,20 @@ target_link_libraries(
     ${PROJECT_NAME}_kernel
     ${PROJECT_NAME}_module
 )
-target_compile_definitions(
-    ${PROJECT_NAME}_runtime PRIVATE
-    PACKAGE_NAME="${PROJECT_NAME}"
-)
 
 if(BUILD_TESTING)
     include(test/test.cmake)
 endif()
 
 ## 安装配置
+install(
+    TARGETS
+        ${PROJECT_NAME}_component
+        ${PROJECT_NAME}_kernel
+        ${PROJECT_NAME}_module
+    DESTINATION
+        lib/
+)
 install(
     DIRECTORY
         config/
@@ -119,11 +121,8 @@ install(
 install(
     TARGETS
         ${PROJECT_NAME}_runtime
-        ${PROJECT_NAME}_component
-        ${PROJECT_NAME}_kernel
-        ${PROJECT_NAME}_module
     DESTINATION
-        lib/
+        lib/${PROJECT_NAME}
 )
 
 ## plugins for rmcs_executor

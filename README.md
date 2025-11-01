@@ -1,6 +1,23 @@
 # 较为现代化的机甲大师自瞄
 
+## 部署步骤
+
+先确保海康相机的 SDK 正确构建，再保证 `rmcs_exetutor` 正确构建，如果要运行 RMCS 控制系统的话
+
+```sh
+# 进入工作空间的 src/ 目录下
+git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --branch 2.0 --depth 1
+git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
+
+# 构建依赖
+build-rmcs
+```
+
 ## 项目架构
+
+### 文件排布
+
+### 任务调度
 
 ## 调试指南
 
@@ -38,18 +55,14 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
 
 ```sh
-play-autoaim username
+# 如果自瞄运行在机器人上，就加上 --remote 参数
+play-autoaim username [--remote]
 ```
 
 随后你会看到这样的输出：
 
 ```
 /workspaces/RMCS/main/RMCS (main*) » play-autoaim creeper                                             ubuntu@creeper
-ssh: connect to host 127.0.0.1 port 2022: Connection refused
-scp: Connection closed
-⚠️ 从 remote 拷贝失败。是否继续？(y/n)
-y
-继续执行后续操作…
 creeper@localhost's password: 
 auto_aim.sdp                                                                       100%   70   330.8KB/s   00:00    
 ✅ 文件已拷贝到宿主机：/tmp/auto_aim.sdp
