@@ -6,7 +6,7 @@ set(BUILD_TESTING ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_BUILD_TYPE "Debug") # TODO: Remove it
+set(CMAKE_BUILD_TYPE "Release")
 add_compile_options(-Wall -Wextra -Wpedantic -O3)
 
 ## 依赖查找
@@ -32,6 +32,7 @@ include_directories(
 
     ${type_description_interfaces_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
+    ${ament_index_cpp_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
 
     ${rmcs_executor_INCLUDE_DIRS}
@@ -54,8 +55,7 @@ file(GLOB_RECURSE AUTO_AIM_MODULE
     ${PROJECT_SOURCE_DIR}/src/utility/*.cc
 )
 
-## 构建目标
-## 核心构建
+## 核心构建: kernel and module
 add_library(
     ${PROJECT_NAME}_kernel SHARED
     ${AUTO_AIM_KERNEL}
@@ -73,11 +73,11 @@ target_link_libraries(
     ${PROJECT_NAME}_module
     ${OpenCV_LIBS}
     ${hikcamera_LIBRARIES}
+    ament_index_cpp::ament_index_cpp
     openvino::runtime
-    Ceres::ceres
 )
 
-## 组件构建
+## 组件构建: component
 add_library(
     ${PROJECT_NAME}_component SHARED
     ${PROJECT_SOURCE_DIR}/src/component.cpp
@@ -89,7 +89,7 @@ target_link_libraries(
     ${rmcs_executor_LIBRARIES}
 )
 
-## 运行时构建
+## 运行时构建: runtime
 add_executable(
     ${PROJECT_NAME}_runtime
     ${PROJECT_SOURCE_DIR}/src/runtime.cpp
@@ -98,7 +98,6 @@ target_link_libraries(
     ${PROJECT_NAME}_runtime
     ${PROJECT_NAME}_kernel
     ${PROJECT_NAME}_module
-    ament_index_cpp::ament_index_cpp
 )
 target_compile_definitions(
     ${PROJECT_NAME}_runtime PRIVATE
@@ -125,6 +124,7 @@ install(
         lib/${PROJECT_NAME}
 )
 
+## plugins for rmcs_executor
 find_package(pluginlib REQUIRED)
 pluginlib_export_plugin_description_file(
     rmcs_executor plugins.xml

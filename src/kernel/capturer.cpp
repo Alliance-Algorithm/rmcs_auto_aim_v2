@@ -21,7 +21,7 @@ struct Capturer::Impl {
     std::unique_ptr<Cap> capturer;
     Cap::Config hikcamera_config;
 
-    std::chrono::seconds reconnect_wait_seconds { 1 };
+    std::chrono::milliseconds reconnect_wait_interval { 500 };
 
     util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
@@ -96,7 +96,7 @@ struct Capturer::Impl {
                 log.error("- Reconnect capturer now...");
 
                 std::ignore = capturer->deinitialize();
-                rclcpp::sleep_for(reconnect_wait_seconds);
+                rclcpp::sleep_for(reconnect_wait_interval);
                 capture_failed_limit.reset();
             }
         };
@@ -121,7 +121,7 @@ struct Capturer::Impl {
                     log.error("{} times, stop printing errors", error_limit.count);
                 }
             }
-            rclcpp::sleep_for(reconnect_wait_seconds);
+            rclcpp::sleep_for(reconnect_wait_interval);
         };
 
         for (;;) {

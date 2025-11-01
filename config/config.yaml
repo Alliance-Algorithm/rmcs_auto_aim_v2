@@ -1,6 +1,6 @@
 AutoAim:
   ros__parameters:
-    use_visualization: false
+    use_visualization: true
 
     capturer:
       # int
@@ -17,7 +17,7 @@ AutoAim:
       trigger_mode: false
       fixed_framerate: true
 
-      print_loss_framerate: true
+      print_loss_framerate: false
       print_loss_framerate_interval_seconds: 5
 
     visualization:

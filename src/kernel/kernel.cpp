@@ -13,6 +13,13 @@ public:
     explicit Impl(util::Node& _node) noexcept
         : node { _node } {
 
+        initialize();
+
+        using namespace std::chrono_literals;
+        timer = node.create_wall_timer(1ms, [this] { kernel_event_loop(); });
+    }
+
+    auto initialize() noexcept -> void {
         node.info("AutoAim Kernel is initializing...");
 
         if (auto ret = config.serialize("", node); !ret) {
@@ -29,9 +36,6 @@ public:
         if (config.use_visualization) {
             initialize_kernel(visualization, node);
         }
-
-        using namespace std::chrono_literals;
-        timer = node.create_wall_timer(1ms, [this] { kernel_event_loop(); });
 
         node.info("AutoAim Kernel is initialized");
     }
@@ -53,12 +57,13 @@ public:
     }
 
     /// @NOTE: The main loop for auto aiming
-    ///  - event 1: query image from capturer and publish task
-    ///  - event 2: resume avaliable task and clear them
+    ///  - Event 1: query image from capturer and publish task
+    ///  - Event 2: resume avaliable task and clear them
+    ///  - Finally registerd in ros2 executor
     auto kernel_event_loop() noexcept -> void {
         // Publish task here
         if (auto image = capturer.fetch_image()) {
-            auto task = make_consumption(std::move(image));
+            auto task = make_consumption_task(std::move(image));
             tasks.emplace_back(task);
         }
         // Resume avaliable coroutine task
@@ -83,7 +88,7 @@ public:
     /// @NOTE:
     ///  - Use "switch_to_kernel" to come back from other thread
     ///  - No blocking function on kernel context after switching
-    auto make_consumption(std::unique_ptr<Image> image) noexcept //
+    auto make_consumption_task(std::unique_ptr<Image> image) noexcept //
         -> co::task<result_type> {
 
         // ...

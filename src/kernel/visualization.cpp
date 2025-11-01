@@ -3,6 +3,8 @@
 #include "utility/image.details.hpp"
 #include "utility/logging/printer.hpp"
 
+#include <fstream>
+
 using do_not_warn_please_for_clangd = rmcs::Image::Details;
 using namespace rmcs::kernel;
 
@@ -44,7 +46,15 @@ struct VisualizationRuntime::Impl {
             if (auto ret = session->open(session_config)) {
                 log.info("Visualization session is opened");
                 if (auto ret = session->session_description_protocol()) {
-                    log.info("\n{}", ret.value());
+                    auto output_location = "/tmp/auto_aim.sdp";
+                    if (auto ofstream = std::ofstream { output_location }) {
+                        ofstream.clear();
+                        ofstream << ret.value();
+                        ofstream.close();
+                        log.info("Sdp has been written to: {}", output_location);
+                    } else {
+                        log.error("Failed to write sdp: {}", output_location);
+                    }
                 } else {
                     log.error("Failed to get description protocol");
                     log.error("  e: {}", ret.error());
