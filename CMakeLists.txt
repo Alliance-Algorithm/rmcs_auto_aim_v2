@@ -120,8 +120,10 @@ install(
     TARGETS
         ${PROJECT_NAME}_runtime
         ${PROJECT_NAME}_component
+        ${PROJECT_NAME}_kernel
+        ${PROJECT_NAME}_module
     DESTINATION
-        lib/${PROJECT_NAME}
+        lib/
 )
 
 ## plugins for rmcs_executor
