@@ -1,6 +1,9 @@
 #include "kernel/kernel.hpp"
 #include "kernel/kernel.config.hpp"
 #include "kernel/kernel.util.hpp"
+#include "modules/debug/framerate.hpp"
+#include "utility/shared/context.hpp"
+#include "utility/shared/interprocess.hpp"
 #include "utility/thread/spsc_queue.hpp"
 
 #include "kernel/capturer.hpp"
@@ -35,6 +38,12 @@ public:
 
         if (config.use_visualization) {
             initialize_kernel(visualization, node);
+        }
+
+        if (!client.open(shared::id)) {
+            node.error("Failed to create shared memory");
+        } else {
+            node.info("Shared memory was opened");
         }
 
         node.info("AutoAim Kernel is initialized");
@@ -83,6 +92,13 @@ public:
             return true;
         };
         std::erase_if(tasks, check);
+
+        // TODO: remove soon
+        if (client.opened()) {
+            client.with_write([this](auto& shm) { shm.timestamp = event_framerate.fps(); });
+        }
+
+        event_framerate.tick();
     }
 
     /// @NOTE:
@@ -109,6 +125,7 @@ private:
 
     // Context
     AutoAimConfig config;
+    FramerateCounter event_framerate;
 
     util::spsc_queue<handle_type, 20> coroutines;
     std::vector<co::task<result_type>> tasks;
@@ -119,6 +136,10 @@ private:
     // Identifier
 
     // Calculator
+
+    using Context = shared::Context;
+    using Client  = shm::Client<Context>::Send;
+    Client client {};
 
     // Debug
     kernel::VisualizationRuntime visualization;

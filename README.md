@@ -73,6 +73,6 @@ creeper@localhost's password:
 
 电脑便自动打开 VLC 播放视频流了，SDP 文件会经过`机器人 -> 容器 -> 本地`到 `/tmp/auto_aim.sdp/` 目录
 
-脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**
+脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
 
 愉快调试吧！

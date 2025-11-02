@@ -32,6 +32,11 @@ target_link_libraries(
     ${PROJECT_NAME}_module
 )
 
+ament_add_gtest(
+    test_interprocess
+    test/interprocess.cpp
+)
+
 #
 # For quick test
 #

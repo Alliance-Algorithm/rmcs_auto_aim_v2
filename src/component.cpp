@@ -1,19 +1,42 @@
+#include "modules/debug/framerate.hpp"
 #include "utility/node.hpp"
+#include "utility/shared/context.hpp"
+#include "utility/shared/interprocess.hpp"
+
 #include <rmcs_executor/component.hpp>
 
 namespace rmcs {
+using Component = rmcs_executor::Component;
+using Node      = util::Node;
+using Client    = shm::Client<shared::Context>::Recv;
 
-class AutoAimComponent final : public rmcs_executor::Component, util::Node {
+class AutoAimComponent final : public Component, Node {
 public:
     explicit AutoAimComponent() noexcept
         : Node { get_component_name(), util::options } {
 
-        rclcpp_info("{}", get_parameter_or<std::string>("msg", ""));
+        using namespace std::chrono_literals;
+        framerate.set_intetval(2s);
+
+        if (!client.open(shared::id)) {
+            error("Failed to open shared memory");
+        }
     }
 
-    void update() override { }
+    auto update() -> void override {
+        if (client.opened() == false) {
+            client.open(shared::id);
+        } else if (framerate.tick()) {
+            auto context = shared::Context {};
+            client.recv(context);
+
+            info("context: {}", context.timestamp);
+        }
+    }
 
 private:
+    Client client;
+    FramerateCounter framerate;
 };
 
 } // namespace rmcs
