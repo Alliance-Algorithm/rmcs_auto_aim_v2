@@ -21,9 +21,9 @@ build-rmcs
 
 ## 调试指南
 
-### cv::imshow
+### OPENCV 可视化窗口
 
-如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，设置环境变量永远使用 CPU 渲染即可
+如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可
 
 ```
 # F*** Nvidia
@@ -65,13 +65,13 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 
 ```sh
 # 如果自瞄运行在机器人上，就加上 --remote 参数
-play-autoaim username [--remote]
+play-autoaim --user username [--remote][--no-copy]
 ```
 
 随后你会看到这样的输出：
 
 ```
-/workspaces/RMCS/main/RMCS (main*) » play-autoaim creeper                                             ubuntu@creeper
+/workspaces/RMCS/main/RMCS (main*) » play-autoaim --user creeper                                       ubuntu@creeper
 creeper@localhost's password: 
 auto_aim.sdp                                                                       100%   70   330.8KB/s   00:00    
 ✅ 文件已拷贝到宿主机：/tmp/auto_aim.sdp
