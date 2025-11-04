@@ -7,7 +7,7 @@
 #include <coroutine>
 #include <thread>
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 template <class T>
 inline auto initialize_kernel(T& kernel, util::Node& node) -> void {

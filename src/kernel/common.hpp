@@ -4,7 +4,7 @@
 
 #include <yaml-cpp/yaml.h>
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 using Yaml = YAML::Node;
 

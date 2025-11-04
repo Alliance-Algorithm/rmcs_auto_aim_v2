@@ -4,7 +4,7 @@
 #include "utility/image.hpp"
 #include "utility/pimpl.hpp"
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 class Identifier {
     RMCS_PIMPL_DEFINITION(Identifier)

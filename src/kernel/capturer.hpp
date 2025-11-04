@@ -5,7 +5,7 @@
 
 #include <expected>
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 class Capturer final {
     RMCS_PIMPL_DEFINITION(Capturer)

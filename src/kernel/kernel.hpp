@@ -1,7 +1,7 @@
 #include "utility/node.hpp"
 #include <memory>
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 class AutoAim final : public util::Node {
 public:

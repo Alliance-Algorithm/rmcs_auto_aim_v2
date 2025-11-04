@@ -23,8 +23,8 @@ auto main() -> int {
     auto framerate = FramerateCounter {};
     framerate.set_intetval(5s);
 
-    auto capturer      = runtime::Capturer {};
-    auto visualization = runtime::Visualization {};
+    auto capturer      = kernel::Capturer {};
+    auto visualization = kernel::Visualization {};
 
     ///
     /// Configure

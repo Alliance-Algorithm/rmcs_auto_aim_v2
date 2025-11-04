@@ -4,7 +4,7 @@
 #include "modules/identifier/lightbar.hpp"
 #include "modules/identifier/preprocess.hpp"
 
-using namespace rmcs::runtime;
+using namespace rmcs::kernel;
 
 struct Identifier::Impl {
     using ImageUnique = std::unique_ptr<Image>;

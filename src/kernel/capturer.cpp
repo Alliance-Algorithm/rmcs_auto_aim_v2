@@ -10,7 +10,7 @@
 #include <rclcpp/utilities.hpp>
 #include <thread>
 
-using namespace rmcs::runtime;
+using namespace rmcs::kernel;
 using namespace rmcs::cap;
 
 struct Capturer::Impl {

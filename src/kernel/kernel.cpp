@@ -9,7 +9,7 @@
 #include "kernel/identifier.hpp"
 #include "kernel/visualization.hpp"
 
-using namespace rmcs::runtime;
+using namespace rmcs::kernel;
 
 struct AutoAim::Impl {
     using Context = shared::Context;
@@ -28,15 +28,15 @@ private:
     std::vector<co::task<result_type>> tasks;
 
     // Capturer
-    runtime::Capturer capturer {};
+    kernel::Capturer capturer {};
 
     // Identifier
-    runtime::Identifier identifier {};
+    kernel::Identifier identifier {};
 
     // Calculator
 
     // Debug
-    runtime::Visualization visualization;
+    kernel::Visualization visualization;
 
     Client client {};
 

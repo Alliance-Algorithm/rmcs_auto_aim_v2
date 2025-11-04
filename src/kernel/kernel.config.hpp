@@ -1,7 +1,7 @@
 #pragma once
 #include "utility/serializable.hpp"
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 struct AutoAimConfig : util::Serializable {
 

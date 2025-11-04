@@ -8,7 +8,7 @@
 #include <fstream>
 
 using do_not_warn_please_for_clangd = rmcs::Image::Details;
-using namespace rmcs::runtime;
+using namespace rmcs::kernel;
 
 struct Visualization::Impl {
     using SessionConfig = debug::StreamSession::Config;

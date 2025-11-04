@@ -1,7 +1,7 @@
 #pragma once
 #include "utility/serializable.hpp"
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 constexpr std::array kVideoTypes {
     "RTP_JEPG",

@@ -4,7 +4,7 @@
 #include <expected>
 #include <yaml-cpp/yaml.h>
 
-namespace rmcs::runtime {
+namespace rmcs::kernel {
 
 class Visualization {
     RMCS_PIMPL_DEFINITION(Visualization)
