@@ -1,9 +1,9 @@
 #pragma once
 #include "utility/serializable.hpp"
 
-namespace rmcs::kernel {
+namespace rmcs::runtime {
 
-struct AutoAimConfig : util::SerializableExpansion {
+struct AutoAimConfig : util::Serializable {
 
     util::flag_t use_visualization = false;
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 
-namespace rmcs {
+namespace rmcs::util {
 
 struct TimesLimit {
 

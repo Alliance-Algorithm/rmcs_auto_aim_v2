@@ -1,17 +1,61 @@
 #include "kernel/kernel.hpp"
 #include "kernel/kernel.config.hpp"
-#include "kernel/kernel.util.hpp"
 #include "modules/debug/framerate.hpp"
 #include "utility/shared/context.hpp"
 #include "utility/shared/interprocess.hpp"
 #include "utility/thread/spsc_queue.hpp"
 
 #include "kernel/capturer.hpp"
+#include "kernel/identifier.hpp"
 #include "kernel/visualization.hpp"
 
-using namespace rmcs::kernel;
+using namespace rmcs::runtime;
 
 struct AutoAim::Impl {
+    using Context = shared::Context;
+    using Client  = shm::Client<Context>::Send;
+
+private:
+    // ROS2
+    util::Node& node;
+    std::shared_ptr<rclcpp::TimerBase> timer;
+
+    // Context
+    AutoAimConfig config;
+    FramerateCounter event_framerate;
+
+    util::spsc_queue<handle_type, 20> coroutines;
+    std::vector<co::task<result_type>> tasks;
+
+    // Capturer
+    runtime::Capturer capturer {};
+
+    // Identifier
+    runtime::Identifier identifier {};
+
+    // Calculator
+
+    // Debug
+    runtime::Visualization visualization;
+
+    Client client {};
+
+    auto switch_to_kernel() noexcept {
+        struct awaitable {
+            decltype(coroutines)& coroutines_ref;
+            bool pushed = false;
+
+            auto await_suspend(handle_type co) noexcept {
+                // Resume immediately if push failed
+                return pushed = coroutines_ref.push(co);
+            }
+            auto await_resume() const noexcept { return pushed; }
+
+            static constexpr auto await_ready() noexcept { return false; }
+        };
+        return awaitable { coroutines };
+    }
+
 public:
     explicit Impl(util::Node& _node) noexcept
         : node { _node } {
@@ -31,13 +75,13 @@ public:
             rclcpp::shutdown();
         }
 
-        initialize_kernel(capturer, node);
+        // initialize_kernel(capturer, node);
 
         // initialize_kernel(kernel1, node);
         // initialize_kernel(kernel2, node);
 
         if (config.use_visualization) {
-            initialize_kernel(visualization, node);
+            // initialize_kernel(visualization, node);
         }
 
         if (!client.open(shared::id)) {
@@ -47,22 +91,6 @@ public:
         }
 
         node.info("AutoAim Kernel is initialized");
-    }
-
-    auto switch_to_kernel() noexcept {
-        struct awaitable {
-            decltype(coroutines)& coroutines_ref;
-            bool pushed = false;
-
-            auto await_suspend(handle_type co) noexcept {
-                // Resume immediately if push failed
-                return pushed = coroutines_ref.push(co);
-            }
-            auto await_resume() const noexcept { return pushed; }
-
-            static constexpr auto await_ready() noexcept { return false; }
-        };
-        return awaitable { coroutines };
     }
 
     /// @NOTE: The main loop for auto aiming
@@ -93,56 +121,24 @@ public:
         };
         std::erase_if(tasks, check);
 
-        // TODO: remove soon
-        if (client.opened()) {
-            client.with_write([this](auto& shm) { shm.timestamp = event_framerate.fps(); });
-        }
-
         event_framerate.tick();
     }
 
     /// @NOTE:
     ///  - Use "switch_to_kernel" to come back from other thread
     ///  - No blocking function on kernel context after switching
-    auto make_consumption_task(std::unique_ptr<Image> image) noexcept //
+    auto make_consumption_task(std::unique_ptr<Image> _image) noexcept //
         -> co::task<result_type> {
 
-        // ...
+        auto image = std::shared_ptr<Image> { _image.release() };
+
+        identifier.sync_identify(*image);
 
         if (config.use_visualization) {
-            if (!visualization.send_image(*image)) {
-                // ...
-            }
+            visualization.send_image(*image);
         }
-
         co_return {};
     }
-
-private:
-    // ROS2
-    util::Node& node;
-    std::shared_ptr<rclcpp::TimerBase> timer;
-
-    // Context
-    AutoAimConfig config;
-    FramerateCounter event_framerate;
-
-    util::spsc_queue<handle_type, 20> coroutines;
-    std::vector<co::task<result_type>> tasks;
-
-    // Capturer
-    kernel::Capturer capturer;
-
-    // Identifier
-
-    // Calculator
-
-    using Context = shared::Context;
-    using Client  = shm::Client<Context>::Send;
-    Client client {};
-
-    // Debug
-    kernel::VisualizationRuntime visualization;
 };
 
 AutoAim::AutoAim() noexcept

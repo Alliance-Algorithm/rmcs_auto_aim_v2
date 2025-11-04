@@ -26,11 +26,18 @@ public:
     auto update() -> void override {
         if (client.opened() == false) {
             client.open(shared::id);
-        } else if (framerate.tick()) {
+        } else if (client.is_updated() && framerate.tick()) {
+
             auto context = shared::Context {};
             client.recv(context);
 
-            info("context: {}", context.timestamp);
+            auto timestamp = context.timestamp;
+            auto now       = shared::Clock::now();
+
+            using Milli   = std::chrono::duration<double, std::milli>;
+            auto interval = Milli { now - timestamp };
+
+            info("Client recv, delay: {:.3}ms, hz: {}", interval.count(), framerate.fps());
         }
     }
 

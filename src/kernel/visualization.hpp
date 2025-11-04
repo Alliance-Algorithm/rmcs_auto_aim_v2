@@ -1,22 +1,25 @@
 #pragma once
 #include "utility/image.hpp"
-#include "visualization.config.hpp"
 
-namespace rmcs::kernel {
+#include <expected>
+#include <yaml-cpp/yaml.h>
 
-class VisualizationRuntime {
-    RMCS_PIMPL_DEFINITION(VisualizationRuntime)
+namespace rmcs::runtime {
+
+class Visualization {
+    RMCS_PIMPL_DEFINITION(Visualization)
 
 public:
     static constexpr auto get_prefix() noexcept { return "visualization"; }
 
-    auto operator<<(const Image& image) noexcept -> VisualizationRuntime& {
+    auto operator<<(const Image& image) noexcept -> Visualization& {
         return send_image(image), *this;
     }
 
 public:
-    using Config = VisualizationConfig;
-    auto initialize(const Config&) noexcept -> std::expected<void, std::string>;
+    auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
+
+    auto initialized() const noexcept -> bool;
 
     auto send_image(const Image&) noexcept -> bool;
 };

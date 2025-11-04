@@ -5,6 +5,10 @@
 
 namespace rmcs::co {
 
+/// @note:
+///  - No raii for coroutine manager, destroy manually
+///  - Launch immediately
+///  - Destroy lazy
 template <typename result_type>
 struct task {
 

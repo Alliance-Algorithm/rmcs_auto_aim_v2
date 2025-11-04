@@ -1,14 +1,14 @@
 #pragma once
 #include "utility/serializable.hpp"
 
-namespace rmcs::kernel {
+namespace rmcs::runtime {
 
 constexpr std::array kVideoTypes {
     "RTP_JEPG",
     "RTP_H264",
 };
 
-struct VisualizationConfig : util::SerializableExpansion {
+struct VisualizationConfig : util::Serializable {
 
     util::integer_t framerate = 80;
 

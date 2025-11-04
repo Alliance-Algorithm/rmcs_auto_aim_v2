@@ -9,7 +9,8 @@ using Clock = std::chrono::steady_clock;
 using Stamp = Clock::time_point;
 
 struct Context {
-    std::uint32_t timestamp;
+    Stamp timestamp;
+    std::byte bytes[128];
 };
 static_assert(std::is_trivially_copyable_v<Context>, " ");
 }

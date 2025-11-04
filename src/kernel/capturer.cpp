@@ -1,47 +1,70 @@
 #include "capturer.hpp"
+#include "modules/capturer/common.hpp"
 #include "modules/capturer/hikcamera.hpp"
 #include "modules/debug/framerate.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/singleton/running.hpp"
 #include "utility/thread/spsc_queue.hpp"
 #include "utility/times_limit.hpp"
 
 #include <rclcpp/utilities.hpp>
 #include <thread>
 
-using Cap = rmcs::cap::Hikcamera;
-
-using namespace rmcs::kernel;
+using namespace rmcs::runtime;
+using namespace rmcs::cap;
 
 struct Capturer::Impl {
     using RawImage = Image*;
 
+    std::unique_ptr<Interface> interface;
+
     Printer log { "Capturer" };
     FramerateCounter loss_image_framerate {};
-
-    std::unique_ptr<Cap> capturer;
-    Cap::Config hikcamera_config;
 
     std::chrono::milliseconds reconnect_wait_interval { 500 };
 
     util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
 
-    auto initialize(const Config& config) noexcept -> std::expected<void, std::string> {
-        using namespace std::chrono_literals;
+    auto initialize(const Yaml& yaml) noexcept -> Result try {
+        using namespace ::details;
 
-        loss_image_framerate.enable = config.print_loss_framerate;
+        auto source = yaml["source"].as<std::string>();
+
+        /*  */ if (source == "hikcamera") {
+            using Instance = cap::Adapter<hik::Hikcamera>;
+
+            auto camera = std::make_unique<Instance>();
+            auto result = camera->configure_yaml(yaml["hikcamera"]);
+            if (!result.has_value()) {
+                return std::unexpected { result.error() };
+            }
+            interface = std::move(camera);
+        } else if (source == "video") {
+            return std::unexpected { "not implemented: video" };
+        } else if (source == "images") {
+            return std::unexpected { "not implemented: images" };
+        } else {
+            return std::unexpected { "Unknown capturer source" };
+        }
+
+        auto show_loss_framerate          = yaml["show_loss_framerate"].as<bool>();
+        auto show_loss_framerate_interval = yaml["show_loss_framerate_interval"].as<int>();
+
+        loss_image_framerate.enable = show_loss_framerate;
         loss_image_framerate.set_intetval(
-            std::chrono::seconds { config.print_loss_framerate_interval_seconds });
+            std::chrono::milliseconds { show_loss_framerate_interval });
 
-        // Not connect here, to quick launch
-        capturer = std::make_unique<Cap>();
-        config.transform_to(hikcamera_config);
+        reconnect_wait_interval =
+            std::chrono::milliseconds { yaml["reconnect_wait_interval"].as<int>() };
 
         runtime_thread = std::jthread {
             [this](const auto& t) { runtime_task(t); },
         };
+        return {};
 
-        return { /* Successfully initialize */ };
+    } catch (const std::exception& e) {
+        return std::unexpected { e.what() };
     }
 
     ~Impl() noexcept {
@@ -87,7 +110,7 @@ struct Capturer::Impl {
         };
 
         // Failed context
-        auto capture_failed_limit = TimesLimit { 3 };
+        auto capture_failed_limit = util::TimesLimit { 3 };
 
         auto failed_callback = [&](const std::string& msg) {
             if (capture_failed_limit.tick() == false) {
@@ -95,20 +118,16 @@ struct Capturer::Impl {
                 log.error("- Newest error: {}", msg);
                 log.error("- Reconnect capturer now...");
 
-                std::ignore = capturer->deinitialize();
                 rclcpp::sleep_for(reconnect_wait_interval);
                 capture_failed_limit.reset();
             }
         };
 
         // Reconnect context
-        auto error_limit = TimesLimit { 3 };
+        auto error_limit = util::TimesLimit { 3 };
 
         auto reconnect = [&] {
-            if (!capturer->initialized()) {
-                auto ret = capturer->deinitialize();
-            }
-            if (auto result = capturer->initialize(hikcamera_config)) {
+            if (auto result = interface->connect()) {
                 log.info("Connect to capturer successfully");
                 error_limit.reset();
                 error_limit.enable();
@@ -125,15 +144,18 @@ struct Capturer::Impl {
         };
 
         for (;;) {
-            if (token.stop_requested()) break;
-            if (!rclcpp::ok()) break;
+            if (!util::get_running()) [[unlikely]]
+                break;
 
-            if (!capturer->initialized()) {
+            if (token.stop_requested()) [[unlikely]]
+                break;
+
+            if (!interface->connected()) {
                 reconnect();
                 continue;
             }
 
-            if (auto result = capturer->wait_image()) {
+            if (auto result = interface->wait_image()) {
                 success_callback(std::move(*result));
             } else {
                 failed_callback(result.error());
@@ -143,7 +165,7 @@ struct Capturer::Impl {
     }
 };
 
-auto Capturer::initialize(const Config& config) noexcept -> std::expected<void, std::string> {
+auto Capturer::initialize(const Yaml& config) noexcept -> std::expected<void, std::string> {
     return pimpl->initialize(config);
 }
 

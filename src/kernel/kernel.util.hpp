@@ -1,15 +1,16 @@
 #pragma once
 #include "kernel/common.hpp"
+#include "utility/node.hpp"
 
 #include <rclcpp/utilities.hpp>
 
 #include <coroutine>
 #include <thread>
 
-namespace rmcs::kernel {
+namespace rmcs::runtime {
 
 template <class T>
-inline auto initialize_kernel(T& kernel, auto& node) -> void {
+inline auto initialize_kernel(T& kernel, util::Node& node) -> void {
 
     static_assert(details::has_config_trait<T>,
         "Type T must define a nested type 'Config' for serialize from yaml.");

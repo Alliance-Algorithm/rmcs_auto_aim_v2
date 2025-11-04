@@ -1,40 +1,24 @@
 #pragma once
+#include "identifier.config.hpp"
+
 #include "utility/image.hpp"
-#include "utility/robot/color.hpp"
-#include "utility/robot/id.hpp"
+#include "utility/pimpl.hpp"
 
-namespace rmcs::kernel {
+namespace rmcs::runtime {
 
-namespace identifier::details {
-    using ImageUnique = std::unique_ptr<Image>;
+class Identifier {
+    RMCS_PIMPL_DEFINITION(Identifier)
 
-    template <class T>
-    concept fetchable_trait = requires(T& t) {
-        { t.fetch() } -> std::same_as<ImageUnique>;
-    };
-    template <fetchable_trait T>
-    struct CaptureAdapter final {
-        T& fetchable;
+public:
+    using Config = IdentifierConfig;
 
-        explicit CaptureAdapter(T& capturer) noexcept
-            : fetchable { capturer } { }
+    auto initialize(const Config&) noexcept -> std::expected<void, std::string>;
 
-        auto fetch() const noexcept -> ImageUnique { return fetchable.fetch(); }
-    };
+    auto perview() const noexcept -> const Image&;
 
-    struct IdentifierImpl final {
-        RMCS_PIMPL_DEFINITION(IdentifierImpl)
+    auto sync_identify(const Image&) noexcept -> void;
 
-    public:
-        using IdentifyResult = void;
-        using ResultUnique   = std::unique_ptr<IdentifyResult>;
-
-        auto push_source(ImageUnique source) noexcept -> void;
-        auto pull_result() noexcept -> ResultUnique;
-
-        auto set_enemy_color(CampColor color) noexcept -> void;
-        auto set_enemy_target(DeviceIds ids) noexcept -> void;
-    };
+    static constexpr auto get_prefix() { return "identifier"; }
 };
 
 }

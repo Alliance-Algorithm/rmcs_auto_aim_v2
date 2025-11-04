@@ -1,47 +1,41 @@
 #pragma once
-#include "modules/capturer/common.hpp"
-#include "utility/image.details.hpp"
 #include <hikcamera/capturer.hpp>
 
-namespace rmcs::cap::details {
+#include "utility/image.hpp"
+#include "utility/serializable.hpp"
 
-struct HikcameraImpl {
-    using Config = hikcamera::Config;
+namespace rmcs::cap::hik {
 
-    hikcamera::Camera details;
+using NormalResult = std::expected<void, std::string>;
+using ImageResult  = std::expected<std::unique_ptr<Image>, std::string>;
 
-    explicit HikcameraImpl() noexcept
-        : details {} { }
+struct Hikcamera : public hikcamera::Camera {
+    using Camera::Camera;
 
-    auto initialize(const Config& config) noexcept -> NormalResult {
-        return details.initialize(config);
-    }
+    struct Config : hikcamera::Config, util::Serializable {
+        static constexpr std::tuple metas {
+            &Config::timeout_ms,
+            "timeout_ms",
+            &Config::exposure_us,
+            "exposure_us",
+            &Config::framerate,
+            "framerate",
+            &Config::gain,
+            "gain",
+            &Config::invert_image,
+            "invert_image",
+            &Config::software_sync,
+            "software_sync",
+            &Config::trigger_mode,
+            "trigger_mode",
+            &Config::fixed_framerate,
+            "fixed_framerate",
+        };
+    };
 
-    auto deinitialize() noexcept -> NormalResult { return details.deinitialize(); }
-
-    auto initialized() const noexcept -> bool { return details.initialized(); }
-
-    auto wait_image() noexcept -> ImageResult {
-        auto mat = details.read_image();
-        if (!mat.has_value()) {
-            return std::unexpected { mat.error() };
-        }
-
-        auto image = std::make_unique<Image>();
-        image->details().set_mat(std::move(*mat));
-
-        // TODO: Sync the timestamp
-        image->set_timestamp(Image::Clock::now());
-
-        return image;
-    }
+    auto wait_image() noexcept -> ImageResult;
 
     static constexpr auto get_prefix() noexcept { return "hikcamera"; }
 };
-
-}
-namespace rmcs::cap {
-
-using Hikcamera = cap::Adapter<details::HikcameraImpl>;
 
 }

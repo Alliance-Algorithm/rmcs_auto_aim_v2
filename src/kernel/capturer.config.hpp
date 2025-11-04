@@ -1,9 +1,9 @@
 #pragma once
 #include "utility/serializable.hpp"
 
-namespace rmcs::kernel {
+namespace rmcs::runtime {
 
-struct CapturerConfig : util::SerializableExpansion {
+struct CapturerConfig : util::Serializable {
     static constexpr auto kMaxGain = float { 16.9807 };
 
     util::integer_t timeout_ms = 2000;

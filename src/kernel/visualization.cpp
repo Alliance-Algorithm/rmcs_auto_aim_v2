@@ -1,4 +1,6 @@
 #include "visualization.hpp"
+#include "visualization.config.hpp"
+
 #include "modules/debug/visualization/stream_session.hpp"
 #include "utility/image.details.hpp"
 #include "utility/logging/printer.hpp"
@@ -6,9 +8,9 @@
 #include <fstream>
 
 using do_not_warn_please_for_clangd = rmcs::Image::Details;
-using namespace rmcs::kernel;
+using namespace rmcs::runtime;
 
-struct VisualizationRuntime::Impl {
+struct Visualization::Impl {
     using SessionConfig = debug::StreamSession::Config;
     using NormalResult  = std::expected<void, std::string>;
 
@@ -17,11 +19,18 @@ struct VisualizationRuntime::Impl {
     std::unique_ptr<debug::StreamSession> session;
     SessionConfig session_config;
 
-    bool has_determine_size = false;
+    bool is_initialized  = false;
+    bool size_determined = false;
 
     Impl() noexcept { session = std::make_unique<debug::StreamSession>(); }
 
-    auto initialize(const Config& config) noexcept -> NormalResult {
+    auto initialize(const YAML::Node& yaml) noexcept -> NormalResult {
+        auto config = VisualizationConfig {};
+        auto result = config.serialize(yaml);
+        if (!result.has_value()) {
+            return std::unexpected { result.error() };
+        }
+
         session_config.target.host = config.monitor_host;
         session_config.target.port = config.monitor_port;
         session_config.format.hz   = static_cast<int>(config.framerate);
@@ -33,36 +42,48 @@ struct VisualizationRuntime::Impl {
         } else {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
+        is_initialized = true;
         return {};
     }
-    auto send_image(const Image& image) noexcept -> bool {
-        const auto& mat = image.details().get_mat();
-        if (has_determine_size == false) {
-            has_determine_size = true;
 
+    auto initialized() const noexcept { return is_initialized; }
+
+    auto send_image(const Image& image) noexcept -> bool {
+        if (!is_initialized) return false;
+
+        const auto& mat = image.details().mat;
+
+        if (!size_determined) {
             session_config.format.w = mat.cols;
             session_config.format.h = mat.rows;
 
-            if (auto ret = session->open(session_config)) {
+            { // open session
+                auto ret = session->open(session_config);
+                if (!ret) {
+                    log.error("Failed to open visualization session");
+                    log.error("  e: {}", ret.error());
+                    return false;
+                }
                 log.info("Visualization session is opened");
-                if (auto ret = session->session_description_protocol()) {
-                    auto output_location = "/tmp/auto_aim.sdp";
-                    if (auto ofstream = std::ofstream { output_location }) {
-                        ofstream.clear();
-                        ofstream << ret.value();
-                        ofstream.close();
-                        log.info("Sdp has been written to: {}", output_location);
-                    } else {
-                        log.error("Failed to write sdp: {}", output_location);
-                    }
-                } else {
+            }
+            { // write SDP
+                auto ret = session->session_description_protocol();
+                if (!ret) {
                     log.error("Failed to get description protocol");
                     log.error("  e: {}", ret.error());
+                    return false;
                 }
-            } else {
-                log.error("Failed to open visualization session");
-                log.error("  e: {}", ret.error());
+
+                const auto output_location = "/tmp/auto_aim.sdp";
+                if (auto ofstream = std::ofstream { output_location }) {
+                    ofstream << ret.value();
+                    log.info("Sdp has been written to: {}", output_location);
+                } else {
+                    log.error("Failed to write sdp: {}", output_location);
+                    return false;
+                }
             }
+            size_determined = true;
         }
         if (!session->opened()) return false;
 
@@ -70,16 +91,18 @@ struct VisualizationRuntime::Impl {
     }
 };
 
-auto VisualizationRuntime::initialize(const Config& config) noexcept
+auto Visualization::initialize(const YAML::Node& yaml) noexcept
     -> std::expected<void, std::string> {
-    return pimpl->initialize(config);
+    return pimpl->initialize(yaml);
 }
 
-auto VisualizationRuntime::send_image(const Image& image) noexcept -> bool {
+auto Visualization::initialized() const noexcept -> bool { return pimpl->initialized(); }
+
+auto Visualization::send_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
 }
 
-VisualizationRuntime::VisualizationRuntime() noexcept
+Visualization::Visualization() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-VisualizationRuntime::~VisualizationRuntime() noexcept = default;
+Visualization::~Visualization() noexcept = default;

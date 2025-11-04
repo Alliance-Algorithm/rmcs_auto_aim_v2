@@ -28,8 +28,9 @@ ament_add_gtest(
 )
 target_link_libraries(
     test_serializable
-    rclcpp::rclcpp
     ${PROJECT_NAME}_module
+    rclcpp::rclcpp
+    yaml-cpp::yaml-cpp
 )
 
 ament_add_gtest(

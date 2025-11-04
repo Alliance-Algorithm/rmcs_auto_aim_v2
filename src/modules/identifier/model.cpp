@@ -1,4 +1,5 @@
 #include "model.hpp"
+#include "utility/image.details.hpp"
 
 #include <opencv2/imgproc.hpp>
 
@@ -8,6 +9,7 @@
 #include <openvino/runtime/exception.hpp>
 
 using namespace rmcs::identifier;
+using do_not_warning = rmcs::Image::Details;
 
 constexpr auto kPreElementType = ov::element::u8;
 constexpr auto kPreLayout      = "NHWC";
@@ -77,10 +79,9 @@ struct NeuralNetwork::Impl {
         return std::unexpected { "Failed to load model caused by unknown exception" };
     }
 
-    // TODO: To implement
-    auto request_inference(const Input& input) noexcept -> void {
+    auto async_infer(const Image& image, std::coroutine_handle<> h) noexcept -> void {
 
-        cv::resize(input, resized_input_buffer, config.infer_size);
+        cv::resize(image.details().mat, resized_input_buffer, config.infer_size);
 
         const auto tensor = ov::Tensor {
             openvino_model.input().get_element_type(),
@@ -91,21 +92,37 @@ struct NeuralNetwork::Impl {
         request.set_input_tensor(tensor);
 
         auto living_weak = std::weak_ptr { living_flag };
-        request.set_callback([living_weak](const std::exception_ptr& exception) mutable {
+        request.set_callback([=](const auto& e) mutable {
             if (!living_weak.lock()) {
                 return;
             }
-            if (exception) {
+            if (e) {
                 try {
-                    std::rethrow_exception(exception);
+                    std::rethrow_exception(e);
                 } catch (const ov::Cancelled& e) {
                 } catch (const ov::Busy& e) {
                 } catch (const std::exception& e) { }
             }
+
+            auto output = request.get_output_tensor();
         });
         request.start_async();
     }
 };
+
+auto NeuralNetwork::configure(const Config& config) noexcept -> std::expected<void, std::string> {
+    return pimpl->make_configuration(config);
+}
+
+auto NeuralNetwork::load_from_filesystem(const std::string& location) noexcept
+    -> std::expected<void, std::string_view> {
+    return pimpl->load_from_filesystem(location);
+}
+
+auto NeuralNetwork::sync_infer(const Image&) const noexcept -> std::vector<Armor> { }
+
+auto NeuralNetwork::async_infer(std::shared_ptr<Image const> image, Callback callback) noexcept
+    -> void { }
 
 NeuralNetwork::NeuralNetwork() noexcept
     : pimpl { std::make_unique<Impl>() } { }

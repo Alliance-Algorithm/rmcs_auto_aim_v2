@@ -1,3 +1,3 @@
 #pragma once
 
-namespace rmcs::kernel { }
+namespace rmcs::runtime { }

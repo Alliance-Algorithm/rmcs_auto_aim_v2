@@ -10,6 +10,7 @@ set(CMAKE_BUILD_TYPE "Release")
 add_compile_options(-Wall -Wextra -Wpedantic -O3)
 
 ## 依赖查找
+find_package(yaml-cpp REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(Ceres REQUIRED)
@@ -61,7 +62,7 @@ add_library(
 target_link_libraries(
     ${PROJECT_NAME}_kernel
     ${OpenCV_LIBS}
-    rclcpp::rclcpp
+    yaml-cpp::yaml-cpp
 )
 add_library(
     ${PROJECT_NAME}_module SHARED
@@ -69,10 +70,12 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}_module
-    ${OpenCV_LIBS}
-    ${hikcamera_LIBRARIES}
+    yaml-cpp::yaml-cpp
     ament_index_cpp::ament_index_cpp
     openvino::runtime
+    rclcpp::rclcpp
+    ${OpenCV_LIBS}
+    ${hikcamera_LIBRARIES}
 )
 
 ## 组件构建: component

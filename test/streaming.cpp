@@ -1,6 +1,7 @@
 #include "modules/capturer/hikcamera.hpp"
 #include "modules/debug/framerate.hpp"
 #include "modules/debug/visualization/stream_session.hpp"
+#include "utility/image.details.hpp"
 #include "utility/node.hpp"
 
 #include <chrono>
@@ -49,8 +50,10 @@ int main(int argc, char** argv) {
     }
     // NOTE: End
 
-    auto hikcamera = std::make_unique<cap::Hikcamera>();
-    if (auto ret = hikcamera->initialize(); !ret) {
+    auto hikcamera = std::make_unique<cap::hik::Hikcamera>();
+    hikcamera->configure({});
+
+    if (auto ret = hikcamera->connect(); !ret) {
         node.rclcpp_error("Failed to init camera: {}", ret.error());
     } else {
         node.rclcpp_info("Successfully initialize camera");
@@ -65,10 +68,7 @@ int main(int argc, char** argv) {
         if (!image.has_value()) {
             node.rclcpp_error("Failed to read image: {}", image.error());
 
-            if (hikcamera->initialized()) {
-                std::ignore = hikcamera->deinitialize();
-            }
-            if (auto ret = hikcamera->initialize(); !ret) {
+            if (auto ret = hikcamera->connect(); !ret) {
                 node.rclcpp_error("Failed to init camera: {}", ret.error());
                 std::this_thread::sleep_for(std::chrono::seconds { 2 });
             } else {
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
         }
 
         // NOTE: Stream Session
-        if (!stream_session.push_frame(current_frame->details().get_mat())) {
+        if (!stream_session.push_frame(current_frame->details().mat)) {
             node.rclcpp_warn("Frame was pushed failed");
         }
         // NOTE: End

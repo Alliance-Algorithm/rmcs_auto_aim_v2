@@ -2,13 +2,17 @@
 #include "utility/coroutine/common.hpp"
 #include "utility/serializable.hpp"
 
-namespace rmcs::kernel {
+#include <yaml-cpp/yaml.h>
+
+namespace rmcs::runtime {
+
+using Yaml = YAML::Node;
 
 using result_type = std::expected<void, std::string>;
 using handle_type = std::coroutine_handle<co::task<result_type>::promise_type>;
 
 namespace details {
-    using Expansion = rmcs::util::SerializableExpansion;
+    using Expansion = rmcs::util::Serializable;
 
     template <class T>
     concept has_config_trait = requires { typename T::Config; };
