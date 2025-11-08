@@ -1,8 +1,10 @@
 #pragma once
-#include "identifier.config.hpp"
 
 #include "utility/image.hpp"
 #include "utility/pimpl.hpp"
+
+#include <expected>
+#include <yaml-cpp/node/node.h>
 
 namespace rmcs::kernel {
 
@@ -10,9 +12,7 @@ class Identifier {
     RMCS_PIMPL_DEFINITION(Identifier)
 
 public:
-    using Config = IdentifierConfig;
-
-    auto initialize(const Config&) noexcept -> std::expected<void, std::string>;
+    auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
     auto perview() const noexcept -> const Image&;
 

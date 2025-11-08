@@ -1,18 +1,43 @@
 #include "visualization.hpp"
-#include "visualization.config.hpp"
-
 #include "modules/debug/visualization/stream_session.hpp"
+
 #include "utility/image.details.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/serializable.hpp"
 
 #include <fstream>
 
-using do_not_warn_please_for_clangd = rmcs::Image::Details;
 using namespace rmcs::kernel;
+
+constexpr std::array kVideoTypes {
+    "RTP_JEPG",
+    "RTP_H264",
+};
 
 struct Visualization::Impl {
     using SessionConfig = debug::StreamSession::Config;
     using NormalResult  = std::expected<void, std::string>;
+
+    struct Config : util::Serializable {
+
+        util::integer_t framerate = 80;
+
+        util::string_t monitor_host = "localhost";
+        util::string_t monitor_port = "5000";
+
+        util::string_t stream_type = "RTP_JEPG";
+
+        static constexpr auto metas = std::tuple {
+            &Config::framerate,
+            "framerate",
+            &Config::monitor_host,
+            "monitor_host",
+            &Config::monitor_port,
+            "monitor_port",
+            &Config::stream_type,
+            "stream_type",
+        };
+    };
 
     Printer log { "visualization" };
 
@@ -25,7 +50,7 @@ struct Visualization::Impl {
     Impl() noexcept { session = std::make_unique<debug::StreamSession>(); }
 
     auto initialize(const YAML::Node& yaml) noexcept -> NormalResult {
-        auto config = VisualizationConfig {};
+        auto config = Config {};
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };

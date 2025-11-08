@@ -1,7 +1,7 @@
 #include "kernel/capturer.hpp"
 #include "kernel/visualization.hpp"
-#include "modules/debug/framerate.hpp"
 
+#include "modules/debug/framerate.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/singleton/running.hpp"
@@ -18,6 +18,7 @@ auto main() -> int {
     ///
     /// Runtime
     ///
+
     auto rclcpp_node = util::RclcppNode { "AutoAim" };
 
     auto framerate = FramerateCounter {};
@@ -33,12 +34,13 @@ auto main() -> int {
     auto use_visualization = configuration["use_visualization"].as<bool>();
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
+        auto initialized = true;
         if (!result.has_value()) {
             rclcpp_node.error("Failed to init <{}>", runtime_name);
             rclcpp_node.error("  e: {}", result.error());
-            return false;
+            initialized = false;
         }
-        return true;
+        return initialized;
     };
 
     // CAPTURER
@@ -69,6 +71,8 @@ auto main() -> int {
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
+
+            // Publish task
         }
 
         rclcpp_node.spin_once();

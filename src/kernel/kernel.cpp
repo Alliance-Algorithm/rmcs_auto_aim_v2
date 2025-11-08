@@ -1,5 +1,5 @@
 #include "kernel/kernel.hpp"
-#include "kernel/kernel.config.hpp"
+#include "kernel/common.hpp"
 #include "modules/debug/framerate.hpp"
 #include "utility/shared/context.hpp"
 #include "utility/shared/interprocess.hpp"
@@ -21,7 +21,6 @@ private:
     std::shared_ptr<rclcpp::TimerBase> timer;
 
     // Context
-    AutoAimConfig config;
     FramerateCounter event_framerate;
 
     util::spsc_queue<handle_type, 20> coroutines;
@@ -69,20 +68,20 @@ public:
     auto initialize() noexcept -> void {
         node.info("AutoAim Kernel is initializing...");
 
-        if (auto ret = config.serialize("", node); !ret) {
-            node.error("Failed to read kernel config.");
-            node.error("  e: {}", ret.error());
-            rclcpp::shutdown();
-        }
+        // if (auto ret = config.serialize("", node); !ret) {
+        //     node.error("Failed to read kernel config.");
+        //     node.error("  e: {}", ret.error());
+        //     rclcpp::shutdown();
+        // }
 
         // initialize_kernel(capturer, node);
 
         // initialize_kernel(kernel1, node);
         // initialize_kernel(kernel2, node);
 
-        if (config.use_visualization) {
-            // initialize_kernel(visualization, node);
-        }
+        // if (config.use_visualization) {
+        //     // initialize_kernel(visualization, node);
+        // }
 
         if (!client.open(shared::id)) {
             node.error("Failed to create shared memory");
@@ -134,9 +133,6 @@ public:
 
         identifier.sync_identify(*image);
 
-        if (config.use_visualization) {
-            visualization.send_image(*image);
-        }
         co_return {};
     }
 };

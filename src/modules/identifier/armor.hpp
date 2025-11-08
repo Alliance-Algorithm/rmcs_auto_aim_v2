@@ -4,14 +4,14 @@
 
 namespace rmcs {
 
-struct Armor {
-    DeviceId id;
-};
+// struct Armor {
+//     DeviceId id;
+// };
 
 struct ArmorFinder {
     DeviceIds to_find;
 
-    auto process(const std::vector<Lightbar>&) const noexcept -> std::vector<Armor>;
+    // auto process(const std::vector<Lightbar>&) const noexcept -> std::vector<Armor>;
 };
 
 }

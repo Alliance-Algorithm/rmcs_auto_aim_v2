@@ -1,5 +1,6 @@
 #include "model.hpp"
 #include "utility/image.details.hpp"
+#include "utility/serializable.hpp"
 
 #include <opencv2/imgproc.hpp>
 
@@ -11,77 +12,132 @@
 using namespace rmcs::identifier;
 using do_not_warning = rmcs::Image::Details;
 
-constexpr auto kPreElementType = ov::element::u8;
-constexpr auto kPreLayout      = "NHWC";
-constexpr auto kPreColorFormat = ov::preprocess::ColorFormat::BGR;
+struct OpenVinoNet::Impl {
 
-constexpr auto kPreConvertElementType = ov::element::f32;
-constexpr auto kPreConvertColor       = ov::preprocess::ColorFormat::RGB;
-
-const auto kPreScale = std::vector<float> { 255., 255., 255. };
-
-constexpr auto kPreModelLayout       = "NCHW";
-constexpr auto kPreTensorElementType = ov::element::f32;
-
-constexpr auto kCompileDevice = "AUTO";
-
-struct NeuralNetwork::Impl {
-    struct Nothing { };
-    std::shared_ptr<Nothing> living_flag = std::make_shared<Nothing>();
-
-    Config config;
     ov::CompiledModel openvino_model;
+    ov::Core openvino_core;
+
+    struct Nothing { };
+    std::shared_ptr<Nothing> living_flag {
+        std::make_shared<Nothing>(),
+    };
 
     cv::Mat resized_input_buffer;
 
-    auto make_configuration(const Config& config) noexcept -> std::expected<void, std::string> {
-        if (config.color == CampColor::UNKNOWN) {
-            return std::unexpected { "Illegal camp color was set while configuring" };
-        }
-        this->config = config;
-        return {};
-    }
+    struct NetworkConfig : util::Serializable {
+        std::string model_location;
+        std::string infer_device;
 
-    auto load_from_filesystem(const std::string& location) noexcept
-        -> std::expected<void, std::string> try {
+        bool use_roi_segment;
+        bool use_corner_correction;
 
-        auto openvino_core = ov::Core {};
-        auto origin_model  = openvino_core.read_model(location);
+        int roi_w;
+        int roi_h;
+
+        double threshold;
+        double min_confidence;
+
+        int tensor_w;
+        int tensor_h;
+
+        constexpr static std::tuple metas {
+            &NetworkConfig::model_location,
+            "model_location",
+            &NetworkConfig::infer_device,
+            "infer_device",
+        };
+    } network_config;
+
+    auto configure(const YAML::Node& yaml) noexcept { return network_config.serialize(yaml); }
+
+    auto compile_openvino_model() noexcept -> std::expected<void, std::string> try {
+        auto origin_model = openvino_core.read_model(network_config.model_location);
         if (!origin_model) {
             return std::unexpected { "Empty model resource was loaded from openvino core" };
         }
-        {
-            auto preprocessor = ov::preprocess::PrePostProcessor { origin_model };
 
-            auto& input = preprocessor.input();
-            input.tensor()
-                .set_element_type(kPreElementType)
-                .set_layout(kPreLayout)
+        auto preprocess = ov::preprocess::PrePostProcessor { origin_model };
 
-                .set_color_format(kPreColorFormat);
-            input.preprocess()
-                .convert_element_type(kPreConvertElementType)
-                .convert_color(kPreConvertColor)
-                .scale(kPreScale);
-            input.model().set_layout(kPreModelLayout);
+        auto& input = preprocess.input();
+        input.tensor()
+            .set_element_type(ov::element::u8)
+            .set_shape({ 1, 640, 640, 3 })
+            .set_layout("NHWC")
+            .set_color_format(ov::preprocess::ColorFormat::BGR);
+        input.preprocess()
+            .convert_element_type(ov::element::f32)
+            .convert_color(ov::preprocess::ColorFormat::RGB)
+            .scale(255.0);
+        input.model().set_layout("NCHW");
 
-            auto& output = preprocessor.output();
-            output.tensor().set_element_type(kPreTensorElementType);
-
-            openvino_model = openvino_core.compile_model(preprocessor.build(), kCompileDevice);
-        }
+        // For real-time process, use this mode
+        const auto performance  = ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY);
+        const auto processe_out = preprocess.build();
+        openvino_model =
+            openvino_core.compile_model(processe_out, network_config.infer_device, performance);
         return {};
 
-    } catch (std::runtime_error const& e) {
-        return std::unexpected { std::string { "Failed to load model: " } + e.what() };
+    } catch (const std::runtime_error& e) {
+        return std::unexpected { std::string { "Failed to load model | " } + e.what() };
 
     } catch (...) {
         return std::unexpected { "Failed to load model caused by unknown exception" };
     }
 
-    auto async_infer(const Image& image, std::coroutine_handle<> h) noexcept -> void {
+    auto generate_openvino_request() noexcept {
+        auto tensor  = ov::Tensor {};
+        auto request = openvino_model.create_infer_request();
+    }
 
-        cv::resize(image.details().mat, resized_input_buffer, config.infer_size);
+    auto async_infer(const Image& image, Callback callback) noexcept -> void {
+        const auto& origin_mat = image.details().mat;
+        if (origin_mat.empty()) [[unlikely]] {
+            callback(std::unexpected { "Empty image mat" });
+        }
+
+        auto segmentation = origin_mat;
+        if (network_config.use_roi_segment) {
+            const auto w = network_config.roi_w;
+            const auto h = network_config.roi_h;
+
+            auto action_success = false;
+            do {
+                if (w > origin_mat.cols) break;
+                if (h > origin_mat.rows) break;
+
+                // Find roi corner
+                const auto x    = (origin_mat.cols - w) / 2;
+                const auto y    = (origin_mat.rows - h) / 2;
+                const auto rect = cv::Rect2i { x, y, w, h };
+
+                action_success = true;
+                segmentation   = origin_mat(rect);
+            } while (false);
+
+            if (!action_success) {
+                callback(std::unexpected { "Failed to segment image" });
+            }
+        }
+
+        auto input_tensor = ov::Tensor {};
+        {
+            const auto w = network_config.tensor_w;
+            const auto h = network_config.tensor_h;
+
+            const auto scale = std::min(static_cast<double>(h) / segmentation.rows,
+                static_cast<double>(w) / segmentation.cols);
+
+            const auto scaled_w = static_cast<int>(segmentation.cols * scale);
+            const auto scaled_h = static_cast<int>(segmentation.rows * scale);
+
+            auto input_roi = cv::Rect2i { 0, 0, scaled_w, scaled_h };
+            auto input_mat = cv::Mat { h, w, CV_8UC3, { 0, 0, 0 } };
+            cv::resize(segmentation, input_mat(input_roi), { scaled_w, scaled_h });
+
+            input_tensor = ov::Tensor { ov::element::u8,
+                { 1, static_cast<std::size_t>(w), static_cast<std::size_t>(h), 3 },
+                input_mat.data };
+        }
 
         const auto tensor = ov::Tensor {
             openvino_model.input().get_element_type(),
@@ -92,7 +148,7 @@ struct NeuralNetwork::Impl {
         request.set_input_tensor(tensor);
 
         auto living_weak = std::weak_ptr { living_flag };
-        request.set_callback([=](const auto& e) mutable {
+        request.set_callback([=, f = std::move(callback)](const auto& e) mutable {
             if (!living_weak.lock()) {
                 return;
             }
@@ -105,26 +161,23 @@ struct NeuralNetwork::Impl {
             }
 
             auto output = request.get_output_tensor();
+            f(std::unexpected { "" });
         });
         request.start_async();
     }
 };
 
-auto NeuralNetwork::configure(const Config& config) noexcept -> std::expected<void, std::string> {
-    return pimpl->make_configuration(config);
+auto OpenVinoNet::configure(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
+    return pimpl->configure(yaml);
 }
 
-auto NeuralNetwork::load_from_filesystem(const std::string& location) noexcept
-    -> std::expected<void, std::string_view> {
-    return pimpl->load_from_filesystem(location);
+auto OpenVinoNet::sync_infer(const Image&) const noexcept -> std::vector<Armor> { }
+
+auto OpenVinoNet::async_infer(const Image& image, Callback callback) noexcept -> void {
+    return pimpl->async_infer(image, std::move(callback));
 }
 
-auto NeuralNetwork::sync_infer(const Image&) const noexcept -> std::vector<Armor> { }
-
-auto NeuralNetwork::async_infer(std::shared_ptr<Image const> image, Callback callback) noexcept
-    -> void { }
-
-NeuralNetwork::NeuralNetwork() noexcept
+OpenVinoNet::OpenVinoNet() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-NeuralNetwork::~NeuralNetwork() noexcept = default;
+OpenVinoNet::~OpenVinoNet() noexcept = default;

@@ -26,9 +26,7 @@ struct Capturer::Impl {
     util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
 
-    auto initialize(const Yaml& yaml) noexcept -> Result try {
-        using namespace ::details;
-
+    auto initialize(const YAML::Node& yaml) noexcept -> Result try {
         auto source = yaml["source"].as<std::string>();
 
         /*  */ if (source == "hikcamera") {

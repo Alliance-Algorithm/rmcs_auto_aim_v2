@@ -1,9 +1,9 @@
 #pragma once
-#include "kernel/common.hpp"
 #include "utility/image.hpp"
 #include "utility/pimpl.hpp"
 
 #include <expected>
+#include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
 
@@ -15,7 +15,7 @@ public:
 
     using Result = std::expected<void, std::string>;
 
-    auto initialize(const Yaml&) noexcept -> Result;
+    auto initialize(const YAML::Node&) noexcept -> Result;
 
     /// @brief
     ///   Fetches an image from the background worker thread.
