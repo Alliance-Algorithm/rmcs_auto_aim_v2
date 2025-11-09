@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(rmcs_auto_aim_v2)
 
-set(BUILD_TESTING ON)
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
@@ -101,10 +99,6 @@ target_link_libraries(
     ${PROJECT_NAME}_module
 )
 
-if(BUILD_TESTING)
-    include(test/test.cmake)
-endif()
-
 ## 安装配置
 install(
     TARGETS
@@ -118,6 +112,7 @@ install(
     DIRECTORY
         config/
         launch/
+        models/
     DESTINATION
         share/${PROJECT_NAME}
 )

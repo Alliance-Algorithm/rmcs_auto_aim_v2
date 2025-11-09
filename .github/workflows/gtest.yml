@@ -29,16 +29,23 @@ jobs:
         run: |
           curl -fsSL "$IMAGE_URL" -o "$IMAGE_PATH"
 
-      - name: Colcon build
+      - name: Configure test project
         shell: bash
         run: |
-          cd "$WS_DIR"
           source /opt/ros/jazzy/setup.bash
-          colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Run inference gtest
+      - name: Build test project
         shell: bash
         run: |
-          cd "$WS_DIR"
-          source install/setup.bash
-          IMAGE="$IMAGE_PATH" build/rmcs_auto_aim_v2/test_model_infer
+          source /opt/ros/jazzy/setup.bash
+          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          cmake --build build --parallel
+
+      - name: Run gtests
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          IMAGE="$IMAGE_PATH" ctest --test-dir build --output-on-failure
