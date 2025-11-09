@@ -1,7 +1,7 @@
 #pragma once
 #include "utility/image.hpp"
+#include "utility/model/armor_detection.hpp"
 #include "utility/pimpl.hpp"
-#include "utility/robot/armor.hpp"
 
 #include <coroutine>
 #include <expected>
@@ -16,7 +16,7 @@ struct OpenVinoNet final {
     RMCS_PIMPL_DEFINITION(OpenVinoNet)
 
 public:
-    using Result = std::expected<std::vector<Armor>, std::string>;
+    using Result = std::expected<std::vector<ArmorDetection<>>, std::string>;
 
     using Callback = std::function<void(Result)>;
     auto async_infer(const Image&, Callback) noexcept -> void;
@@ -48,9 +48,9 @@ public:
         };
     }
 
-    auto configure(const YAML::Node&) noexcept -> std::expected<void, std::string>;
+    auto sync_infer(const Image&) const noexcept -> Result;
 
-    auto sync_infer(const Image&) const noexcept -> std::vector<Armor>;
+    auto configure(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 };
 
 }

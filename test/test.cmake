@@ -38,6 +38,16 @@ ament_add_gtest(
     test/interprocess.cpp
 )
 
+ament_add_gtest(
+    test_model_infer
+    test/model_infer.cpp
+)
+target_link_libraries(
+    test_model_infer
+    yaml-cpp::yaml-cpp
+    ${PROJECT_NAME}_module
+)
+
 #
 # For quick test
 #
