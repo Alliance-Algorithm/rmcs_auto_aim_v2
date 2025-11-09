@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: qzhhhi/rmcs-develop
+      options: --user 0
 
     env:
       WS_DIR: ${{ github.workspace }}/ws
