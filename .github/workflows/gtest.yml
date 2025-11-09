@@ -30,12 +30,14 @@ jobs:
           curl -fsSL "$IMAGE_URL" -o "$IMAGE_PATH"
 
       - name: Colcon build
+        shell: bash
         run: |
           cd "$WS_DIR"
           source /opt/ros/jazzy/setup.bash
           colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
       - name: Run inference gtest
+        shell: bash
         run: |
           cd "$WS_DIR"
           source install/setup.bash
