@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
-      image: qzhhhi/rmcs-runtime
+      image: qzhhhi/rmcs-develop
 
     env:
       WS_DIR: ${{ github.workspace }}/ws
