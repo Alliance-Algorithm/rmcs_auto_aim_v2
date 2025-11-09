@@ -13,27 +13,30 @@ jobs:
       image: qzhhhi/rmcs-runtime
 
     env:
-      WORKSPACE: /github/workspace/rmcs_ws
-      BUILD_DIR: /github/workspace/rmcs_ws/build
+      WS_DIR: ${{ github.workspace }}/ws
+      SRC_DIR: ${{ github.workspace }}/ws/src
       IMAGE_URL: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
       IMAGE_PATH: /tmp/model_infer_example.jpg
 
     steps:
-      - name: Checkout
+      - name: Checkout repository into ROS2 workspace
         uses: actions/checkout@v4
+        with:
+          repository: Alliance-Algorithm/rmcs_auto_aim_v2
+          path: ws/src/rmcs_auto_aim_v2
 
       - name: Download test frame
         run: |
           curl -fsSL "$IMAGE_URL" -o "$IMAGE_PATH"
 
-      - name: Build (colcon)
+      - name: Colcon build
         run: |
-          cd "$WORKSPACE"
+          cd "$WS_DIR"
           source /opt/ros/jazzy/setup.bash
-          colcon build
+          colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
 
-      - name: Run model inference test
+      - name: Run inference gtest
         run: |
-          cd "$WORKSPACE"
+          cd "$WS_DIR"
           source install/setup.bash
-          IMAGE="$IMAGE_PATH" "$BUILD_DIR"/rmcs_auto_aim_v2/test_model_infer
+          IMAGE="$IMAGE_PATH" build/rmcs_auto_aim_v2/test_model_infer
