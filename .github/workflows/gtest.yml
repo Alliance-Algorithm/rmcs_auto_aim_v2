@@ -1,0 +1,39 @@
+name: Run Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: qzhhhi/rmcs-runtime
+
+    env:
+      WORKSPACE: /github/workspace/rmcs_ws
+      BUILD_DIR: /github/workspace/rmcs_ws/build
+      IMAGE_URL: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
+      IMAGE_PATH: /tmp/model_infer_example.jpg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download test frame
+        run: |
+          curl -fsSL "$IMAGE_URL" -o "$IMAGE_PATH"
+
+      - name: Build (colcon)
+        run: |
+          cd "$WORKSPACE"
+          source /opt/ros/jazzy/setup.bash
+          colcon build
+
+      - name: Run model inference test
+        run: |
+          cd "$WORKSPACE"
+          source install/setup.bash
+          IMAGE="$IMAGE_PATH" "$BUILD_DIR"/rmcs_auto_aim_v2/test_model_infer
