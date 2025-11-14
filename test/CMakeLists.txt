@@ -10,9 +10,12 @@ set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(visualization_msgs REQUIRED)
+
 find_package(yaml-cpp REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
+
 find_package(hikcamera QUIET)
 
 set(HIKCAMERA_AVAILABLE OFF)
@@ -26,20 +29,24 @@ include_directories(
     ${RMCS_SRC_DIR}
     ${hikcamera_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
 )
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Duck
 ament_add_gtest(
     test_duck_type
     ${TEST_DIR}/duck_type.cpp
 )
 
+# Pipeline
 ament_add_gtest(
     test_pipeline
     ${TEST_DIR}/pipeline.cpp
 )
 
+# Serializable
 ament_add_gtest(
     test_serializable
     ${TEST_DIR}/serializable.cpp
@@ -50,11 +57,13 @@ target_link_libraries(
     yaml-cpp::yaml-cpp
 )
 
+# Interprocess
 ament_add_gtest(
     test_interprocess
     ${TEST_DIR}/interprocess.cpp
 )
 
+# Model Infer
 ament_add_gtest(
     test_model_infer
     ${TEST_DIR}/model_infer.cpp
@@ -68,7 +77,19 @@ target_link_libraries(
     ${OpenCV_LIBS}
 )
 
+# Visualization
+add_executable(
+    example_visualization
+    ${TEST_DIR}/visualization.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visualization.cpp
+)
+target_link_libraries(
+    example_visualization
+    rclcpp::rclcpp
+)
+
 if(HIKCAMERA_AVAILABLE)
+    # Hikcamera
     add_executable(
         example_hikcamera
         ${TEST_DIR}/hikcamera.cpp
@@ -79,6 +100,7 @@ if(HIKCAMERA_AVAILABLE)
         ${hikcamera_LIBRARIES}
     )
 
+    # RTP Streaming
     add_executable(
         example_streaming
         ${TEST_DIR}/streaming.cpp
@@ -94,7 +116,5 @@ if(HIKCAMERA_AVAILABLE)
         ${hikcamera_LIBRARIES}
     )
 else()
-    message(
-        STATUS
-        "hikcamera SDK 未检测到，跳过 example_hikcamera 与 example_streaming 目标的构建")
+    message(STATUS "hikcamera 未检测到，跳过相关构建")
 endif()

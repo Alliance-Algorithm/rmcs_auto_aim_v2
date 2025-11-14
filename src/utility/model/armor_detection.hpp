@@ -5,6 +5,9 @@ namespace rmcs {
 
 template <typename precision_type = float>
 struct ArmorDetection {
+    using Point = cv::Point_<precision_type>;
+    using Rect  = cv::Rect_<precision_type>;
+
     struct Corners {
         precision_type lt_x;
         precision_type lt_y;
@@ -14,28 +17,10 @@ struct ArmorDetection {
         precision_type rt_y;
         precision_type lb_x;
         precision_type lb_y;
-
-        using Point = cv::Point_<precision_type>;
         auto lt() const noexcept { return Point { lt_x, lt_y }; }
         auto rb() const noexcept { return Point { rb_x, rb_y }; }
         auto rt() const noexcept { return Point { rt_x, rt_y }; }
         auto lb() const noexcept { return Point { lb_x, lb_y }; }
-
-        using Rect = cv::Rect_<precision_type>;
-        auto bounding_rect() const noexcept {
-            using std::max;
-            using std::min;
-
-            const auto min_x = min(min(lt_x, rt_x), min(rb_x, lb_x));
-            const auto max_x = max(max(lt_x, rt_x), max(rb_x, lb_x));
-            const auto min_y = min(min(lt_y, rt_y), min(rb_y, lb_y));
-            const auto max_y = max(max(lt_y, rt_y), max(rb_y, lb_y));
-
-            const auto w = max_x - min_x;
-            const auto h = max_y - min_y;
-
-            return Rect { min_x, min_y, w, h };
-        }
     } corners;
 
     precision_type confidence;
@@ -59,11 +44,32 @@ struct ArmorDetection {
         precision_type nothing;
     } role;
 
-    void unsafe_from(std::span<const precision_type> values) noexcept {
+    auto unsafe_from(std::span<const precision_type> raw) noexcept {
         static_assert(std::is_trivially_copyable_v<ArmorDetection>);
-        std::memcpy(this, values.data(), sizeof(ArmorDetection));
+        std::memcpy(this, raw.data(), sizeof(ArmorDetection));
     }
-    void scale_corners(precision_type scaling) noexcept {
+
+    auto bounding_rect() const noexcept {
+        using std::max;
+        using std::min;
+
+        const auto min_x = min(min(corners.lt_x, corners.rt_x), min(corners.rb_x, corners.lb_x));
+        const auto max_x = max(max(corners.lt_x, corners.rt_x), max(corners.rb_x, corners.lb_x));
+        const auto min_y = min(min(corners.lt_y, corners.rt_y), min(corners.rb_y, corners.lb_y));
+        const auto max_y = max(max(corners.lt_y, corners.rt_y), max(corners.rb_y, corners.lb_y));
+
+        const auto w = max_x - min_x;
+        const auto h = max_y - min_y;
+
+        return Rect { min_x, min_y, w, h };
+    }
+
+    auto lt() const noexcept { return corners.lt(); }
+    auto rb() const noexcept { return corners.rb(); }
+    auto rt() const noexcept { return corners.rt(); }
+    auto lb() const noexcept { return corners.lb(); }
+
+    auto scale_corners(precision_type scaling) noexcept {
         corners.lb_x *= scaling;
         corners.lb_y *= scaling;
         corners.lt_x *= scaling;

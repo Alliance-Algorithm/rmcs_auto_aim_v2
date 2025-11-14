@@ -15,7 +15,7 @@ using double_t  = double;
 using flag_t    = bool;
 using string_t  = std::string;
 
-namespace detials {
+namespace details {
 
     template <typename T>
     concept yaml_cpp_trait = requires(T node) {
@@ -41,7 +41,7 @@ namespace detials {
             : node { node } { }
 
         template <typename T>
-            requires detials::yaml_cpp_trait<Node>
+            requires details::yaml_cpp_trait<Node>
         auto get_param(const std::string& name, T& target) noexcept
             -> std::expected<void, std::string> {
             try {
@@ -64,7 +64,7 @@ namespace detials {
         }
 
         template <typename T>
-            requires detials::rclcpp_node_trait<Node>
+            requires details::rclcpp_node_trait<Node>
         auto get_param(const std::string& name, T& target) noexcept
             -> std::expected<void, std::string> {
             try {
@@ -160,8 +160,8 @@ namespace detials {
 struct Serializable {
     template <typename Metas, std::size_t... Idx>
     constexpr auto make_serializable_impl(Metas metas, std::index_sequence<Idx...>) {
-        return detials::Serializable {
-            detials::MemberMeta { std::get<Idx * 2>(metas), std::get<Idx * 2 + 1>(metas) }...,
+        return details::Serializable {
+            details::MemberMeta { std::get<Idx * 2>(metas), std::get<Idx * 2 + 1>(metas) }...,
         };
     }
     template <typename Metas>
@@ -175,7 +175,7 @@ struct Serializable {
         -> std::expected<void, std::string> {
 
         static_assert(
-            detials::serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
+            details::serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
 
         auto s = self.make_serializable(self.metas);
         return s.serialize(prefix, source, self);

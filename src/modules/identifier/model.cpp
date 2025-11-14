@@ -1,5 +1,6 @@
 #include "model.hpp"
 #include "utility/image.details.hpp"
+#include "utility/math/sigmoid.hpp"
 #include "utility/serializable.hpp"
 
 #include <opencv2/dnn/dnn.hpp>
@@ -149,7 +150,7 @@ struct OpenVinoNet::Impl {
         const auto processe_out = preprocess.build();
         openvino_model =
             openvino_core.compile_model(processe_out, config.infer_device, performance);
-        return {};
+        return { };
 
     } catch (const std::runtime_error& e) {
         return std::unexpected { std::string { "Failed to load model | " } + e.what() };
@@ -225,28 +226,28 @@ struct OpenVinoNet::Impl {
             return std::unexpected { "Wrong tensor line length happened while explaining result" };
         }
 
-        auto result = std::vector<armor_type> {};
-        auto scores = std::vector<float> {};
-        auto boxes  = std::vector<cv::Rect> {};
+        auto result = std::vector<armor_type> { };
+        auto scores = std::vector<float> { };
+        auto boxes  = std::vector<cv::Rect> { };
 
         const auto* data = tensor.data<precision_type>();
         for (std::size_t row = 0; row < rows; row++) {
 
-            auto line = armor_type {};
+            auto line = armor_type { };
             line.unsafe_from(std::span { data + row * cols, cols });
-            line.confidence = sigmoid(line.confidence);
+            line.confidence = util::sigmoid(line.confidence);
 
             if (line.confidence > config.min_confidence) {
                 result.push_back(line);
                 scores.push_back(line.confidence);
-                boxes.push_back(line.corners.bounding_rect());
+                boxes.push_back(line.bounding_rect());
             }
         }
 
-        auto kept_points = std::vector<int> {};
+        auto kept_points = std::vector<int> { };
         cv::dnn::NMSBoxes(boxes, scores, config.score_threshold, config.nms_threshold, kept_points);
 
-        auto final_result = std::vector<armor_type> {};
+        auto final_result = std::vector<armor_type> { };
         final_result.reserve(kept_points.size());
 
         for (auto idx : kept_points) {
@@ -285,7 +286,7 @@ struct OpenVinoNet::Impl {
                 return;
             }
             if (e) {
-                auto error = std::string {};
+                auto error = std::string { };
                 try {
                     std::rethrow_exception(e);
                 } catch (const ov::Cancelled& e) {
@@ -304,17 +305,6 @@ struct OpenVinoNet::Impl {
             callback(explain_infer_result(request));
         });
         request.start_async();
-    }
-
-    template <std::floating_point type>
-    static type sigmoid(type x) {
-        if (x >= 0) {
-            type z = std::exp(-x);
-            return 1.0 / (1.0 + z);
-        } else {
-            type z = std::exp(x);
-            return z / (1.0 + z);
-        }
     }
 };
 

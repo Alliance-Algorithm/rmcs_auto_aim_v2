@@ -1,76 +1,66 @@
 #pragma once
+#include "utility/details.hpp"
+#include "utility/linear.hpp"
+#include "utility/panic.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/robot/color.hpp"
+#include "utility/robot/id.hpp"
 
 namespace rmcs::util {
 
-namespace details {
+namespace visual {
+
+    struct Context {
+        RMCS_DETAILS_DEFINITION(Context)
+
+        std::string topic_name;
+        std::string tf_name;
+
+        auto update() noexcept -> void;
+    };
     template <class T>
-    concept translation_trait = requires(T t) {
-        t.x();
-        t.y();
-        t.z();
+    concept visual_trait = requires(T t) {
+        { t.context } -> std::same_as<Context>;
     };
-    template <class Q>
-    concept orientation_trait = requires(Q q) {
-        q.x();
-        q.y();
-        q.z();
-        q.w();
-    };
-
-    struct Translation {
-        double x;
-        double y;
-        double z;
-        constexpr explicit Translation(translation_trait auto t) noexcept
-            : x { t.x() }
-            , y { t.y() }
-            , z { t.z() } { }
-        auto operator=(translation_trait auto const& t) noexcept -> Translation& {
-            x = t.x();
-            y = t.y();
-            z = t.z();
-            return *this;
-        }
-    };
-    struct Orientation {
-        double x;
-        double y;
-        double z;
-        double w;
-        constexpr explicit Orientation(orientation_trait auto q) noexcept
-            : x { q.x() }
-            , y { q.y() }
-            , z { q.z() }
-            , w { q.z() } { }
-        auto operator=(orientation_trait auto const& q) noexcept -> Orientation& {
-            x = q.x();
-            y = q.y();
-            z = q.z();
-            w = q.w();
-            return *this;
-        }
-    };
-}
-
-namespace item {
 
     struct Armor {
-        details::Translation t;
-        details::Orientation q;
-    };
+        DeviceId device_id;
+        CampColor camp_color;
 
+        Context context;
+
+        explicit Armor(const std::string& id, const std::string& tf) noexcept {
+            if (id.contains('/')) {
+                util::panic(std::format("Invalid id containing '/': {}", id));
+            }
+            context.topic_name = "/rmcs/auto_aim/armor/" + id;
+            context.tf_name    = tf;
+        }
+
+        auto update() noexcept -> void;
+
+        auto set_translation(const Translation&) noexcept -> void;
+        auto set_orientation(const Orientation&) noexcept -> void;
+    };
 }
 
 class Visualization {
     RMCS_PIMPL_DEFINITION(Visualization)
 
 public:
+    explicit Visualization(const std::string& id) noexcept;
+
     auto set_topic_prefix(const std::string&) noexcept -> void;
 
-    auto set_scaling_value(double) noexcept -> void;
+    template <visual::visual_trait T>
+    auto make_visualized() noexcept -> std::unique_ptr<T> {
+        auto item = std::make_unique<visual::Armor>("", "");
+        bind_context(item->context);
+        return item;
+    }
 
-    auto set_transform_link(const std::string&) noexcept -> void;
+private:
+    auto bind_context(visual::Context& context) noexcept -> void;
 };
 
 }

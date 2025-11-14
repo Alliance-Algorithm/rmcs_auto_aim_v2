@@ -9,8 +9,8 @@
 
 using namespace rmcs::util;
 
-static_assert(detials::rclcpp_node_trait<rclcpp::Node>, " ");
-static_assert(detials::yaml_cpp_trait<YAML::Node>, " ");
+static_assert(details::rclcpp_node_trait<rclcpp::Node>, " ");
+static_assert(details::yaml_cpp_trait<YAML::Node>, " ");
 
 constexpr auto kFilePath = __FILE__;
 
@@ -51,17 +51,17 @@ TEST(serializable, rclcpp_init) {
 TEST(serializable, node_adapter) {
     auto param = std::string {};
 
-    static_assert(detials::rclcpp_node_trait<rclcpp::Node>, " ");
+    static_assert(details::rclcpp_node_trait<rclcpp::Node>, " ");
 
     auto rclcpp_node    = rclcpp::Node { "not_a_empty_name_that_rclcpp_like" };
-    auto rclcpp_adapter = detials::NodeAdapter<rclcpp::Node> { rclcpp_node };
+    auto rclcpp_adapter = details::NodeAdapter<rclcpp::Node> { rclcpp_node };
 
     auto ret1 = rclcpp_adapter.get_param("", param);
 
-    static_assert(detials::yaml_cpp_trait<YAML::Node>, " ");
+    static_assert(details::yaml_cpp_trait<YAML::Node>, " ");
 
     auto yaml_node    = YAML::Node {};
-    auto yaml_adapter = detials::NodeAdapter<YAML::Node> { yaml_node };
+    auto yaml_adapter = details::NodeAdapter<YAML::Node> { yaml_node };
 
     auto ret2 = yaml_adapter.get_param("", param);
 }
@@ -82,7 +82,7 @@ TEST(serializable, yaml_cpp) {
     ASSERT_TRUE(yaml_node.IsMap());
 
     auto t       = T {};
-    auto adapter = detials::NodeAdapter<YAML::Node> { yaml_node };
+    auto adapter = details::NodeAdapter<YAML::Node> { yaml_node };
 
     auto ret = t.serialize("", adapter);
     if (!ret.has_value()) {

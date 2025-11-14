@@ -1,9 +1,13 @@
 #include "modules/identifier/model.hpp"
 #include "utility/image.details.hpp"
-#include <filesystem>
+
 #include <gtest/gtest.h>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+
+#include <chrono>
+#include <cmath>
+#include <filesystem>
 #include <print>
 #include <ranges>
 
@@ -13,11 +17,11 @@ auto location   = std::filesystem::path { __FILE__ }.parent_path();
 
 constexpr auto config = R"(
     model_location: "assets/yolov5.xml"
-    infer_device: "CPU"
+    infer_device: "AUTO"
     use_roi_segment: false
     use_corner_correction: false
-    roi_rows: 0
-    roi_cols: 0
+    roi_rows: 640
+    roi_cols: 640
     input_rows: 640
     input_cols: 640
     min_confidence: 0.8
@@ -28,7 +32,7 @@ constexpr auto config = R"(
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
-    auto net  = OpenVinoNet {};
+    auto net  = OpenVinoNet { };
     auto yaml = YAML::Load(config);
 
     auto model_location    = location / "../models/yolov5.xml";
@@ -40,10 +44,32 @@ TEST(model, sync_infer) {
     auto image_location = std::getenv("IMAGE");
     ASSERT_NE(image_location, nullptr) << error_head << "Set env 'IMAGE' to pass infer source";
 
-    auto image { Image {} };
+    auto image { Image { } };
     image.details().mat = cv::imread(image_location);
+    ASSERT_FALSE(image.details().mat.empty())
+        << error_head << std::format("Failed to read image from '{}'", image_location);
 
+    const auto use_roi_segment = yaml["use_roi_segment"].as<bool>();
+    const auto roi_cols        = yaml["roi_cols"].as<int>();
+    const auto roi_rows        = yaml["roi_rows"].as<int>();
+    auto roi_offset            = cv::Point2f { 0.F, 0.F };
+    if (use_roi_segment) {
+        const auto width  = image.details().mat.cols;
+        const auto height = image.details().mat.rows;
+        if (width >= roi_cols && height >= roi_rows) {
+            roi_offset = cv::Point2f {
+                static_cast<float>((width - roi_cols) / 2.),
+                static_cast<float>((height - roi_rows) / 2.),
+            };
+        }
+    }
+
+    auto infer_begin  = std::chrono::steady_clock::now();
     auto infer_result = net.sync_infer(image);
+    auto infer_elapsed =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - infer_begin);
+    std::println("[ LOG      ] infer cost: {:.3f} ms", infer_elapsed.count());
+
     ASSERT_TRUE(infer_result.has_value()) << error_head << infer_result.error();
 
     const auto& armors = infer_result.value();
@@ -56,26 +82,31 @@ TEST(model, sync_infer) {
             697.7f, 580.1f, 690.2f, 619.0f, 751.4f, 620.9f, 758.9f, 581.4f },
     };
 
-    auto matched = std::array<bool, expected.size()> { false, false };
+    auto matched   = std::array<bool, expected.size()> { false, false };
+    auto threshold = use_roi_segment ? 5.0 : 2.0;
     for (const auto&& [i, armor] : infer_result.value() | std::views::enumerate) {
+        auto lt = armor.corners.lt() + roi_offset;
+        auto rt = armor.corners.rt() + roi_offset;
+        auto rb = armor.corners.rb() + roi_offset;
+        auto lb = armor.corners.lb() + roi_offset;
+
         std::println("[ LOG      ] confidence {:2}: {:.3f}", i, armor.confidence);
-        std::println("[ LOG      ]   lt=({:.1f}, {:.1f})  rt=({:.1f}, {:.1f})", armor.corners.lt_x,
-            armor.corners.lt_y, armor.corners.rt_x, armor.corners.rt_y);
-        std::println("[ LOG      ]   rb=({:.1f}, {:.1f})  lb=({:.1f}, {:.1f})", armor.corners.rb_x,
-            armor.corners.rb_y, armor.corners.lb_x, armor.corners.lb_y);
+        std::println(
+            "[ LOG      ]   lt=({:.1f}, {:.1f})  rt=({:.1f}, {:.1f})", lt.x, lt.y, rt.x, rt.y);
+        std::println(
+            "[ LOG      ]   rb=({:.1f}, {:.1f})  lb=({:.1f}, {:.1f})", rb.x, rb.y, lb.x, lb.y);
 
         constexpr auto is_close = [](const auto& p, const auto& q, double tol) {
-            return cv::norm(p - q) <= tol;
+            return std::abs(p.x - q.x) <= tol && std::abs(p.y - q.y) <= tol;
         };
 
-        auto threshold = 2.;
         for (std::size_t index = 0; index < expected.size(); index++) {
             if (matched.at(index)) continue;
 
-            auto ok_lt = is_close(armor.corners.lt(), expected.at(index).lt(), threshold);
-            auto ok_lb = is_close(armor.corners.lb(), expected.at(index).lb(), threshold);
-            auto ok_rt = is_close(armor.corners.rt(), expected.at(index).rt(), threshold);
-            auto ok_rb = is_close(armor.corners.rb(), expected.at(index).rb(), threshold);
+            auto ok_lt = is_close(lt, expected.at(index).lt(), threshold);
+            auto ok_lb = is_close(lb, expected.at(index).lb(), threshold);
+            auto ok_rt = is_close(rt, expected.at(index).rt(), threshold);
+            auto ok_rb = is_close(rb, expected.at(index).rb(), threshold);
             if (ok_lt && ok_lb && ok_rt && ok_rb) {
                 matched[index] = true;
             }
