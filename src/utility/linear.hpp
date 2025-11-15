@@ -20,6 +20,7 @@ struct Translation {
     double x;
     double y;
     double z;
+    constexpr explicit Translation() noexcept = default;
     constexpr explicit Translation(const translation_trait auto& t) noexcept
         : x { t.x() }
         , y { t.y() }
@@ -37,17 +38,32 @@ struct Translation {
         target.y = y;
         target.z = z;
     }
+    auto copy_to(auto& target) const noexcept -> void
+        requires requires { target.x(); }
+    {
+        target.x() = x;
+        target.y() = y;
+        target.z() = z;
+    }
+
+    template <class T>
+    auto make() -> T {
+        auto result = T {};
+        copy_to(result);
+        return result;
+    }
 };
 struct Orientation {
     double x;
     double y;
     double z;
     double w;
+    constexpr explicit Orientation() noexcept = default;
     constexpr explicit Orientation(const orientation_trait auto& q) noexcept
         : x { q.x() }
         , y { q.y() }
         , z { q.z() }
-        , w { q.z() } { }
+        , w { q.w() } { }
     auto operator=(const orientation_trait auto& q) noexcept -> Orientation& {
         x = q.x();
         y = q.y();
@@ -62,6 +78,21 @@ struct Orientation {
         target.y = y;
         target.z = z;
         target.w = w;
+    }
+    auto copy_to(auto& target) const noexcept -> void
+        requires requires { target.x(); }
+    {
+        target.x() = x;
+        target.y() = y;
+        target.z() = z;
+        target.w() = w;
+    }
+
+    template <class T>
+    auto make() -> T {
+        auto result = T {};
+        copy_to(result);
+        return result;
     }
 };
 

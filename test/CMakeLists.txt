@@ -77,15 +77,24 @@ target_link_libraries(
     ${OpenCV_LIBS}
 )
 
+# Device Id
+ament_add_gtest(
+    test_device_id
+    ${TEST_DIR}/device_id.cpp
+)
+
 # Visualization
 add_executable(
     example_visualization
     ${TEST_DIR}/visualization.cpp
     ${RMCS_SRC_DIR}/utility/rclcpp/visualization.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_armors.cpp
 )
 target_link_libraries(
     example_visualization
     rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
 )
 
 if(HIKCAMERA_AVAILABLE)

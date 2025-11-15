@@ -72,8 +72,10 @@ constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
         // clang-format on
     }
 }
-constexpr auto from_index(std::size_t data) {
-    return DeviceId { id::details::id_underlyings[data] };
+constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
+    return (data < id::details::id_underlyings.size())
+        ? DeviceId { id::details::id_underlyings[data] }
+        : DeviceId::UNKNOWN;
 }
 
 struct DeviceIds {
@@ -108,8 +110,50 @@ struct DeviceIds {
         return std::to_underlying(DeviceId::UNKNOWN) == data;
     }
 
-    constexpr auto append(DeviceId id) noexcept -> void { data |= ~std::to_underlying(id); }
+    constexpr auto append(DeviceId id) noexcept -> void { data |= std::to_underlying(id); }
     constexpr auto remove(DeviceId id) noexcept -> void { data &= ~std::to_underlying(id); }
+
+    constexpr static auto kLargeArmorDevices() {
+        return DeviceIds {
+            DeviceId::HERO,
+            DeviceId::ENGINEER,
+            DeviceId::BASE,
+        };
+    }
+    constexpr static auto kSmallArmorDevices() {
+        return DeviceIds {
+            DeviceId::INFANTRY_3,
+            DeviceId::INFANTRY_4,
+            DeviceId::INFANTRY_5,
+            DeviceId::SENTRY,
+            DeviceId::OUTPOST,
+        };
+    }
+    constexpr static auto kGroundDevices() {
+        return DeviceIds {
+            DeviceId::HERO,
+            DeviceId::ENGINEER,
+            DeviceId::INFANTRY_3,
+            DeviceId::INFANTRY_4,
+            DeviceId::INFANTRY_5,
+            DeviceId::SENTRY,
+        };
+    }
+    constexpr static auto kOffensiveDevices() {
+        return DeviceIds {
+            DeviceId::HERO,
+            DeviceId::INFANTRY_3,
+            DeviceId::INFANTRY_4,
+            DeviceId::INFANTRY_5,
+            DeviceId::SENTRY,
+        };
+    }
+    constexpr static auto kBuildingDevices() {
+        return DeviceIds {
+            DeviceId::OUTPOST,
+            DeviceId::BASE,
+        };
+    }
 };
 
 }
