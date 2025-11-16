@@ -1,5 +1,4 @@
 #include "visualization.hpp"
-#include "utility/math/solve_armors.hpp"
 #include "utility/panic.hpp"
 #include "utility/robot/id.hpp"
 #include <rclcpp/node.hpp>
@@ -10,6 +9,7 @@ namespace rmcs::util {
 using Marker = visualization_msgs::msg::Marker;
 
 namespace visual::details {
+
     struct Context::Details {
         Marker marker_status;
         std::shared_ptr<rclcpp::Publisher<Marker>> rclcpp_pub;
@@ -76,36 +76,6 @@ namespace visual {
     auto Armor::init_context() noexcept -> void {
         init_armor_context(context, device_id, camp_color);
     }
-
-    auto AssembledArmors::init(
-        DeviceId device_id, CampColor camp_color, double w, double h) noexcept -> void {
-        this->w = w, this->h = h;
-        for (auto&& [index, armor] : armors | std::views::enumerate) {
-            context.share_rclcpp_context(armor.context);
-            armor.init(device_id, camp_color);
-            armor.context.details->marker_status.ns += std::to_string(index);
-            armor.context.details->marker_status.id = static_cast<int>(index);
-        }
-    }
-    auto AssembledArmors::update() noexcept -> void {
-        auto solution = ArmorsForwardSolution {};
-
-        solution.input.robot_height = h;
-        solution.input.robot_width  = w;
-
-        solution.input.t = translation;
-        solution.input.q = orientation;
-
-        solution.solve();
-
-        const auto& armors_status = solution.result.armors_status;
-        for (auto&& [armor, status] : std::views::zip(armors, armors_status)) {
-            const auto& [t, q] = status;
-            armor.set_translation(t);
-            armor.set_orientation(q);
-            armor.update();
-        }
-    }
 }
 
 struct VisualNode::Impl {
@@ -116,8 +86,7 @@ struct VisualNode::Impl {
         : rclcpp { std::make_shared<rclcpp::Node>(id) } { }
 
     auto bind_context(visual::details::Context& context) const noexcept -> void {
-        auto prefix = std::string { "/rmcs/auto_aim/" };
-
+        const auto prefix { std::string { kRclcppTopicHead } };
         context.details->rclcpp_pub = rclcpp->create_publisher<Marker>(prefix + context.id, 10);
     }
 };

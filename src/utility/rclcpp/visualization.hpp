@@ -14,6 +14,7 @@ namespace rmcs::util {
 namespace visual {
 
     namespace details {
+
         constexpr auto check_naming(std::string_view name) noexcept -> bool {
             return std::ranges::all_of(name, [](char c) {
                 return (c >= 'a' && c <= 'z') || (c >= '0' && c < '9') || (c == '_');
@@ -66,30 +67,14 @@ namespace visual {
         auto init_context() noexcept -> void;
     };
     static_assert(details::visual_trait<Armor>);
-
-    struct AssembledArmors {
-        details::Context context;
-
-        std::array<Armor, 4> armors;
-        double w, h;
-
-        Translation translation;
-        Orientation orientation;
-
-        auto init(DeviceId device_id, CampColor camp_color, double w, double h) noexcept -> void;
-
-        auto set_translation(const translation_trait auto& t) noexcept { translation = t; }
-        auto set_orientation(const orientation_trait auto& o) noexcept { orientation = o; }
-
-        auto update() noexcept -> void;
-    };
-    static_assert(details::visual_trait<AssembledArmors>);
 }
 
 class VisualNode {
     RMCS_PIMPL_DEFINITION(VisualNode)
 
 public:
+    constexpr static auto kRclcppTopicHead = "/rmcs/auto_aim/";
+
     explicit VisualNode(const std::string& id) noexcept;
 
     template <visual::details::visual_trait T>

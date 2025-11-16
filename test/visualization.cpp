@@ -1,4 +1,5 @@
 #include "utility/rclcpp/visualization.hpp"
+#include "utility/acsii_art.hpp"
 #include "utility/math/solve_armors.hpp"
 #include <eigen3/Eigen/Dense>
 #include <print>
@@ -8,13 +9,17 @@ auto main() -> int {
     using namespace rmcs;
     using namespace rmcs::util;
 
+    for (auto line : ascii_banner) {
+        std::println("\033[32m{}\033[0m", line);
+    }
+    std::println("> Visualization Here using Rclcpp!!");
+    std::println("> Use 'ros2 topic list' to check, and open foxglove to watch armors");
+    std::println("> Rclcpp Prefix: {}", VisualNode::kRclcppTopicHead);
+
     constexpr auto translation_speed = 3.;   // m
     constexpr auto orientation_speed = 6.28; // rad
 
     rclcpp::init(0, nullptr);
-
-    std::println("> Hello World!!!");
-    std::println("> Visualization Here using Rclcpp");
 
     auto visual = VisualNode { "example" };
 
