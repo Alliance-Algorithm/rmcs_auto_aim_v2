@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <ranges>
 
-#define tr(string) [] { return string; }
-
 namespace rmcs::util {
 
 namespace visual {
@@ -88,17 +86,15 @@ namespace visual {
     static_assert(details::visual_trait<AssembledArmors>);
 }
 
-class Visualization {
-    RMCS_PIMPL_DEFINITION(Visualization)
+class VisualNode {
+    RMCS_PIMPL_DEFINITION(VisualNode)
 
 public:
-    explicit Visualization(const std::string& id) noexcept;
-
-    auto set_topic_prefix(const std::string&) noexcept -> void;
+    explicit VisualNode(const std::string& id) noexcept;
 
     template <visual::details::visual_trait T>
-    auto make_visualized(std::string_view id, std::string_view tf) noexcept -> std::unique_ptr<T> {
-        auto item = std::make_unique<visual::Armor>();
+    auto make(const std::string& id, const std::string& tf) noexcept -> std::unique_ptr<T> {
+        auto item = std::make_unique<T>();
 
         if (!visual::details::check_naming(id)) {
             util::panic(std::format(

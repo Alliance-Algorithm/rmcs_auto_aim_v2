@@ -80,9 +80,11 @@ namespace visual {
     auto AssembledArmors::init(
         DeviceId device_id, CampColor camp_color, double w, double h) noexcept -> void {
         this->w = w, this->h = h;
-        for (auto& armor : armors) {
+        for (auto&& [index, armor] : armors | std::views::enumerate) {
             context.share_rclcpp_context(armor.context);
             armor.init(device_id, camp_color);
+            armor.context.details->marker_status.ns += std::to_string(index);
+            armor.context.details->marker_status.id = static_cast<int>(index);
         }
     }
     auto AssembledArmors::update() noexcept -> void {
@@ -106,7 +108,7 @@ namespace visual {
     }
 }
 
-struct Visualization::Impl {
+struct VisualNode::Impl {
 
     std::shared_ptr<rclcpp::Node> rclcpp;
 
@@ -120,15 +122,15 @@ struct Visualization::Impl {
     }
 };
 
-auto Visualization::bind_context(visual::details::Context& context) noexcept -> void {
+auto VisualNode::bind_context(visual::details::Context& context) noexcept -> void {
     pimpl->bind_context(context);
 }
 
-Visualization::Visualization(const std::string& id) noexcept
+VisualNode::VisualNode(const std::string& id) noexcept
     : pimpl { std::make_unique<Impl>(id) } { }
 
-Visualization::Visualization() noexcept { util::panic("Should not use this constructer!"); }
+VisualNode::VisualNode() noexcept { util::panic("Should not use this constructer!"); }
 
-Visualization::~Visualization() noexcept = default;
+VisualNode::~VisualNode() noexcept = default;
 
 }

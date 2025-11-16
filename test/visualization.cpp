@@ -1,67 +1,55 @@
 #include "utility/rclcpp/visualization.hpp"
+#include "utility/math/solve_armors.hpp"
 #include <eigen3/Eigen/Dense>
 #include <print>
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/utilities.hpp>
 
 auto main() -> int {
     using namespace rmcs;
     using namespace rmcs::util;
+
+    constexpr auto translation_speed = 3.;   // m
+    constexpr auto orientation_speed = 6.28; // rad
 
     rclcpp::init(0, nullptr);
 
     std::println("> Hello World!!!");
     std::println("> Visualization Here using Rclcpp");
 
-    auto visualization = Visualization { "example" };
+    auto visual = VisualNode { "example" };
 
-    auto armor_a = visualization.make_visualized<visual::Armor>("sentry_a", "camera_link");
-    auto armor_b = visualization.make_visualized<visual::Armor>("sentry_b", "camera_link");
-    auto armor_c = visualization.make_visualized<visual::Armor>("sentry_c", "camera_link");
-    auto armor_d = visualization.make_visualized<visual::Armor>("sentry_d", "camera_link");
-    armor_a->init(DeviceId::INFANTRY_3, CampColor::RED);
-    armor_b->init(DeviceId::INFANTRY_3, CampColor::RED);
-    armor_c->init(DeviceId::INFANTRY_3, CampColor::RED);
-    armor_d->init(DeviceId::INFANTRY_3, CampColor::RED);
+    auto armors = std::array<std::unique_ptr<visual::Armor>, 4> {};
+    auto index  = char { 'a' };
+    std::ranges::for_each(armors, [&](auto& armor) {
+        const auto naming { std::string { "sentry_" } + index++ };
+        armor = visual.make<visual::Armor>(naming, "camera_link");
+        armor->init(DeviceId::SENTRY, CampColor::BLUE);
+    });
+
+    auto solution = ArmorsForwardSolution {};
 
     auto start = std::chrono::steady_clock::now();
 
     while (rclcpp::ok()) {
-        auto now = std::chrono::steady_clock::now();
-        double t = std::chrono::duration<double>(now - start).count();
+        const auto now = std::chrono::steady_clock::now();
+        const auto t   = std::chrono::duration<double>(now - start).count();
 
-        // 整体绕 z 轴旋转：角速度 1 rad/s
-        double angle = t * 3;
-        Eigen::AngleAxisd rot(angle, Eigen::Vector3d::UnitZ());
+        const auto angle_axisd =
+            Eigen::AngleAxisd { t * orientation_speed, Eigen::Vector3d::UnitZ() };
+        const auto quaternion = Eigen::Quaterniond { angle_axisd };
 
-        // 四个角点（正方形边长 0.5 m）
-        double half                            = 0.25;
-        std::array<Eigen::Vector3d, 4> corners = { Eigen::Vector3d(half, half, 0.0),
-            Eigen::Vector3d(-half, half, 0.0), Eigen::Vector3d(-half, -half, 0.0),
-            Eigen::Vector3d(half, -half, 0.0) };
+        solution.input.t = std::sin(translation_speed * t) * Eigen::Vector3d::UnitX();
+        solution.input.q = quaternion;
+        solution.solve();
 
-        // 更新四个装甲板
-        auto update_armor = [&](const auto& armor, const Eigen::Vector3d& corner) {
-            Eigen::Vector3d pos = rot * corner;
-            armor->set_translation(pos);
-
-            // 让装甲板朝向中心 (0,0,z)
-            Eigen::Vector3d to_center = pos;
-            to_center.normalize();
-
-            // 假设装甲板的局部 x 轴是“正前方”
-            auto orient = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitX(), to_center);
-            armor->set_orientation(orient);
-
+        const auto& armors_status = solution.result.armors_status;
+        for (auto&& [armor, status] : std::views::zip(armors, armors_status)) {
+            armor->set_translation(std::get<0>(status));
+            armor->set_orientation(std::get<1>(status));
             armor->update();
-        };
+        }
 
-        update_armor(armor_a, corners[0]);
-        update_armor(armor_b, corners[1]);
-        update_armor(armor_c, corners[2]);
-        update_armor(armor_d, corners[3]);
-
-        using namespace std::chrono_literals;
-        rclcpp::sleep_for(5ms);
+        rclcpp::sleep_for(std::chrono::milliseconds { 1'000 / 60 });
     }
 
     return 0;
