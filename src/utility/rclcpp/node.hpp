@@ -11,7 +11,7 @@ class RclcppNode {
 public:
     explicit RclcppNode(const std::string& name) noexcept;
 
-    auto spin_once() noexcept -> void;
+    auto spin_once() const noexcept -> void;
 
     template <typename... Args>
     auto info(std::format_string<Args...> fmt, Args&&... args) const noexcept {
@@ -25,6 +25,10 @@ public:
     auto error(std::format_string<Args...> fmt, Args&&... args) const noexcept {
         impl_error(std::format(fmt, std::forward<Args>(args)...));
     }
+
+public:
+    struct Details;
+    std::unique_ptr<Details> details;
 
 private:
     auto impl_info_(const std::string&) const noexcept -> void;

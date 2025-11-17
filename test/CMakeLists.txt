@@ -87,9 +87,10 @@ ament_add_gtest(
 add_executable(
     example_visualization
     ${TEST_DIR}/visualization.cpp
-    ${RMCS_SRC_DIR}/utility/rclcpp/visualization.cpp
     ${RMCS_SRC_DIR}/utility/panic.cpp
     ${RMCS_SRC_DIR}/utility/math/solve_armors.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
 )
 target_link_libraries(
     example_visualization

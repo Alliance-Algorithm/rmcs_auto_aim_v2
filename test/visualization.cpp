@@ -1,8 +1,9 @@
-#include "utility/rclcpp/visualization.hpp"
 #include "utility/acsii_art.hpp"
 #include "utility/math/solve_armors.hpp"
+#include "utility/rclcpp/visual/armor.hpp"
 #include <eigen3/Eigen/Dense>
 #include <print>
+#include <ranges>
 #include <rclcpp/utilities.hpp>
 
 auto main() -> int {
@@ -14,21 +15,28 @@ auto main() -> int {
     }
     std::println("> Visualization Here using Rclcpp!!");
     std::println("> Use 'ros2 topic list' to check, and open foxglove to watch armors");
-    std::println("> Rclcpp Prefix: {}", VisualNode::kRclcppTopicHead);
+    std::println("> Rclcpp Prefix: {}", "/rmcs/auto_aim/");
 
     constexpr auto translation_speed = 3.;   // m
     constexpr auto orientation_speed = 6.28; // rad
 
     rclcpp::init(0, nullptr);
 
-    auto visual = VisualNode { "example" };
+    auto visual = RclcppNode { "example" };
+
+    auto config = visual::Armor::Config {
+        .rclcpp = visual,
+        .device = DeviceId::SENTRY,
+        .camp   = CampColor::BLUE,
+        .id     = "",
+        .tf     = "camera_link",
+    };
 
     auto armors = std::array<std::unique_ptr<visual::Armor>, 4> {};
     auto index  = char { 'a' };
     std::ranges::for_each(armors, [&](auto& armor) {
-        const auto naming { std::string { "sentry_" } + index++ };
-        armor = visual.make<visual::Armor>(naming, "camera_link");
-        armor->init(DeviceId::SENTRY, CampColor::BLUE);
+        config.id = std::string { "sentry_" } + index++;
+        armor     = std::make_unique<visual::Armor>(config);
     });
 
     auto solution = ArmorsForwardSolution {};
@@ -49,8 +57,7 @@ auto main() -> int {
 
         const auto& armors_status = solution.result.armors_status;
         for (auto&& [armor, status] : std::views::zip(armors, armors_status)) {
-            armor->set_translation(std::get<0>(status));
-            armor->set_orientation(std::get<1>(status));
+            armor->move(status);
             armor->update();
         }
 

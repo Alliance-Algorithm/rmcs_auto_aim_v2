@@ -1,10 +1,9 @@
 #pragma once
 #include <array>
-#include <string_view>
 
 namespace rmcs::util {
 
-constexpr std::array<std::string_view, 8> ascii_banner = {
+constexpr std::array ascii_banner = {
     R"( _____   __  __   _____   _____            _    _  _______  ____            _____  __  __ )",
     R"(|  __ \ |  \/  | / ____| / ____|     /\   | |  | ||__   __|/ __ \    /\    |_   _||  \/  |)",
     R"(| |__) || \  / || |     | (___      /  \  | |  | |   | |  | |  | |  /  \     | |  | \  / |)",
