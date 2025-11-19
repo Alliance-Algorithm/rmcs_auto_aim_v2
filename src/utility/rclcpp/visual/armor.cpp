@@ -15,6 +15,7 @@ struct Armor::Impl {
     std::shared_ptr<rclcpp::Publisher<Marker>> rclcpp_pub;
 
     explicit Impl(const Config& config) {
+        auto& rclcpp  = config.rclcpp;
         auto& details = config.rclcpp.details;
 
         if (!prefix::check_naming(config.id) || !prefix::check_naming(config.tf)) {
@@ -22,7 +23,7 @@ struct Armor::Impl {
                 std::format("Not a valid naming for armor id or tf: {}", prefix::naming_standard));
         }
 
-        std::string topic_name { prefix::pub_topic + config.id };
+        const auto topic_name { rclcpp.get_pub_topic_prefix() + config.id };
         rclcpp_pub = details->make_pub<Marker>(topic_name, qos::debug);
 
         marker.header.frame_id = config.tf;
@@ -63,7 +64,9 @@ struct Armor::Impl {
 
 auto Armor::update() noexcept -> void { pimpl->update(); }
 
-auto Armor::move(const Translation& t, const Orientation& q) noexcept -> void { pimpl->move(t, q); }
+auto Armor::impl_move(const Translation& t, const Orientation& q) noexcept -> void {
+    pimpl->move(t, q);
+}
 
 Armor::Armor(const Config& config) noexcept
     : pimpl { std::make_unique<Impl>(config) } { }

@@ -11,6 +11,7 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 find_package(yaml-cpp REQUIRED)
 find_package(OpenVINO REQUIRED)
@@ -30,6 +31,7 @@ include_directories(
     ${hikcamera_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
 )
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -87,15 +89,17 @@ ament_add_gtest(
 add_executable(
     example_visualization
     ${TEST_DIR}/visualization.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/posture.cpp
     ${RMCS_SRC_DIR}/utility/panic.cpp
     ${RMCS_SRC_DIR}/utility/math/solve_armors.cpp
     ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
-    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
 )
 target_link_libraries(
     example_visualization
     rclcpp::rclcpp
     ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
 )
 
 if(HIKCAMERA_AVAILABLE)

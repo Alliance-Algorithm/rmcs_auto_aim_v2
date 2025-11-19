@@ -12,12 +12,10 @@ namespace qos {
 namespace prefix {
     constexpr auto check_naming(std::string_view name) noexcept -> bool {
         return std::ranges::all_of(name, [](char c) {
-            return (c >= 'a' && c <= 'z') || (c >= '0' && c < '9') || (c == '_');
+            return (c >= 'a' && c <= 'z') || (c >= '0' && c < '9') || (c == '_') || (c == '/');
         }) && !std::ranges::empty(name);
     }
-    constexpr auto naming_standard = "Names must match pattern: ^[a-z0-9_]+$";
-
-    constexpr auto pub_topic = "/rmcs/auto_aim/";
+    constexpr auto naming_standard = "Names must match pattern: ^[a-z0-9_/]+$";
 }
 
 struct RclcppNode::Details {

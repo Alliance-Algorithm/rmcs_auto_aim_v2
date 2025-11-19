@@ -1,28 +1,22 @@
 #pragma once
+#include "utility/linear.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/movable.hpp"
-#include "utility/robot/color.hpp"
-#include "utility/robot/id.hpp"
 
 namespace rmcs::util::visual {
 
-struct Armor : public Movable {
-public:
+struct Posture : Movable {
     struct Config {
         RclcppNode& rclcpp;
-
-        DeviceId device;
-        CampColor camp;
 
         std::string id;
         std::string tf;
     };
+    explicit Posture(const Config&) noexcept;
+    ~Posture() noexcept;
 
-    explicit Armor(const Config&) noexcept;
-    ~Armor() noexcept;
-
-    Armor(const Armor&)            = delete;
-    Armor& operator=(const Armor&) = delete;
+    Posture(const Posture&)            = delete;
+    Posture& operator=(const Posture&) = delete;
 
     auto update() noexcept -> void;
 
