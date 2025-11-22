@@ -1,5 +1,5 @@
 #pragma once
-#include "utility/linear.hpp"
+#include "utility/math/linear.hpp"
 #include <tuple>
 
 namespace rmcs::util::visual {

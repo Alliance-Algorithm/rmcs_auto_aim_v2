@@ -94,6 +94,10 @@ struct Translation {
     double z = 0;
 
     constexpr explicit Translation() noexcept = default;
+    constexpr explicit Translation(double x, double y, double z) noexcept
+        : x { x }
+        , y { y }
+        , z { z } { }
     constexpr explicit Translation(const translation_trait auto& t) noexcept {
         linear::details::clone_translation(t, *this);
     }
@@ -105,7 +109,7 @@ struct Translation {
         linear::details::clone_translation(*this, target);
     }
     template <class T>
-    auto make() -> T {
+    auto make() const -> T {
         auto result = T {};
         return linear::details::clone_translation(*this, result);
     }
@@ -115,9 +119,14 @@ struct Orientation {
     double x = 0;
     double y = 0;
     double z = 0;
-    double w = 0;
+    double w = 1;
 
     constexpr explicit Orientation() noexcept = default;
+    constexpr explicit Orientation(double x, double y, double z, double w) noexcept
+        : x { x }
+        , y { y }
+        , z { z }
+        , w { w } { }
     constexpr explicit Orientation(const orientation_trait auto& q) noexcept {
         linear::details::clone_orientation(q, *this);
     }
@@ -129,7 +138,7 @@ struct Orientation {
         linear::details::clone_orientation(*this, target);
     }
     template <class T>
-    auto make() -> T {
+    auto make() const -> T {
         auto result = T {};
         return linear::details::clone_orientation(*this, result);
     }

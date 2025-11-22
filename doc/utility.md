@@ -19,7 +19,7 @@
 - **[acsii_art.hpp](../src/utility/acsii_art.hpp)**: 提供 ASCII 艺术横幅，用于程序启动时显示 RMCS 标识。
 
 ### 线性代数
-- **[linear.hpp](../src/utility/linear.hpp)**: 提供 `Translation` 和 `Orientation` 结构体，用于表示三维空间中的平移和旋转。支持从符合特定 trait 的对象进行转换，并提供 `copy_to` 方法将数据复制到目标对象。
+- **[linear.hpp](../src/utility/math/linear.hpp)**: 提供 `Translation` 和 `Orientation` 结构体，用于表示三维空间中的平移和旋转。支持从符合特定 trait 的对象进行转换，并提供 `copy_to` 方法将数据复制到目标对象。
 
 ### 错误处理
 - **[panic.hpp](../src/utility/panic.hpp)** / **[panic.cpp](../src/utility/panic.cpp)**: 提供 `panic` 函数，用于程序异常终止。会输出详细的错误信息，包括消息、文件位置、函数名、行号、线程 ID、时间戳和堆栈跟踪。

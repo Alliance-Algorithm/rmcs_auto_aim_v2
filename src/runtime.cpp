@@ -15,7 +15,6 @@ auto main() -> int {
 
     std::signal(SIGINT, [](int) { util::set_running(false); });
 
-    ///
     /// Runtime
     ///
 
@@ -27,7 +26,6 @@ auto main() -> int {
     auto capturer      = kernel::Capturer {};
     auto visualization = kernel::Visualization {};
 
-    ///
     /// Configure
     ///
     auto configuration     = util::configuration();

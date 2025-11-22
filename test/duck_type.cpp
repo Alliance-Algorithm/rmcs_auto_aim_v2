@@ -44,8 +44,8 @@ TEST(DuckArrayTest, Access) {
     };
 
     // Assert
-    static_assert(duck_array.contains<LoggerType1>(), "Do not contain LoggerType1");
-    static_assert(duck_array.size() == 3, "Array has wrong size");
+    static_assert(decltype(duck_array)::contains<LoggerType1>(), "Do not contain LoggerType1");
+    static_assert(decltype(duck_array)::size() == 3, "Array has wrong size");
 
     EXPECT_EQ(decltype(duck_array)::size(), 3);
 

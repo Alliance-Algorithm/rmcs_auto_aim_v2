@@ -32,6 +32,7 @@ include_directories(
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
 )
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -85,6 +86,25 @@ ament_add_gtest(
     ${TEST_DIR}/device_id.cpp
 )
 
+# Solve pnp
+ament_add_gtest(
+    test_solve_pnp
+    ${TEST_DIR}/solve_pnp.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp.cpp
+)
+target_link_libraries(
+    test_solve_pnp
+    ${OpenCV_LIBRARIES}
+)
+
+# Tf
+ament_add_gtest(
+    test_tf
+    ${TEST_DIR}/tf.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/tf.cpp
+)
+
 # Visualization
 add_executable(
     example_visualization
@@ -122,6 +142,7 @@ if(HIKCAMERA_AVAILABLE)
         ${RMCS_SRC_DIR}/modules/debug/visualization/stream_session.cpp
         ${RMCS_SRC_DIR}/modules/debug/visualization/stream_context.cpp
         ${RMCS_SRC_DIR}/utility/image.cpp
+        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
     )
     target_link_libraries(
         example_streaming

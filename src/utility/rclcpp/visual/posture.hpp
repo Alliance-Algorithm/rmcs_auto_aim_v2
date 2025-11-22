@@ -1,5 +1,5 @@
 #pragma once
-#include "utility/linear.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/movable.hpp"
 
