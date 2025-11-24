@@ -10,41 +10,7 @@ concept is_duck_checker = requires {
 };
 
 template <typename... Ts>
-class duck_array;
-
-template <>
-class duck_array<> {
-public:
-    using type_list = std::tuple<>;
-
-    template <is_duck_checker checker>
-    constexpr explicit duck_array(checker) noexcept { }
-
-    [[nodiscard]] static constexpr auto size() noexcept { return std::size_t { 0 }; }
-
-    template <typename T>
-    [[nodiscard]] static constexpr auto contains() noexcept -> bool {
-        return false;
-    }
-
-    template <std::size_t index>
-    [[nodiscard]] constexpr auto at(this auto&&) {
-        static_assert(index != index, "duck_array<> has no elements");
-    }
-
-    [[deprecated("Prefer at<index>() for compile-time access")]]
-    auto at(this auto&&, std::size_t, auto&&) -> void {
-        // No-op: empty array has no elements
-    }
-
-    constexpr auto foreach (this auto&&, auto&&) -> void {
-        // No-op: empty array has no elements
-    }
-};
-
-template <typename... Ts>
-    requires(sizeof...(Ts) > 0)
-class duck_array<Ts...> {
+class duck_array {
 public:
     using type_list = std::tuple<Ts...>;
 
@@ -72,7 +38,7 @@ public:
     auto at(this auto&& self, std::size_t index, auto&& f) -> void
         requires(std::invocable<decltype(f), Ts&> && ...)
     {
-        self.impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...> { });
+        self.impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...> {});
     }
 
     constexpr auto foreach (this auto&& self, auto&& f) -> void

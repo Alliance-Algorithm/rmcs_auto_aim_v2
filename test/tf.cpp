@@ -1,45 +1,45 @@
 #include "utility/tf.hpp"
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry>
 #include <gtest/gtest.h>
 
 using namespace rmcs;
 using namespace rmcs::util;
 
 constexpr static auto tree = TfJoint {
-    { "base_link" },
+    "base_link",
     TfJoint {
-        { "gimbal_link" },
-        TfJoint { { "scope_link" } },
-        TfJoint { { "lidar_link" } },
-        TfJoint { { "camera_link" } },
+        "gimbal_link",
+        TfJoint { "scope_link" },
+        TfJoint { "lidar_link" },
+        TfJoint { "camera_link" },
     },
     TfJoint {
-        { "chassis_link" },
-        TfJoint { { "wheel0_link" } },
-        TfJoint { { "wheel1_link" } },
-        TfJoint { { "wheel2_link" } },
-        TfJoint { { "wheel3_link" } },
+        "chassis_link",
+        TfJoint { "wheel0_link" },
+        TfJoint { "wheel1_link" },
+        TfJoint { "wheel2_link" },
+        TfJoint { "wheel3_link" },
     },
     TfJoint {
-        { "arm_link" },
+        "arm_link",
         TfJoint {
-            { "shoulder_link" },
+            "shoulder_link",
             TfJoint {
-                { "elbow_link" },
+                "elbow_link",
                 TfJoint {
-                    { "wrist_link" },
-                    TfJoint { { "gripper_link" } },
+                    "wrist_link",
+                    TfJoint { "gripper_link" },
                 },
             },
         },
     },
     TfJoint {
-        { "sensor_link" },
-        TfJoint { { "imu_link" } },
-        TfJoint { { "gps_link" } },
+        "sensor_link",
+        TfJoint { "imu_link" },
+        TfJoint { "gps_link" },
         TfJoint {
-            { "radar_link" },
-            TfJoint { { "antenna_link" } },
+            "radar_link",
+            TfJoint { "antenna_link" },
         },
     },
 };

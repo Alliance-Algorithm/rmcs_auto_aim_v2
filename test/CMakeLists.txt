@@ -97,12 +97,11 @@ target_link_libraries(
     ${OpenCV_LIBRARIES}
 )
 
-# Tf
+# Static TF
 ament_add_gtest(
-    test_tf
-    ${TEST_DIR}/tf.cpp
+    test_static_tf
+    ${TEST_DIR}/static_tf.cpp
     ${RMCS_SRC_DIR}/utility/panic.cpp
-    ${RMCS_SRC_DIR}/utility/tf.cpp
 )
 
 # Visualization

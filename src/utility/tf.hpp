@@ -11,44 +11,46 @@
 #include <string_view>
 #include <utility>
 
-namespace rmcs::util {
+namespace rmcs::util::tf::details {
 
-namespace tf::details {
+constexpr auto make_hash(std::string_view tf_name) noexcept {
+    std::uint64_t hash = 0xcbf29ce484222325ULL; // FNV offset basis
+    for (char c : tf_name) {
+        hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c));
+        hash *= 0x100000001b3ULL; // FNV prime
+    }
+    return hash;
+}
 
-    template <typename T>
-    concept node_trait = requires(T t) {
-        t.data.tf_name;
-        t.childs;
+template <typename T>
+concept node_trait = requires(T t) {
+    t.data.tf_name;
+    t.childs;
+};
+
+struct node_checker_type {
+    template <class T>
+    struct result {
+        constexpr static auto v = node_trait<T>;
     };
-
-    constexpr struct node_checker_type {
-        template <class T>
-        struct result {
-            constexpr static auto v = node_trait<T>;
-        };
-    } node_checker;
+};
+constexpr node_checker_type node_checker;
 
 }
+namespace rmcs::util {
 
 struct JointTransform {
     Translation translation {};
     Orientation orientation {};
-    constexpr static auto Identity() { return JointTransform {}; }
+
     auto inverse() const noexcept -> JointTransform;
+
+    constexpr static auto Identity() { return JointTransform {}; }
 };
 auto operator*(const JointTransform&, const JointTransform&) -> JointTransform;
 
 struct JointStatus {
     std::string_view tf_name;
-
-    constexpr auto make_hash() const noexcept {
-        std::uint64_t hash = 0xcbf29ce484222325ULL; // FNV offset basis
-        for (char c : tf_name) {
-            hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c));
-            hash *= 0x100000001b3ULL; // FNV prime
-        }
-        return hash;
-    }
 };
 
 template <tf::details::node_trait... node_tuple>
@@ -65,13 +67,17 @@ struct TfJoint {
         : data { data }
         , childs { tf::details::node_checker, std::forward<node_tuple>(childs)... } { }
 
+    constexpr explicit TfJoint(name_type name, node_tuple&&... childs) noexcept
+        : data { name }
+        , childs { tf::details::node_checker, std::forward<node_tuple>(childs)... } { }
+
     constexpr auto has_duplicate_nodes() const noexcept {
         auto hash_table = std::array<std::uint64_t, kTotalAmount> {};
         auto hash_index = std::size_t { 0 };
         this->foreach ([&](const auto& node) { //
-            hash_table[hash_index++] = node.data.make_hash();
+            hash_table[hash_index++] = tf::details::make_hash(node.data.tf_name);
         });
-        hash_table[hash_index++] = data.make_hash();
+        hash_table[hash_index++] = tf::details::make_hash(data.tf_name);
 
         std::ranges::sort(hash_table);
         return std::ranges::adjacent_find(hash_table) != hash_table.end();
@@ -283,6 +289,12 @@ struct JointTransforms {
         });
     }
 
+    auto look_up_(name_type from, name_type to) const noexcept {
+        if (from == to) return JointTransform::Identity();
+
+        auto path = joint_root.find_path(from, to);
+    }
+
     auto look_up(name_type from, name_type to) const noexcept -> JointTransform {
         if (from == to) {
             return JointTransform::Identity();
@@ -308,7 +320,6 @@ struct JointTransforms {
                 result = result * (*this)[current];
             }
         }
-
         return result;
     }
 
