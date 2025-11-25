@@ -17,7 +17,8 @@ find_package(Ceres REQUIRED)
 find_package(type_description_interfaces REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_description REQUIRED)
@@ -31,7 +32,8 @@ include_directories(
     ${type_description_interfaces_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${ament_index_cpp_INCLUDE_DIRS}
-    ${sensor_msgs_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
 
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
@@ -74,6 +76,8 @@ target_link_libraries(
     rclcpp::rclcpp
     ${OpenCV_LIBS}
     ${hikcamera_LIBRARIES}
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
 )
 
 ## 组件构建: component

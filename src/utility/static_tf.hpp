@@ -31,18 +31,19 @@ struct JointTransfroms {
 namespace rmcs::util {
 
 template <StaticString Name, class T = tf::details::MonoState>
-struct JointState { };
+struct Link { };
 
 template <StaticString name_, class State_ = tf::details::MonoState, class... Ts_>
 struct Joint {
     using State = State_;
 
-    constexpr explicit Joint(JointState<name_, State_>, Ts_...) noexcept { }
+    constexpr explicit Joint(Link<name_, State_>, Ts_...) noexcept { }
 
     static constexpr std::size_t child_amount = sizeof...(Ts_);
     static constexpr std::size_t total_amount = 1 + (0 + ... + Ts_::total_amount);
 
-    static constexpr auto name = name_.view();
+    static constexpr auto name        = name_.view();
+    static constexpr auto static_name = name_;
 
     template <typename F>
     static constexpr auto foreach_df(F&& f) noexcept {
@@ -77,6 +78,18 @@ struct Joint {
         static_assert(Joint::contains<child>(), "Child was not found");
         return impl_traversal_child<child>();
     }
+    template <StaticString a, StaticString b>
+    static constexpr auto distance() noexcept {
+        static_assert(a != b, "They are the same node");
+
+        constexpr auto to_a = child_path<a>(true);
+        constexpr auto to_b = child_path<b>(true);
+
+        auto mismatch   = std::ranges::mismatch(to_a, to_b);
+        auto common_len = std::ranges::distance(to_a.begin(), mismatch.in1);
+
+        return to_a.size() + to_b.size() - 2 * common_len;
+    }
 
     template <StaticString parent, StaticString child>
     static constexpr auto child_distance() noexcept -> std::size_t {
@@ -92,10 +105,10 @@ struct Joint {
 
     template <StaticString child, std::size_t N = child_distance<child>()>
     static constexpr auto child_path(bool traversal_down = false) noexcept {
-        static_assert(child != name, "Child should not be root");
         static_assert(Joint::contains<child>(), "Child was not found");
 
         auto result = std::array<std::string_view, N> {};
+        if (N == 0) return result;
 
         auto index = traversal_down ? N - 1 : 0;
         auto step  = traversal_down ? -1 : +1;
@@ -131,40 +144,24 @@ struct Joint {
         constexpr auto to_a = child_path<a>(true);
         constexpr auto to_b = child_path<b>(true);
 
+        auto mismatch = std::ranges::mismatch(to_a, to_b);
+        return std::make_tuple(*std::prev(mismatch.in1));
+    }
+
+    template <StaticString a, StaticString b>
+    static constexpr auto distance_to_lca() noexcept {
+        static_assert(a != b, "They are the same node");
+
+        constexpr auto to_a = child_path<a>(true);
+        constexpr auto to_b = child_path<b>(true);
+
         auto mismatch   = std::ranges::mismatch(to_a, to_b);
         auto common_len = std::ranges::distance(to_a.begin(), mismatch.in1);
 
-        auto length = to_a.size() + to_b.size() - 2 * common_len;
-        return std::make_tuple(*std::prev(mismatch.in1), length);
+        return std::make_tuple(to_a.size() - common_len, to_b.size() - common_len);
     }
 
-    /// @note:
-    /// callback(std::string_view, bool)
-    /// - std::string_view name
-    /// - bool need state inverse
-    template <StaticString begin, StaticString final>
-    static constexpr auto path(auto&& callback) noexcept
-        requires requires { callback(std::string_view {}, bool {}); }
-    {
-        constexpr auto to_begin = child_path<begin>(true);
-        constexpr auto to_final = child_path<final>(true);
-
-        auto mismatch   = std::ranges::mismatch(to_begin, to_final);
-        auto common_len = std::ranges::distance(to_begin.begin(), mismatch.in1);
-
-        auto begin_to_lca = to_begin.size() - common_len;
-
-        for (std::size_t i = 0; i < begin_to_lca; ++i) {
-            auto side = to_begin.size() - 1;
-            callback(to_begin[side - i], false);
-        }
-        for (std::size_t i = common_len; i < to_final.size(); ++i) {
-            callback(to_final[i], true);
-        }
-    }
-
-    template <StaticString begin, StaticString final,
-        std::size_t N = std::get<1>(find_lca<begin, final>())>
+    template <StaticString begin, StaticString final, std::size_t N = distance<begin, final>()>
     static constexpr auto path() noexcept {
         constexpr auto to_begin = child_path<begin>(true);
         constexpr auto to_final = child_path<final>(true);
@@ -187,37 +184,70 @@ struct Joint {
     }
 
     template <StaticString name>
-    constexpr static auto look_up(auto&& callback) noexcept {
+    constexpr static auto get_state(auto&& callback) noexcept {
         static_assert(Joint::contains<name>(), "Name was not found");
         std::ignore = find<name>([&]<class T> {
             using State = T::State;
-            callback(tf::details::JointTransfroms<void, name, State>::state);
+            callback(tf::details::JointTransfroms<Joint, name, State>::state);
         });
     }
     template <StaticString name>
-    constexpr static auto look_up(auto& dst) noexcept {
-        look_up<name>([&](const auto& state) { dst = state; });
+    constexpr static auto get_state(auto& dst) noexcept {
+        get_state<name>([&](const auto& state) { dst = state; });
     }
     template <StaticString name, typename T>
-    constexpr static auto look_up() noexcept {
+    constexpr static auto get_state() noexcept {
         auto result = T {};
-        look_up<name>([&](const auto& state) { result = state; });
+        get_state<name>([&](const auto& state) { result = T { state }; });
         return result;
+    }
+    template <StaticString name>
+    constexpr static auto set_state(const auto& _state) noexcept {
+        get_state<name>([&](auto& state) { state = _state; });
     }
 
-    template <StaticString begin, StaticString final>
-    constexpr static auto look_up(auto&& callback) noexcept {
-        // ...
+    template <StaticString name, typename T>
+    using Transforms = tf::details::JointTransfroms<Joint, name, T>;
+
+    /// @param: callback
+    /// - name: std::string_view
+    /// - state: SE3
+    /// - is_begin: bool
+    template <StaticString begin, StaticString final, class SE3>
+    constexpr static auto look_up(auto&& callback) noexcept
+        requires requires { callback(std::string_view {}, SE3 {}, bool {}); }
+    {
+        auto [begin_len, final_len] = distance_to_lca<begin, final>();
+        // calculate tf from begin to lca
+        impl_traversal_child<begin>([&]<class T>() {
+            using State = typename T::State;
+            if (begin_len-- > 0) {
+                callback(T::name, Transforms<T::static_name, State>::state, true);
+            }
+        });
+        // calculate tf from final to lca>
+        impl_traversal_child<final>([&]<class T>() {
+            using State = typename T::State;
+            if (final_len-- > 0) {
+                callback(T::name, Transforms<T::static_name, State>::state, false);
+            }
+        });
     }
-    template <StaticString begin, StaticString final>
-    constexpr static auto look_up(auto& dst) noexcept {
-        look_up<begin, final>([&](const auto& state) { dst = state; });
-    }
-    template <StaticString begin, StaticString final, typename T>
+
+    template <StaticString begin, StaticString final, class SE3>
+        requires requires { SE3::Identity(); }
     constexpr static auto look_up() noexcept {
-        auto result = T {};
-        look_up<begin, final>([&](const auto& state) { result = state; });
-        return result;
+        auto lca_to_begin = SE3::Identity();
+        auto lca_to_final = SE3::Identity();
+        Joint::look_up<begin, final, SE3>([&](auto, auto se3, bool is_begin) {
+            if (is_begin == true) {
+                lca_to_begin = lca_to_begin * se3;
+            }
+            if (is_begin == false) {
+                lca_to_final = lca_to_final * se3;
+            }
+        });
+        return SE3 { lca_to_begin.inverse() * lca_to_final };
     }
 
 public:
