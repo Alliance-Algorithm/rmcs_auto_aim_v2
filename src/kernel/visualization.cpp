@@ -1,5 +1,5 @@
 #include "visualization.hpp"
-#include "modules/debug/visualization/stream_session.hpp"
+#include "module/debug/visualization/stream_session.hpp"
 
 #include "utility/image.details.hpp"
 #include "utility/logging/printer.hpp"

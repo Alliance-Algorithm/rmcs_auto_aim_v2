@@ -48,8 +48,8 @@ file(GLOB_RECURSE AUTO_AIM_KERNEL
 )
 file(GLOB_RECURSE AUTO_AIM_MODULE
     CONFIGURE_DEPENDS
-    ${PROJECT_SOURCE_DIR}/src/modules/*.cpp
-    ${PROJECT_SOURCE_DIR}/src/modules/*.cc
+    ${PROJECT_SOURCE_DIR}/src/module/*.cpp
+    ${PROJECT_SOURCE_DIR}/src/module/*.cc
     ${PROJECT_SOURCE_DIR}/src/utility/*.cpp
     ${PROJECT_SOURCE_DIR}/src/utility/*.cc
 )

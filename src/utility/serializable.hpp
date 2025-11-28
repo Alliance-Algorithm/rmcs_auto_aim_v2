@@ -180,7 +180,11 @@ struct Serializable {
         auto s = self.make_serializable(self.metas);
         return s.serialize(prefix, source, self);
     }
-    auto serialize(this auto& self, const auto& source) noexcept {
+
+    template <class T>
+    auto serialize(this T& self, const auto& source) noexcept {
+        static_assert(
+            details::serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
         return self.serialize("", source);
     }
 

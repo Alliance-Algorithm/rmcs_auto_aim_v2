@@ -1,6 +1,6 @@
-#include "modules/capturer/hikcamera.hpp"
-#include "modules/debug/framerate.hpp"
-#include "modules/debug/visualization/stream_session.hpp"
+#include "module/capturer/hikcamera.hpp"
+#include "module/debug/framerate.hpp"
+#include "module/debug/visualization/stream_session.hpp"
 #include "utility/image.details.hpp"
 #include "utility/rclcpp/node.hpp"
 

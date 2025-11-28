@@ -1,4 +1,4 @@
-#include "modules/debug/framerate.hpp"
+#include "module/debug/framerate.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
 #include "utility/shared/interprocess.hpp"

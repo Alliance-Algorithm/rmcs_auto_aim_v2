@@ -46,31 +46,31 @@ struct Joint {
     static constexpr auto static_name = name_;
 
     template <typename F>
-    static constexpr auto foreach_df(F&& f) noexcept {
+    static constexpr auto foreach_df(F&& f) noexcept -> void {
         f.template operator()<Joint>();
-
         auto recursion = [&]<class T>() { //
             T::foreach_df(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);
     }
 
-    template <StaticString query>
+    template <StaticString query_name>
     static constexpr auto find(auto&& callback) noexcept -> bool {
-        if constexpr (query == name) {
+        if constexpr (query_name == name) {
             callback.template operator()<Joint>();
             return true;
+        } else {
+            const auto recursion_find = [&]<class T>() {
+                return T::template find<query_name>(callback);
+            };
+            return (false || ... || recursion_find.template operator()<Ts_>());
         }
-        auto try_find = [&]<class T>() -> bool { //
-            return T::template find<query>(callback);
-        };
-        return (false || ... || try_find.template operator()<Ts_>());
     }
 
-    template <StaticString query>
+    template <StaticString query_name>
     static constexpr auto contains() noexcept {
-        if constexpr (query == name) return true;
-        return (false || ... || Ts_::template contains<query>());
+        if constexpr (query_name == name) return true;
+        return (false || ... || Ts_::template contains<query_name>());
     }
 
     template <StaticString child>
@@ -239,7 +239,7 @@ struct Joint {
     constexpr static auto look_up() noexcept {
         auto lca_to_begin = SE3::Identity();
         auto lca_to_final = SE3::Identity();
-        Joint::look_up<begin, final, SE3>([&](auto, auto se3, bool is_begin) {
+        Joint::look_up<begin, final, SE3>([&]([[maybe_unused]] auto, auto se3, bool is_begin) {
             if (is_begin == true) {
                 lca_to_begin = lca_to_begin * se3;
             }

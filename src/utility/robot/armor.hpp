@@ -1,4 +1,5 @@
 #pragma once
+#include "utility/math/point.hpp"
 #include "utility/robot/id.hpp"
 #include <opencv2/core/types.hpp>
 
@@ -30,5 +31,18 @@ struct LightStrip {
 
 struct Armor { };
 using Armors = std::vector<Armor>;
+
+constexpr std::array<Point3D, 4> kLargeArmorShape {
+    Point3D { 0.0, 0.115, 0.028 },   // Top-left
+    Point3D { 0.0, -0.115, 0.028 },  // Top-right
+    Point3D { 0.0, -0.115, -0.028 }, // Bottom-right
+    Point3D { 0.0, 0.115, -0.028 }   // Bottom-left
+};
+constexpr std::array<Point3D, 4> kSmallArmorShape {
+    Point3D { 0.0, 0.0675, 0.028 },   // Top-left
+    Point3D { 0.0, -0.0675, 0.028 },  // Top-right
+    Point3D { 0.0, -0.0675, -0.028 }, // Bottom-right
+    Point3D { 0.0, 0.0675, -0.028 }   // Bottom-left
+};
 
 }

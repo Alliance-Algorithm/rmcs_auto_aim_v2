@@ -11,13 +11,32 @@ git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
 
 # 构建依赖
 build-rmcs
+
+# 启动运行时
+ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
+
+# 运行示例程序
+cd /path/to/rmcs_auto_aim_v2/test/
+cmake -B build
+cmake --build build -j
+
+# 以 example 开头的程序包含了很多具体业务的单独运行时实现
+./build/example_xxx
 ```
 
 ## 项目架构
 
 ### 文件排布
 
+- `kernel`: 运行时封装，与业务逻辑强相关，包含业务流程，数据流动，参数配置等
+
+- `module`: 特定特务的通用实现模块，但不包含运行时逻辑
+
+- `utility`: 和运行业务无关的基本数据结果，基本算法和辅助工具，与一些第三方库的有限接口封装
+
 ### 任务调度
+
+TODO
 
 ## 调试指南
 

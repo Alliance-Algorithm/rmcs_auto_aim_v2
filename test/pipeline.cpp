@@ -1,4 +1,4 @@
-#include "modules/pipeline/common.hpp"
+#include "module/pipeline/common.hpp"
 #include <gtest/gtest.h>
 
 using Int = std::int32_t;

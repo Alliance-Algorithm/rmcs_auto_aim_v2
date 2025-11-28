@@ -81,7 +81,10 @@ struct Point2D {
     double x = 0;
     double y = 0;
 
-    constexpr explicit Point2D() noexcept = default;
+    constexpr Point2D() noexcept = default;
+    constexpr Point2D(double x, double y) noexcept
+        : x { x }
+        , y { y } { }
     constexpr explicit Point2D(const point2d_trait auto& p) noexcept {
         point::details::clone_point2d(p, *this);
     }
@@ -104,7 +107,11 @@ struct Point3D {
     double y = 0;
     double z = 0;
 
-    constexpr explicit Point3D() noexcept = default;
+    constexpr Point3D() noexcept = default;
+    constexpr Point3D(double x, double y, double z) noexcept
+        : x { x }
+        , y { y }
+        , z { z } { }
     constexpr explicit Point3D(const point3d_trait auto& p) noexcept {
         point::details::clone_point3d(p, *this);
     }

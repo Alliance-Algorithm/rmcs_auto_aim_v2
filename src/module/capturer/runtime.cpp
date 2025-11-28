@@ -1,5 +1,5 @@
 #include "runtime.hpp"
-#include "modules/capturer/hikcamera.hpp"
+#include "module/capturer/hikcamera.hpp"
 
 namespace rmcs::cap {
 

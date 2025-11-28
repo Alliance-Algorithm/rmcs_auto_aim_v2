@@ -150,7 +150,7 @@ struct OpenVinoNet::Impl {
         const auto processe_out = preprocess.build();
         openvino_model =
             openvino_core.compile_model(processe_out, config.infer_device, performance);
-        return { };
+        return {};
 
     } catch (const std::runtime_error& e) {
         return std::unexpected { std::string { "Failed to load model | " } + e.what() };
@@ -226,14 +226,14 @@ struct OpenVinoNet::Impl {
             return std::unexpected { "Wrong tensor line length happened while explaining result" };
         }
 
-        auto result = std::vector<armor_type> { };
-        auto scores = std::vector<float> { };
-        auto boxes  = std::vector<cv::Rect> { };
+        auto result = std::vector<armor_type> {};
+        auto scores = std::vector<float> {};
+        auto boxes  = std::vector<cv::Rect> {};
 
         const auto* data = tensor.data<precision_type>();
         for (std::size_t row = 0; row < rows; row++) {
 
-            auto line = armor_type { };
+            auto line = armor_type {};
             line.unsafe_from(std::span { data + row * cols, cols });
             line.confidence = util::sigmoid(line.confidence);
 
@@ -244,10 +244,10 @@ struct OpenVinoNet::Impl {
             }
         }
 
-        auto kept_points = std::vector<int> { };
+        auto kept_points = std::vector<int> {};
         cv::dnn::NMSBoxes(boxes, scores, config.score_threshold, config.nms_threshold, kept_points);
 
-        auto final_result = std::vector<armor_type> { };
+        auto final_result = std::vector<armor_type> {};
         final_result.reserve(kept_points.size());
 
         for (auto idx : kept_points) {
@@ -286,7 +286,7 @@ struct OpenVinoNet::Impl {
                 return;
             }
             if (e) {
-                auto error = std::string { };
+                auto error = std::string {};
                 try {
                     std::rethrow_exception(e);
                 } catch (const ov::Cancelled& e) {

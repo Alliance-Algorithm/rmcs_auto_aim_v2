@@ -1,5 +1,5 @@
 #pragma once
-#include "modules/identifier/lightbar.hpp"
+#include "module/identifier/lightbar.hpp"
 #include "utility/robot/id.hpp"
 
 namespace rmcs {

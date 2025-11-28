@@ -4,7 +4,6 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-
   source: "hikcamera"
   hikcamera:
     # int
@@ -20,9 +19,39 @@ capturer:
     software_sync: false
     trigger_mode: false
     fixed_framerate: true
+  video:
+    location: ""
+    loop_play: true
 
 identifier:
   binarization_threshold: 0.5
+
+  # openvino infer
+  model_location: "yolov5.xml"
+  infer_device: "AUTO"
+  use_roi_segment: false
+  use_corner_correction: false
+  roi_rows: 640
+  roi_cols: 640
+  input_rows: 640
+  input_cols: 640
+  min_confidence: 0.8
+  score_threshold: 0.7
+  nms_threshold: 0.3
+
+pose_estimator:
+  camera_matrix: [2414.9359264386621, 0, 717.26243105567414, 0, 2418.0489262208148, 582.68540529942845, 0, 0, 1]
+  distort_coeff: [-0.0209453389287673, 0.15028138841073832, -0.0006517722113234505, -0.0016861906197686788, 0]
+
+  transforms:
+    - parent: "imu_link"
+      child: "gimbal_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
+    - parent: "gimbal_link"
+      child: "camera_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
 
 visualization:
   framerate: 60

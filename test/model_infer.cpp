@@ -1,4 +1,4 @@
-#include "modules/identifier/model.hpp"
+#include "module/identifier/model.hpp"
 #include "utility/image.details.hpp"
 
 #include <gtest/gtest.h>

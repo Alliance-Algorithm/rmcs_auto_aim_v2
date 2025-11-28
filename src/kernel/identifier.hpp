@@ -17,8 +17,6 @@ public:
     auto perview() const noexcept -> const Image&;
 
     auto sync_identify(const Image&) noexcept -> void;
-
-    static constexpr auto get_prefix() { return "identifier"; }
 };
 
 }
