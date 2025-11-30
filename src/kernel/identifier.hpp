@@ -1,7 +1,8 @@
 #pragma once
 
-#include "utility/image.hpp"
+#include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/robot/armor.hpp"
 
 #include <expected>
 #include <yaml-cpp/node/node.h>
@@ -14,9 +15,7 @@ class Identifier {
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto perview() const noexcept -> const Image&;
-
-    auto sync_identify(const Image&) noexcept -> void;
+    auto sync_identify(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
 };
 
 }

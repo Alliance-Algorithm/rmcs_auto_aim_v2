@@ -1,5 +1,5 @@
 #include "module/identifier/model.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 
 #include <gtest/gtest.h>
 #include <opencv2/imgcodecs.hpp>
@@ -32,7 +32,7 @@ constexpr auto config = R"(
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
-    auto net  = OpenVinoNet { };
+    auto net  = OpenVinoNet {};
     auto yaml = YAML::Load(config);
 
     auto model_location    = location / "../models/yolov5.xml";
@@ -44,7 +44,7 @@ TEST(model, sync_infer) {
     auto image_location = std::getenv("IMAGE");
     ASSERT_NE(image_location, nullptr) << error_head << "Set env 'IMAGE' to pass infer source";
 
-    auto image { Image { } };
+    auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location);
@@ -76,9 +76,9 @@ TEST(model, sync_infer) {
     ASSERT_EQ(armors.size(), 2) << error_head << "The count of armor needs to be 2";
 
     constexpr auto expected = std::array {
-        ArmorDetection<>::Corners {
+        ArmorInferResult<>::Corners {
             970.7f, 569.4f, 977.6f, 614.0f, 1057.8f, 615.0f, 1051.0f, 571.5f },
-        ArmorDetection<>::Corners {
+        ArmorInferResult<>::Corners {
             697.7f, 580.1f, 690.2f, 619.0f, 751.4f, 620.9f, 758.9f, 581.4f },
     };
 
@@ -91,10 +91,12 @@ TEST(model, sync_infer) {
         auto lb = armor.corners.lb() + roi_offset;
 
         std::println("[ LOG      ] confidence {:2}: {:.3f}", i, armor.confidence);
-        std::println(
-            "[ LOG      ]   lt=({:.1f}, {:.1f})  rt=({:.1f}, {:.1f})", lt.x, lt.y, rt.x, rt.y);
-        std::println(
-            "[ LOG      ]   rb=({:.1f}, {:.1f})  lb=({:.1f}, {:.1f})", rb.x, rb.y, lb.x, lb.y);
+        std::println("[ LOG      ]   lt=({:.1f}, {:.1f})  rt=({:.1f}, {:.1f})", //
+            lt.x, lt.y, rt.x, rt.y);
+        std::println("[ LOG      ]   rb=({:.1f}, {:.1f})  lb=({:.1f}, {:.1f})", //
+            rb.x, rb.y, lb.x, lb.y);
+        std::println("[ LOG      ]   color: {} genre: {}", get_enum_name(armor.armor_color()),
+            get_enum_name(armor.armor_genre()));
 
         constexpr auto is_close = [](const auto& p, const auto& q, double tol) {
             return std::abs(p.x - q.x) <= tol && std::abs(p.y - q.y) <= tol;

@@ -4,9 +4,11 @@
 #include "kernel/visualization.hpp"
 
 #include "module/debug/framerate.hpp"
+#include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
+#include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
 #include <csignal>
@@ -18,7 +20,7 @@ auto main() -> int {
 
     std::signal(SIGINT, [](int) { util::set_running(false); });
 
-    auto rclcpp_node = util::RclcppNode { "AutoAim" };
+    auto rclcpp_node = util::RclcppNode { "AutoAim_" };
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -42,6 +44,7 @@ auto main() -> int {
     ///
     auto configuration     = util::configuration();
     auto use_visualization = configuration["use_visualization"].as<bool>();
+    auto use_painted_image = configuration["use_painted_image"].as<bool>();
 
     // CAPTURER
     {
@@ -52,6 +55,11 @@ auto main() -> int {
     // IDENTIFIER
     {
         auto config = configuration["identifier"];
+
+        auto path = std::filesystem::path { util::Parameters::share_location() }
+            / std::filesystem::path { config["model_location"].as<std::string>() };
+        config["model_location"] = path.string();
+
         auto result = identifier.initialize(config);
         handle_result("identifier", result);
     }
@@ -76,11 +84,20 @@ auto main() -> int {
             if (framerate.tick()) {
                 rclcpp_node.info("Framerate: {}hz", framerate.fps());
             }
+
+            auto armors_2d = identifier.sync_identify(*image);
+            if (!armors_2d.has_value()) {
+                continue;
+            }
+
+            if (use_painted_image) {
+                for (const auto& armor_2d : *armors_2d)
+                    util::draw(*image, armor_2d);
+            }
+
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
-
-            // Publish task
         }
 
         rclcpp_node.spin_once();

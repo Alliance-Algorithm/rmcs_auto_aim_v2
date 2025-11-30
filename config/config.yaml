@@ -1,4 +1,5 @@
 use_visualization: true
+use_painted_image: false
 
 capturer:
   show_loss_framerate: false
@@ -9,9 +10,9 @@ capturer:
     # int
     timeout_ms: 500
     # float
-    exposure_us: 2000.0
+    exposure_us: 3000.0
     # float
-    framerate: 80.0
+    framerate: 120
     # float
     gain: 16.9807
 
@@ -19,7 +20,7 @@ capturer:
     software_sync: false
     trigger_mode: false
     fixed_framerate: true
-  video:
+  local_video:
     location: ""
     loop_play: true
 
@@ -35,7 +36,7 @@ identifier:
   roi_cols: 640
   input_rows: 640
   input_cols: 640
-  min_confidence: 0.8
+  min_confidence: 0.5
   score_threshold: 0.7
   nms_threshold: 0.3
 
@@ -54,7 +55,7 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 visualization:
-  framerate: 60
+  framerate: 100
   monitor_host: "127.0.0.1"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

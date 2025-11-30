@@ -30,8 +30,8 @@ auto panic(const std::string& message, const std::source_location& loc) -> void 
     std::cerr << "Timestamp: " << std::ctime(&now_c);
 
     void* callstack[64];
-    int frames     = ::backtrace(callstack, 64);
-    char** symbols = ::backtrace_symbols(callstack, frames);
+    auto frames  = ::backtrace(callstack, 64);
+    auto symbols = ::backtrace_symbols(callstack, frames);
 
     std::cerr << "\nStack trace (" << frames << " frames):\n";
     for (int i = 0; i < frames; ++i) {

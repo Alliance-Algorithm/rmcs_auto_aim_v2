@@ -1,10 +1,10 @@
 #pragma once
 #include <hikcamera/capturer.hpp>
 
-#include "utility/image.hpp"
+#include "utility/image/image.hpp"
 #include "utility/serializable.hpp"
 
-namespace rmcs::cap::hik {
+namespace rmcs::cap {
 
 using NormalResult = std::expected<void, std::string>;
 using ImageResult  = std::expected<std::unique_ptr<Image>, std::string>;

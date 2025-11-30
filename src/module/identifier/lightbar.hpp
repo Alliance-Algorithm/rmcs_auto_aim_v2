@@ -1,5 +1,5 @@
 #pragma once
-#include "utility/image.hpp"
+#include "utility/image/image.hpp"
 
 namespace rmcs {
 

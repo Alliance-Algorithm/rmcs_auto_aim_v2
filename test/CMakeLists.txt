@@ -71,7 +71,7 @@ ament_add_gtest(
     test_model_infer
     ${TEST_DIR}/model_infer.cpp
     ${RMCS_SRC_DIR}/module/identifier/model.cpp
-    ${RMCS_SRC_DIR}/utility/image.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 target_link_libraries(
     test_model_infer
@@ -140,7 +140,7 @@ if(HIKCAMERA_AVAILABLE)
         ${RMCS_SRC_DIR}/module/capturer/hikcamera.cpp
         ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
         ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
-        ${RMCS_SRC_DIR}/utility/image.cpp
+        ${RMCS_SRC_DIR}/utility/image/image.cpp
         ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
     )
     target_link_libraries(

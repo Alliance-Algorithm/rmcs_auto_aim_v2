@@ -35,9 +35,9 @@
 - **[times_limit.hpp](../src/utility/times_limit.hpp)**: 提供 `TimesLimit` 类，用于限制某个操作的执行次数。支持启用/禁用、重置计数等功能。
 
 ### 图像处理（OpenCV 包装器）
-- **[image.hpp](../src/utility/image.hpp)** / **[image.cpp](../src/utility/image.cpp)**: 提供 `Image` 类，封装图像数据和时间戳。使用 PIMPL 模式隐藏 OpenCV 头文件，避免在头文件中暴露 `cv::Mat` 等 OpenCV 类型。
-- **[image.details.hpp](../src/utility/image.details.hpp)**: 定义 `Image::Details` 结构体，包含 OpenCV 的 `cv::Mat` 和相关的访问方法。此文件包含 OpenCV 头文件，应仅在实现文件中使用。
-- **[image/painter.hpp](../src/utility/image/painter.hpp)**: 图像绘制工具（具体实现需查看源码）。
+- **[image.hpp](../src/utility/image/image.hpp)** / **[image.cpp](../src/utility/image/image.cpp)**: 提供 `Image` 类，封装图像数据和时间戳。使用 PIMPL 模式隐藏 OpenCV 头文件，避免在头文件中暴露 `cv::Mat` 等 OpenCV 类型。
+- **[image.details.hpp](../src/utility/image/image.details.hpp)**: 定义 `Image::Details` 结构体，包含 OpenCV 的 `cv::Mat` 和相关的访问方法。此文件包含 OpenCV 头文件，应仅在实现文件中使用。
+- **[image/painter.hpp](../src/utility/image/image/painter.hpp)**: 图像绘制工具（具体实现需查看源码）。
 
 ### ROS2 节点（rclcpp 包装器）
 - **[node.hpp](../src/utility/node.hpp)**: 提供 `Node` 类，继承自 `rclcpp::Node`，扩展了日志功能，支持使用 `std::format` 进行格式化输出。提供 `info`、`warn`、`error` 等方法。**注意**：此文件直接继承 rclcpp::Node，如需完全隐藏 rclcpp 头文件，请使用 `rclcpp/node.hpp` 中的 `RclcppNode`。

@@ -1,5 +1,5 @@
 #include "model.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 #include "utility/math/sigmoid.hpp"
 #include "utility/serializable.hpp"
 
@@ -215,14 +215,14 @@ struct OpenVinoNet::Impl {
 
     auto explain_infer_result(ov::InferRequest& finished_request) const noexcept -> Result {
         using precision_type = float;
-        using armor_type     = ArmorDetection<precision_type>;
+        using armor_type     = ArmorInferResult<precision_type>;
 
         auto tensor = finished_request.get_output_tensor();
         auto& shape = tensor.get_shape();
 
         const auto rows = static_cast<std::size_t>(shape.at(1));
         const auto cols = static_cast<std::size_t>(shape.at(2));
-        if (cols != ArmorDetection<precision_type>::length()) {
+        if (cols != ArmorInferResult<precision_type>::length()) {
             return std::unexpected { "Wrong tensor line length happened while explaining result" };
         }
 

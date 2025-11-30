@@ -11,7 +11,6 @@ def generate_launch_description():
     node = Node(
         package="rmcs_auto_aim_v2",
         executable="rmcs_auto_aim_v2_runtime",
-        parameters= [[FindPackageShare("rmcs_auto_aim_v2"), "/config.yaml"]],
         output="screen",
         respawn=True,
         respawn_delay=1.0,

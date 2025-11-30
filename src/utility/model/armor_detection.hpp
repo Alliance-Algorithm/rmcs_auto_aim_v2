@@ -1,10 +1,11 @@
 #pragma once
+#include "utility/robot/armor.hpp"
 #include <opencv2/core/types.hpp>
 
 namespace rmcs {
 
 template <typename precision_type = float>
-struct ArmorDetection {
+struct ArmorInferResult {
     using Point = cv::Point_<precision_type>;
     using Rect  = cv::Rect_<precision_type>;
 
@@ -26,48 +27,43 @@ struct ArmorDetection {
     precision_type confidence;
 
     struct Color {
-        precision_type red;
         precision_type blue;
+        precision_type red;
         precision_type dark;
         precision_type mix;
     } color;
 
     struct Role {
+        precision_type sentry;
         precision_type hero;
         precision_type engineer;
         precision_type infantry_3;
         precision_type infantry_4;
         precision_type infantry_5;
-        precision_type sentry;
         precision_type outpost;
         precision_type base;
         precision_type nothing;
     } role;
 
     auto unsafe_from(std::span<const precision_type> raw) noexcept {
-        static_assert(std::is_trivially_copyable_v<ArmorDetection>);
-        std::memcpy(this, raw.data(), sizeof(ArmorDetection));
+        static_assert(std::is_trivially_copyable_v<ArmorInferResult>);
+        std::memcpy(this, raw.data(), sizeof(ArmorInferResult));
     }
 
     auto bounding_rect() const noexcept {
-        using std::max;
-        using std::min;
-
-        const auto min_x = min(min(corners.lt_x, corners.rt_x), min(corners.rb_x, corners.lb_x));
-        const auto max_x = max(max(corners.lt_x, corners.rt_x), max(corners.rb_x, corners.lb_x));
-        const auto min_y = min(min(corners.lt_y, corners.rt_y), min(corners.rb_y, corners.lb_y));
-        const auto max_y = max(max(corners.lt_y, corners.rt_y), max(corners.rb_y, corners.lb_y));
-
-        const auto w = max_x - min_x;
-        const auto h = max_y - min_y;
-
-        return Rect { min_x, min_y, w, h };
+        const std::array xs { corners.lt_x, corners.rt_x, corners.rb_x, corners.lb_x };
+        const std::array ys { corners.lt_y, corners.rt_y, corners.rb_y, corners.lb_y };
+        const auto min_x = std::ranges::min(xs);
+        const auto max_x = std::ranges::max(xs);
+        const auto min_y = std::ranges::min(ys);
+        const auto max_y = std::ranges::max(ys);
+        return Rect { min_x, min_y, max_x - min_x, max_y - min_y };
     }
 
-    auto lt() const noexcept { return corners.lt(); }
-    auto rb() const noexcept { return corners.rb(); }
-    auto rt() const noexcept { return corners.rt(); }
-    auto lb() const noexcept { return corners.lb(); }
+    auto bl() const noexcept { return corners.lb(); }
+    auto br() const noexcept { return corners.rb(); }
+    auto tl() const noexcept { return corners.lt(); }
+    auto tr() const noexcept { return corners.rt(); }
 
     auto scale_corners(precision_type scaling) noexcept {
         corners.lb_x *= scaling;
@@ -80,8 +76,58 @@ struct ArmorDetection {
         corners.rt_y *= scaling;
     }
 
+    auto armor_color() const noexcept {
+        constexpr static std::array enums {
+            ArmorColor::RED,
+            ArmorColor::BLUE,
+            ArmorColor::DARK,
+            ArmorColor::MIX,
+        };
+        const std::array colors {
+            color.red,
+            color.blue,
+            color.dark,
+            color.mix,
+        };
+        return max_element(enums, colors);
+    }
+
+    auto armor_genre() const noexcept {
+        constexpr static std::array enums {
+            ArmorGenre::UNKNOWN,
+            ArmorGenre::HERO,
+            ArmorGenre::ENGINEER,
+            ArmorGenre::INFANTRY_3,
+            ArmorGenre::INFANTRY_4,
+            ArmorGenre::INFANTRY_5,
+            ArmorGenre::SENTRY,
+            ArmorGenre::OUTPOST,
+            ArmorGenre::BASE,
+        };
+        const std::array genres {
+            role.nothing,
+            role.hero,
+            role.engineer,
+            role.infantry_3,
+            role.infantry_4,
+            role.infantry_5,
+            role.sentry,
+            role.outpost,
+            role.base,
+        };
+        return max_element(enums, genres);
+    }
+
     constexpr static auto length() noexcept {
-        return sizeof(ArmorDetection) / sizeof(precision_type);
+        return sizeof(ArmorInferResult) / sizeof(precision_type);
+    }
+
+    template <typename T1, typename T2, std::size_t N>
+    constexpr static auto max_element(
+        const std::array<T1, N>& a1, const std::array<T2, N>& a2) noexcept {
+        const auto it  = std::ranges::max_element(a2);
+        const auto idx = std::ranges::distance(a2.begin(), it);
+        return a1[idx];
     }
 };
 

@@ -1,5 +1,5 @@
 #include "preprocess.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 
 #include <opencv2/imgproc.hpp>
 

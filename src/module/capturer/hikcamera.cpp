@@ -1,7 +1,7 @@
 #include "hikcamera.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 
-namespace rmcs::cap::hik {
+namespace rmcs::cap {
 
 auto Hikcamera::wait_image() noexcept -> ImageResult {
     auto captured = read_image_with_timestamp();

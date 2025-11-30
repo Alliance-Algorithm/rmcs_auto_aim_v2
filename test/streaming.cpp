@@ -1,7 +1,7 @@
 #include "module/capturer/hikcamera.hpp"
 #include "module/debug/framerate.hpp"
 #include "module/debug/visualization/stream_session.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 #include "utility/rclcpp/node.hpp"
 
 #include <rclcpp/utilities.hpp>
@@ -52,8 +52,10 @@ int main(int argc, char** argv) {
     }
     // NOTE: End
 
-    auto hikcamera = std::make_unique<cap::hik::Hikcamera>();
-    hikcamera->configure({});
+    auto hikcamera = std::make_unique<cap::Hikcamera>();
+    hikcamera->configure({
+        .exposure_us = 3'000,
+    });
 
     if (auto ret = hikcamera->connect(); !ret) {
         node.error("Failed to init camera: {}", ret.error());

@@ -1,6 +1,7 @@
 #include "capturer.hpp"
 #include "module/capturer/common.hpp"
 #include "module/capturer/hikcamera.hpp"
+#include "module/capturer/local_video.hpp"
 #include "module/debug/framerate.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/singleton/running.hpp"
@@ -29,21 +30,33 @@ struct Capturer::Impl {
     auto initialize(const YAML::Node& yaml) noexcept -> Result try {
         auto source = yaml["source"].as<std::string>();
 
-        /*  */ if (source == "hikcamera") {
-            using Instance = cap::Adapter<hik::Hikcamera>;
+        auto instantitation_result = std::expected<void, std::string> {
+            std::unexpected { "Unknown capturer source or not implemented source" },
+        };
 
-            auto camera = std::make_unique<Instance>();
-            auto result = camera->configure_yaml(yaml["hikcamera"]);
+        // > 「系统实例化！」
+        // > 不觉得这个名字很帅么
+        auto system_instantiation = [&, this]<class Impl>(const std::string& source) {
+            using Instance = cap::Adapter<Impl>;
+
+            auto instance = std::make_unique<Instance>();
+            auto result   = instance->configure_yaml(yaml[source]);
             if (!result.has_value()) {
-                return std::unexpected { result.error() };
+                result = std::unexpected { result.error() };
             }
-            interface = std::move(camera);
-        } else if (source == "video") {
-            return std::unexpected { "not implemented: video" };
+            result    = {};
+            interface = std::move(instance);
+        };
+
+        /*  */ if (source == "hikcamera") {
+            system_instantiation.operator()<Hikcamera>(source);
+        } else if (source == "local_video") {
+            system_instantiation.operator()<LocalVideo>(source);
         } else if (source == "images") {
-            return std::unexpected { "not implemented: images" };
-        } else {
-            return std::unexpected { "Unknown capturer source" };
+        }
+
+        if (!instantitation_result.has_value()) {
+            return std::unexpected { instantitation_result.error() };
         }
 
         auto show_loss_framerate          = yaml["show_loss_framerate"].as<bool>();

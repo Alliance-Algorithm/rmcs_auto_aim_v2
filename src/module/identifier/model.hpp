@@ -1,5 +1,5 @@
 #pragma once
-#include "utility/image.hpp"
+#include "utility/image/image.hpp"
 #include "utility/model/armor_detection.hpp"
 #include "utility/pimpl.hpp"
 
@@ -16,7 +16,7 @@ struct OpenVinoNet final {
     RMCS_PIMPL_DEFINITION(OpenVinoNet)
 
 public:
-    using Result = std::expected<std::vector<ArmorDetection<>>, std::string>;
+    using Result = std::expected<std::vector<ArmorInferResult<>>, std::string>;
 
     using Callback = std::function<void(Result)>;
     auto async_infer(const Image&, Callback) noexcept -> void;

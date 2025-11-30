@@ -1,5 +1,5 @@
 #include "lightbar.hpp"
-#include "utility/image.details.hpp"
+#include "utility/image/image.details.hpp"
 
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgproc.hpp>

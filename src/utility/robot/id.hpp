@@ -53,6 +53,7 @@ constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
         case DeviceId::BASE:       return 11;
         // clang-format on
     }
+    return {};
 }
 constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
     switch (id) {
@@ -71,6 +72,7 @@ constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
         case DeviceId::BASE:       return "BASE";
         // clang-format on
     }
+    return {};
 }
 constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
     return (data < id::details::id_underlyings.size())
