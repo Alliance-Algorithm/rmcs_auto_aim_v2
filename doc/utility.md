@@ -15,9 +15,6 @@
 
 ## 核心工具
 
-### ASCII 艺术
-- **[acsii_art.hpp](../src/utility/acsii_art.hpp)**: 提供 ASCII 艺术横幅，用于程序启动时显示 RMCS 标识。
-
 ### 线性代数
 - **[linear.hpp](../src/utility/math/linear.hpp)**: 提供 `Translation` 和 `Orientation` 结构体，用于表示三维空间中的平移和旋转。支持从符合特定 trait 的对象进行转换，并提供 `copy_to` 方法将数据复制到目标对象。
 
@@ -91,4 +88,10 @@
 
 ### 模型 (model)
 - **[model/armor_detection.hpp](../src/utility/model/armor_detection.hpp)**: 定义 `ArmorDetection` 结构体，用于表示检测到的装甲板信息。包含角点坐标、置信度、颜色信息和角色信息。支持从原始数据直接反序列化，并提供边界框计算和角点缩放功能。**注意**：此文件包含 OpenCV 头文件（`opencv2/core/types.hpp`），如需完全隐藏 OpenCV 依赖，建议使用包装器模式。
+
+
+## 一点个性
+
+### ASCII 艺术
+- **[acsii_art.hpp](../src/utility/acsii_art.hpp)**: 提供 ASCII 艺术横幅，用于程序启动时显示 RMCS 标识。
 
