@@ -77,18 +77,18 @@ namespace point::details {
     }
 }
 
-struct Point2D {
+struct Point2d {
     double x = 0;
     double y = 0;
 
-    constexpr Point2D() noexcept = default;
-    constexpr Point2D(double x, double y) noexcept
+    constexpr Point2d() noexcept = default;
+    constexpr Point2d(double x, double y) noexcept
         : x { x }
         , y { y } { }
-    constexpr explicit Point2D(const point2d_trait auto& p) noexcept {
+    constexpr explicit Point2d(const point2d_trait auto& p) noexcept {
         point::details::clone_point2d(p, *this);
     }
-    auto operator=(const point2d_trait auto& p) noexcept -> Point2D& {
+    auto operator=(const point2d_trait auto& p) noexcept -> Point2d& {
         point::details::clone_point2d(p, *this);
         return *this;
     }
@@ -102,20 +102,20 @@ struct Point2D {
     }
 };
 
-struct Point3D {
+struct Point3d {
     double x = 0;
     double y = 0;
     double z = 0;
 
-    constexpr Point3D() noexcept = default;
-    constexpr Point3D(double x, double y, double z) noexcept
+    constexpr Point3d() noexcept = default;
+    constexpr Point3d(double x, double y, double z) noexcept
         : x { x }
         , y { y }
         , z { z } { }
-    constexpr explicit Point3D(const point3d_trait auto& p) noexcept {
+    constexpr explicit Point3d(const point3d_trait auto& p) noexcept {
         point::details::clone_point3d(p, *this);
     }
-    auto operator=(const point3d_trait auto& p) noexcept -> Point3D& {
+    auto operator=(const point3d_trait auto& p) noexcept -> Point3d& {
         point::details::clone_point3d(p, *this);
         return *this;
     }

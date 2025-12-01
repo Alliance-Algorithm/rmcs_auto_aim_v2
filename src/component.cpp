@@ -3,6 +3,7 @@
 #include "utility/shared/client.hpp"
 #include "utility/shared/context.hpp"
 
+#include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
 namespace rmcs {
@@ -26,11 +27,16 @@ public:
     }
 
     auto update() -> void override {
+
+        if (rmcs_tf.ready()) [[likely]] { }
+
         recv_state();
         send_state();
     }
 
 private:
+    InputInterface<rmcs_description::Tf> rmcs_tf;
+
     RclcppNode rclcpp;
 
     ControlClient::Send shm_send;
@@ -38,6 +44,7 @@ private:
 
     FramerateCounter framerate;
 
+private:
     auto recv_state() noexcept -> void {
         using Milli = std::chrono::duration<double, std::milli>;
 

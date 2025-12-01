@@ -43,10 +43,10 @@ auto PnpSolution::solve() noexcept -> void {
     const auto distort_coeff = cast_opencv_matrix(input.distort_coeff);
 
     const auto armor_shape = std::ranges::to<std::vector>(input.armor_shape
-        | std::views::transform([](const Point3D& point) { return point.make<cv::Point3f>(); }));
+        | std::views::transform([](const Point3d& point) { return point.make<cv::Point3f>(); }));
 
     const auto armor_detection = std::ranges::to<std::vector>(input.armor_detection
-        | std::views::transform([](const Point2D& point) { return point.make<cv::Point2f>(); }));
+        | std::views::transform([](const Point2d& point) { return point.make<cv::Point2f>(); }));
 
     auto rota_vec = cv::Vec3d {};
     auto tran_vec = cv::Vec3d {};

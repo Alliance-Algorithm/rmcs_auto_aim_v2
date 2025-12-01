@@ -46,17 +46,17 @@ struct Armor2D {
 struct Armor { };
 using Armors = std::vector<Armor>;
 
-constexpr std::array<Point3D, 4> kLargeArmorShape {
-    Point3D { 0.0, 0.115, 0.028 },   // Top-left
-    Point3D { 0.0, -0.115, 0.028 },  // Top-right
-    Point3D { 0.0, -0.115, -0.028 }, // Bottom-right
-    Point3D { 0.0, 0.115, -0.028 }   // Bottom-left
+constexpr std::array<Point3d, 4> kLargeArmorShape {
+    Point3d { 0.0, 0.115, 0.028 },   // Top-left
+    Point3d { 0.0, -0.115, 0.028 },  // Top-right
+    Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
+    Point3d { 0.0, 0.115, -0.028 }   // Bottom-left
 };
-constexpr std::array<Point3D, 4> kSmallArmorShape {
-    Point3D { 0.0, 0.0675, 0.028 },   // Top-left
-    Point3D { 0.0, -0.0675, 0.028 },  // Top-right
-    Point3D { 0.0, -0.0675, -0.028 }, // Bottom-right
-    Point3D { 0.0, 0.0675, -0.028 }   // Bottom-left
+constexpr std::array<Point3d, 4> kSmallArmorShape {
+    Point3d { 0.0, 0.0675, 0.028 },   // Top-left
+    Point3d { 0.0, -0.0675, 0.028 },  // Top-right
+    Point3d { 0.0, -0.0675, -0.028 }, // Bottom-right
+    Point3d { 0.0, 0.0675, -0.028 }   // Bottom-left
 };
 
 }

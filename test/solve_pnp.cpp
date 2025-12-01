@@ -26,48 +26,48 @@ PnpSolution::Input create_test_input(double focal_length = 800.0, double cx = 32
 }
 
 // 辅助函数：创建小装甲板的 3D 点
-std::array<Point3D, 4> create_small_armor_shape() {
+std::array<Point3d, 4> create_small_armor_shape() {
     constexpr double ARMOR_WIDTH  = 0.135; // 135mm
     constexpr double ARMOR_HEIGHT = 0.056; // 56mm
 
     const auto eigen_points = std::array {
-        Vector3d { 0.0, ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },   // 右上
-        Vector3d { 0.0, -ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },  // 右下
-        Vector3d { 0.0, -ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }, // 左下
-        Vector3d { 0.0, ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }   // 左上
+        Point3d { 0.0, ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },   // 右上
+        Point3d { 0.0, -ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },  // 右下
+        Point3d { 0.0, -ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }, // 左下
+        Point3d { 0.0, ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }   // 左上
     };
 
-    auto points = std::array<Point3D, 4>();
+    auto points = std::array<Point3d, 4>();
     for (size_t i = 0; i < 4; i++) {
-        points[i] = Point3D(eigen_points[i]);
+        points[i] = Point3d(eigen_points[i]);
     }
     return points;
 }
 
 // 辅助函数：创建大装甲板的 3D 点
-std::array<Point3D, 4> create_big_armor_shape() {
+std::array<Point3d, 4> create_big_armor_shape() {
     constexpr double BIG_ARMOR_WIDTH = 0.230; // 230mm
     constexpr double ARMOR_HEIGHT    = 0.056; // 56mm
 
     const auto eigen_points = std::array {
-        Vector3d { 0.0, BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
-        Vector3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
-        Vector3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
-        Vector3d { 0.0, BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
+        Point3d { 0.0, BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
+        Point3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
+        Point3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
+        Point3d { 0.0, BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
     };
 
-    auto points = std::array<Point3D, 4>();
+    auto points = std::array<Point3d, 4>();
     for (size_t i = 0; i < 4; i++) {
-        points[i] = Point3D(eigen_points[i]);
+        points[i] = Point3d(eigen_points[i]);
     }
     return points;
 }
 
-// 辅助函数：从 Eigen::Vector2d 创建 Point2D 数组
-std::array<Point2D, 4> create_armor_detection(const std::array<Vector2d, 4>& eigen_points) {
-    auto points = std::array<Point2D, 4>();
+// 辅助函数：从 Eigen::Vector2d 创建 Point2d 数组
+std::array<Point2d, 4> create_armor_detection(const std::array<Vector2d, 4>& eigen_points) {
+    auto points = std::array<Point2d, 4>();
     for (size_t i = 0; i < 4; i++) {
-        points[i] = Point2D(eigen_points[i]);
+        points[i] = Point2d(eigen_points[i]);
     }
     return points;
 }

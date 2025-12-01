@@ -24,11 +24,16 @@ struct ControlSystem::Impl {
 
     template <std::invocable<AutoAimState&> F>
     auto update_command(F&& f) noexcept {
+        if (shm_send.opened() == false) {
+            shm_send.open(util::shared_autoaim_state_name);
+        }
         shm_send.with_write(std::forward<F>(f));
     }
 
     auto update_state(const AutoAimState& state) noexcept {
-        // ...
+        if (shm_send.opened() == false) {
+            shm_send.open(util::shared_autoaim_state_name);
+        }
         shm_send.send(state);
     }
 
@@ -37,6 +42,9 @@ struct ControlSystem::Impl {
     auto updated() const noexcept { return shm_recv.is_updated(); }
 
     auto system_state() noexcept -> const ControlState& {
+        if (shm_recv.opened() == false) {
+            shm_recv.open(util::shared_control_state_name);
+        }
         shm_recv.recv(control_state);
         return control_state;
     }
