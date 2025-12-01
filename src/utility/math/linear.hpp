@@ -88,20 +88,20 @@ namespace linear::details {
     }
 }
 
-struct Translation {
+struct Scalar3d {
     double x = 0;
     double y = 0;
     double z = 0;
 
-    constexpr explicit Translation() noexcept = default;
-    constexpr explicit Translation(double x, double y, double z) noexcept
+    constexpr explicit Scalar3d() noexcept = default;
+    constexpr explicit Scalar3d(double x, double y, double z) noexcept
         : x { x }
         , y { y }
         , z { z } { }
-    constexpr explicit Translation(const translation_trait auto& t) noexcept {
+    constexpr explicit Scalar3d(const translation_trait auto& t) noexcept {
         linear::details::clone_translation(t, *this);
     }
-    auto operator=(const translation_trait auto& t) noexcept -> Translation& {
+    auto operator=(const translation_trait auto& t) noexcept -> Scalar3d& {
         linear::details::clone_translation(t, *this);
         return *this;
     }
@@ -114,6 +114,9 @@ struct Translation {
         return linear::details::clone_translation(*this, result);
     }
 };
+using Translation = Scalar3d;
+using Vector3d    = Scalar3d;
+using Direction3d = Scalar3d;
 
 struct Orientation {
     double x = 0;

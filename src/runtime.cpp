@@ -1,4 +1,5 @@
 #include "kernel/capturer.hpp"
+#include "kernel/control_system.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/visualization.hpp"
@@ -39,6 +40,8 @@ auto main() -> int {
     auto identifier     = kernel::Identifier {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
+
+    auto control_ststem = kernel::ControlSystem {};
 
     /// Configure
     ///
@@ -98,6 +101,11 @@ auto main() -> int {
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
+
+            using namespace rmcs::util;
+            control_ststem.update_state({
+                .timestamp = Clock::now(),
+            });
         }
 
         rclcpp_node.spin_once();

@@ -42,9 +42,11 @@ struct Capturer::Impl {
             auto instance = std::make_unique<Instance>();
             auto result   = instance->configure_yaml(yaml[source]);
             if (!result.has_value()) {
-                result = std::unexpected { result.error() };
+                instantitation_result = std::unexpected { result.error() };
+                return;
             }
-            result    = {};
+            instantitation_result = {};
+
             interface = std::move(instance);
         };
 

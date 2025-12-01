@@ -1,5 +1,6 @@
 #include "module/debug/framerate.hpp"
 #include "utility/rclcpp/node.hpp"
+#include "utility/shared/client.hpp"
 #include "utility/shared/context.hpp"
 
 #include <rmcs_executor/component.hpp>
@@ -16,27 +17,17 @@ public:
         using namespace std::chrono_literals;
         framerate.set_intetval(2s);
 
-        if (!shm_recv.open(util::shared_memory_id)) {
-            rclcpp.error("Failed to open shared memory");
+        if (!shm_recv.open(util::shared_autoaim_state_name)) {
+            rclcpp.error("Failed to open shared autoaim state");
+        }
+        if (!shm_send.open(util::shared_control_state_name)) {
+            rclcpp.error("Failed to open shared control state");
         }
     }
 
     auto update() -> void override {
-        if (shm_recv.opened() == false) {
-            shm_recv.open(util::shared_memory_id);
-        } else if (shm_recv.is_updated() && framerate.tick()) {
-
-            auto context = AutoAimState {};
-            shm_recv.recv(context);
-
-            auto timestamp = context.timestamp;
-            auto now       = util::Clock::now();
-
-            using Milli   = std::chrono::duration<double, std::milli>;
-            auto interval = Milli { now - timestamp };
-
-            rclcpp.info("Client recv, delay: {:.3}, hz: {}", interval.count(), framerate.fps());
-        }
+        recv_state();
+        send_state();
     }
 
 private:
@@ -46,6 +37,43 @@ private:
     ControlClient::Recv shm_recv;
 
     FramerateCounter framerate;
+
+    auto recv_state() noexcept -> void {
+        using Milli = std::chrono::duration<double, std::milli>;
+
+        if (shm_recv.opened() == false) {
+            shm_recv.open(util::shared_autoaim_state_name);
+            return;
+        }
+
+        if (shm_recv.is_updated()) {
+            auto timestamp = Stamp {};
+            shm_recv.with_read([&](const auto& state) { timestamp = state.timestamp; });
+
+            if (shm_recv.is_updated()) {
+                rclcpp.error("Updated but not clear flag");
+                rclcpp.shutdown();
+            }
+
+            if (framerate.tick()) {
+                auto now      = Clock::now();
+                auto interval = Milli { now - timestamp };
+                rclcpp.info(
+                    "Client recv, delay: {:.3}ms, hz: {}", interval.count(), framerate.fps());
+            }
+        }
+    }
+    auto send_state() noexcept -> void {
+        if (shm_send.opened() == false) {
+            shm_send.open(util::shared_control_state_name);
+            return;
+        }
+
+        shm_send.with_write([](ControlState& state) {
+            state.timestamp = Clock::now();
+            // ...
+        });
+    }
 };
 
 } // namespace rmcs

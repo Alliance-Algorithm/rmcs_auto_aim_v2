@@ -6,21 +6,19 @@
 
 namespace rmcs::shm {
 
-namespace details {
-    template <typename T>
-    struct alignas(64) Context final {
+template <typename T>
+struct alignas(64) SharedContext final {
 
-        alignas(64) std::atomic<std::uint64_t> version;
-        alignas(64) T data;
-        std::byte padding[64 - sizeof(T) % 64];
+    alignas(64) std::atomic<std::uint64_t> version;
+    alignas(64) T data;
+    std::byte padding[64 - sizeof(T) % 64];
 
-        static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
-    };
-}
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+};
 
 template <typename T>
 struct Client {
-    using Context = details::Context<T>;
+    using Context = SharedContext<T>;
 
     static constexpr auto context_len = sizeof(Context);
     static constexpr auto data_len    = sizeof(T);

@@ -1,4 +1,4 @@
-use_visualization: true
+use_visualization: false
 use_painted_image: false
 
 capturer:
@@ -55,7 +55,7 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 visualization:
-  framerate: 100
+  framerate: 60
   monitor_host: "127.0.0.1"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

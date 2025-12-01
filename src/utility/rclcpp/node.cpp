@@ -35,6 +35,8 @@ auto RclcppNode::get_pub_topic_prefix() const noexcept -> std::string {
     return pimpl->pub_topic_prefix;
 }
 
+auto RclcppNode::shutdown() noexcept -> void { rclcpp::shutdown(); }
+
 auto RclcppNode::impl_info_(const std::string& msg) const noexcept -> void {
     RCLCPP_INFO(details->rclcpp->get_logger(), "%s", msg.c_str());
 }

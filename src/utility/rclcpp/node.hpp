@@ -30,6 +30,8 @@ public:
         impl_error(std::format(fmt, std::forward<Args>(args)...));
     }
 
+    static auto shutdown() noexcept -> void;
+
 public:
     struct Details;
     std::unique_ptr<Details> details;
