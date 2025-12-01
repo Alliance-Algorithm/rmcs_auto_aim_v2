@@ -1,16 +1,32 @@
 #pragma once
+#include "utility/shared/interprocess.hpp"
 #include <chrono>
 
-namespace rmcs::shared {
+namespace rmcs::util {
 
-constexpr auto id { "/rmcs_auto_aim" };
+constexpr auto shared_memory_id { "/rmcs_auto_aim" };
 
 using Clock = std::chrono::steady_clock;
 using Stamp = Clock::time_point;
 
-struct Context {
+struct AutoAimState {
     Stamp timestamp;
-    std::byte bytes[128];
 };
-static_assert(std::is_trivially_copyable_v<Context>, " ");
+static_assert(std::is_trivially_copyable_v<AutoAimState>);
+
+struct ControlState {
+    Stamp timestamp;
+};
+static_assert(std::is_trivially_copyable_v<ControlState>);
+
+struct AutoAimClient {
+    using Send = shm::Client<AutoAimState>::Send;
+    using Recv = shm::Client<ControlState>::Recv;
+};
+
+struct ControlClient {
+    using Send = shm::Client<ControlState>::Send;
+    using Recv = shm::Client<AutoAimState>::Recv;
+};
+
 }

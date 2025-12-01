@@ -1,12 +1,12 @@
 #include "module/debug/framerate.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
-#include "utility/shared/interprocess.hpp"
 
 #include <rmcs_executor/component.hpp>
 
 namespace rmcs {
-using Client = shm::Client<shared::Context>::Recv;
+
+using namespace rmcs::util;
 
 class AutoAimComponent final : public rmcs_executor::Component {
 public:
@@ -16,21 +16,21 @@ public:
         using namespace std::chrono_literals;
         framerate.set_intetval(2s);
 
-        if (!client.open(shared::id)) {
+        if (!shm_recv.open(util::shared_memory_id)) {
             rclcpp.error("Failed to open shared memory");
         }
     }
 
     auto update() -> void override {
-        if (client.opened() == false) {
-            client.open(shared::id);
-        } else if (client.is_updated() && framerate.tick()) {
+        if (shm_recv.opened() == false) {
+            shm_recv.open(util::shared_memory_id);
+        } else if (shm_recv.is_updated() && framerate.tick()) {
 
-            auto context = shared::Context {};
-            client.recv(context);
+            auto context = AutoAimState {};
+            shm_recv.recv(context);
 
             auto timestamp = context.timestamp;
-            auto now       = shared::Clock::now();
+            auto now       = util::Clock::now();
 
             using Milli   = std::chrono::duration<double, std::milli>;
             auto interval = Milli { now - timestamp };
@@ -40,8 +40,11 @@ public:
     }
 
 private:
-    util::RclcppNode rclcpp;
-    Client client;
+    RclcppNode rclcpp;
+
+    ControlClient::Send shm_send;
+    ControlClient::Recv shm_recv;
+
     FramerateCounter framerate;
 };
 
