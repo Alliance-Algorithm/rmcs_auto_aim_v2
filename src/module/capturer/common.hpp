@@ -18,6 +18,7 @@ struct Interface {
     virtual auto connect() noexcept -> NormalResult {
         return std::unexpected { "Unimplement interface: 'connect'" };
     }
+    virtual auto disconnect() noexcept -> void { }
     virtual auto connected() const noexcept -> bool { return false; }
 
     virtual ~Interface() noexcept = default;
@@ -44,6 +45,8 @@ public:
     auto wait_image() noexcept -> ImageResult override { return Impl::wait_image(); }
 
     auto connect() noexcept -> NormalResult override { return Impl::connect(); }
+
+    auto disconnect() noexcept -> void override { Impl::disconnect(); }
 
     auto connected() const noexcept -> bool override { return Impl::connected(); }
 };

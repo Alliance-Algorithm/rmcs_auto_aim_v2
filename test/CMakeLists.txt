@@ -103,6 +103,10 @@ ament_add_gtest(
     ${TEST_DIR}/static_tf.cpp
     ${RMCS_SRC_DIR}/utility/panic.cpp
 )
+target_link_libraries(
+    test_static_tf
+    yaml-cpp::yaml-cpp
+)
 
 # Visualization
 add_executable(

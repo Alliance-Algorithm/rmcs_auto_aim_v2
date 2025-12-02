@@ -3,7 +3,7 @@
 #include "utility/logging/printer.hpp"
 #include "utility/math/solve_pnp.hpp"
 #include "utility/serializable.hpp"
-#include "utility/yaml/eigen.hpp"
+#include "utility/yaml/tf.hpp"
 
 using namespace rmcs::util;
 using namespace rmcs;
@@ -35,34 +35,16 @@ struct PoseEstimator::Impl {
             return std::unexpected { result.error() };
         }
 
-        auto read_gimbal = bool { false };
-        auto read_camera = bool { false };
-        for (const auto& link : yaml["transforms"]) {
-            auto t = read_eigen_translation<double>(link["t"]);
-            auto q = read_eigen_orientation<double>(link["q"]);
-
-            auto iso = Eigen::Isometry3d { Eigen::Translation3d { t } * q };
-
-            auto parent = link["parent"].as<std::string>();
-            auto child  = link["child"].as<std::string>();
-            /*  */ if (parent == "imu_link" && child == "gimbal_link") {
-                tf::AutoAim::set_state<"gimbal_link">(iso);
-                read_gimbal = true;
-            } else if (parent == "gimbal_link" && child == "camera_link") {
-                tf::AutoAim::set_state<"camera_link">(iso);
-                read_camera = true;
-            } else {
-                return std::unexpected { "Unknown transform was read in the yaml" };
+        {
+            auto result = serialize_from<tf::AutoAim>(yaml["transforms"]);
+            if (!result.has_value()
+                && result.error() != SerializeTfError::UNMATCHED_LINKS_IN_TREE) {
+                return std::unexpected { std::string { "Failed to parse transforms | " }
+                    + util::to_string(result.error()) };
             }
         }
-        if (!read_gimbal) {
-            return std::unexpected { "Lack of tf from 'imu_link' to 'gimbal_link'" };
-        }
-        if (!read_camera) {
-            return std::unexpected { "Lack of tf from 'gimbal_link' to 'camera_link'" };
-        }
-        return {};
 
+        return {};
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }

@@ -11,7 +11,7 @@ constexpr auto standard_transform_tree = Joint {
     Link<"world_link">(),
 
     Joint {
-        Link<"odom_link", Eigen::Isometry3d>(),
+        Link<"odom_link">(),
 
         Joint {
             Link<"imu_link", Eigen::Quaterniond>(),

@@ -1,8 +1,10 @@
 #include "utility/tf/static_tf.hpp"
 #include "utility/logging/eigen.hpp" // IWYU pragma: keep
+#include "utility/yaml/tf.hpp"
 #include <eigen3/Eigen/Geometry>
 #include <gtest/gtest.h>
 #include <print>
+#include <yaml-cpp/yaml.h>
 
 using namespace rmcs::util;
 
@@ -131,4 +133,67 @@ TEST(static_tf, look_up) {
     std::println("result: {:.2}", result);
     std::println("expect: {:.2}", expect);
     EXPECT_TRUE(result.isApprox(expect));
+}
+
+TEST(static_tf, serialize_from_yaml) {
+
+    SentryTf::set_state<"0.0">(Eigen::Isometry3d::Identity());
+    SentryTf::set_state<"0.0.0">(Eigen::Isometry3d::Identity());
+    SentryTf::set_state<"0.0.0.0">(Eigen::Isometry3d::Identity());
+    SentryTf::set_state<"0.1">(Eigen::Isometry3d::Identity());
+    SentryTf::set_state<"0.1.1">(Eigen::Isometry3d::Identity());
+
+    constexpr auto yaml_str = R"(
+        - parent: "0"
+          child: "0.0"
+          t: [1.0, 0.0, 0.0]
+          q: [1.0, 0.0, 0.0, 0.0]
+
+        - parent: "0.0"
+          child: "0.0.0"
+          t: [0.0, 0.0, 2.5]
+          q: [0.707, 0.707, 0.0, 0.0]
+
+        - parent: "0.0.0"
+          child: "0.0.0.0"
+          t: [0.0, 0.0, 1.0]
+          q: [1.0, 0.0, 0.0, 0.0]
+
+        - parent: "0"
+          child: "0.1"
+          t: [1.0, 15.0, -10.0]
+          q: [1.0, 0.0, 0.0, 0.0]
+
+        - parent: "0.1"
+          child: "0.1.1"
+          q: [0.0, 0.0, 0.0, 1.0]
+    )";
+
+    auto yaml = YAML::Load(yaml_str);
+
+    // 执行序列化
+    auto result = serialize_from<SentryTf>(yaml);
+    EXPECT_TRUE(result.has_value());
+
+    // 验证序列化结果
+    auto tf_0_0 = SentryTf::get_state<"0.0", Eigen::Isometry3d>();
+    EXPECT_NEAR(tf_0_0.translation().x(), 1.0, 1e-6);
+    EXPECT_NEAR(tf_0_0.translation().y(), 0.0, 1e-6);
+    EXPECT_NEAR(tf_0_0.translation().z(), 0.0, 1e-6);
+
+    auto tf_0_0_0 = SentryTf::get_state<"0.0.0", Eigen::Isometry3d>();
+    EXPECT_NEAR(tf_0_0_0.translation().z(), 2.5, 1e-6);
+    auto q_0_0_0 = Eigen::Quaterniond { tf_0_0_0.linear() };
+    EXPECT_NEAR(q_0_0_0.w(), 0.707, 1e-3);
+    EXPECT_NEAR(q_0_0_0.x(), 0.707, 1e-3);
+
+    auto tf_0_1 = SentryTf::get_state<"0.1", Eigen::Isometry3d>();
+    EXPECT_NEAR(tf_0_1.translation().x(), 1.0, 1e-6);
+    EXPECT_NEAR(tf_0_1.translation().y(), 15.0, 1e-6);
+    EXPECT_NEAR(tf_0_1.translation().z(), -10.0, 1e-6);
+
+    auto tf_0_1_1 = SentryTf::get_state<"0.1.1", Eigen::Isometry3d>();
+    auto q_0_1_1  = Eigen::Quaterniond { tf_0_1_1.linear() };
+    EXPECT_NEAR(q_0_1_1.w(), 0.0, 1e-6);
+    EXPECT_NEAR(q_0_1_1.z(), 1.0, 1e-6);
 }

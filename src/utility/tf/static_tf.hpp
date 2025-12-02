@@ -48,7 +48,7 @@ struct Joint {
     template <typename F>
     static constexpr auto foreach_df(F&& f) noexcept -> void {
         f.template operator()<Joint>();
-        const auto recursion = [&]<class T>() { //
+        [[maybe_unused]] const auto recursion = [&]<class T>() { //
             T::foreach_df(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);
@@ -61,7 +61,7 @@ struct Joint {
             "\n错误的函数类型，它应该形如："
             "\n  []<class Joint>(std::string_view father){ ... }\n");
         f.template operator()<Joint>(std::string_view {});
-        auto recursion = [&]<class T>() {
+        [[maybe_unused]] const auto recursion = [&]<class T>() {
             T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);
@@ -77,7 +77,7 @@ struct Joint {
             callback.template operator()<Joint>();
             return true;
         } else {
-            const auto recursion_find = [&]<class T>() {
+            [[maybe_unused]] const auto recursion_find = [&]<class T>() {
                 return T::template find<query_name>(callback);
             };
             return (false || ... || recursion_find.template operator()<Ts_>());
@@ -271,7 +271,7 @@ public:
     template <StaticString parent_name, typename F>
     static constexpr auto foreach_df_with_parent_impl(F&& f) noexcept -> void {
         f.template operator()<Joint>(parent_name.view());
-        auto recursion = [&]<class T>() {
+        [[maybe_unused]] const auto recursion = [&]<class T>() {
             T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);

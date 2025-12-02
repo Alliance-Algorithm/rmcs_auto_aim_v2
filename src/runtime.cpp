@@ -15,18 +15,19 @@
 #include <csignal>
 #include <yaml-cpp/yaml.h>
 
-auto main() -> int {
+using namespace rmcs;
+
+auto main() -> int try {
     using namespace std::chrono_literals;
-    using namespace rmcs;
 
     std::signal(SIGINT, [](int) { util::set_running(false); });
 
-    auto rclcpp_node = util::RclcppNode { "AutoAim_" };
+    auto rclcpp_node = util::RclcppNode { "AutoAim" };
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
-            rclcpp_node.error("Failed to init <{}>", runtime_name);
-            rclcpp_node.error("  e: {}", result.error());
+            rclcpp_node.error("Failed to init '{}'", runtime_name);
+            rclcpp_node.error("  {}", result.error());
             util::panic(std::format("Failed to initialize {}", runtime_name));
         }
     };
@@ -59,7 +60,7 @@ auto main() -> int {
     {
         auto config = configuration["identifier"];
 
-        auto path = std::filesystem::path { util::Parameters::share_location() }
+        const auto path = std::filesystem::path { util::Parameters::share_location() }
             / std::filesystem::path { config["model_location"].as<std::string>() };
         config["model_location"] = path.string();
 
@@ -111,5 +112,8 @@ auto main() -> int {
         rclcpp_node.spin_once();
     }
 
-    return 0;
+    rclcpp_node.shutdown();
+} catch (const std::exception& e) {
+    using namespace rmcs;
+    util::panic(std::format("exception uncatched | {}", e.what()));
 }

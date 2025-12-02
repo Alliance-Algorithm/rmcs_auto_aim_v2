@@ -93,7 +93,6 @@ struct Capturer::Impl {
         return std::unique_ptr<Image> { raw };
     }
 
-    // TODO: 或许图像池更适合这个场景，毕竟同时处于处理中的图像最多就那么几个
     auto runtime_task(const std::stop_token& token) noexcept -> void {
         log.info("[Capturer runtime thread] starts");
 
@@ -127,6 +126,8 @@ struct Capturer::Impl {
 
         auto failed_callback = [&](const std::string& msg) {
             if (capture_failed_limit.tick() == false) {
+                interface->disconnect();
+
                 log.error("Failed to capture image {} times", capture_failed_limit.count);
                 log.error("- Newest error: {}", msg);
                 log.error("- Reconnect capturer now...");

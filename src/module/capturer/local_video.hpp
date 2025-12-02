@@ -25,6 +25,8 @@ public:
 
     auto connect() noexcept -> std::expected<void, std::string>;
 
+    auto disconnect() noexcept { }
+
     auto connected() const noexcept -> bool;
 
     auto wait_image() -> std::expected<std::unique_ptr<Image>, std::string>;

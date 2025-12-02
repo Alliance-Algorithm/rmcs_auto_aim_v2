@@ -1,4 +1,4 @@
-use_visualization: false
+use_visualization: true
 use_painted_image: false
 
 capturer:
@@ -46,16 +46,20 @@ pose_estimator:
 
   transforms:
     - parent: "imu_link"
-      child: "gimbal_link"
+      child: "pitch_link"
       t: [0., 0., 0.]
       q: [1., 0., 0., 0.]
-    - parent: "gimbal_link"
+    - parent: "pitch_link"
+      child: "muzzle_link"
+      t: [0., 0., 0.]
+      q: [1., 0., 0., 0.]
+    - parent: "pitch_link"
       child: "camera_link"
       t: [0., 0., 0.]
       q: [1., 0., 0., 0.]
 
 visualization:
   framerate: 60
-  monitor_host: "127.0.0.1"
+  monitor_host: "192.168.2.154"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
