@@ -9,19 +9,44 @@ using namespace rmcs::util;
 
 constexpr auto standard_transform_tree = Joint {
     Link<"world_link">(),
+
     Joint {
         Link<"odom_link", Eigen::Isometry3d>(),
+
         Joint {
             Link<"imu_link", Eigen::Quaterniond>(),
+
             Joint {
-                Link<"gimbal_link", Eigen::Isometry3d>(),
+                Link<"pitch_link", Eigen::Quaterniond>(),
+
+                Joint {
+                    Link<"muzzle_link", Eigen::Isometry3d>(),
+                },
                 Joint {
                     Link<"camera_link", Eigen::Isometry3d>(),
+                },
+                Joint {
+                    Link<"yaw_link", Eigen::Quaterniond>(),
+
                     Joint {
-                        Link<"target_armor_link", Eigen::Isometry3d>(),
-                    },
-                    Joint {
-                        Link<"target_buff_link", Eigen::Isometry3d>(),
+                        Link<"gimbal_center_link", Eigen::Isometry3d>(),
+
+                        Joint {
+                            Link<"base_link", Eigen::Isometry3d>(),
+
+                            Joint {
+                                Link<"left_front_wheel_link", Eigen::Vector3d>(),
+                            },
+                            Joint {
+                                Link<"right_front_wheel_link", Eigen::Vector3d>(),
+                            },
+                            Joint {
+                                Link<"left_back_wheel_link", Eigen::Vector3d>(),
+                            },
+                            Joint {
+                                Link<"right_back_wheel_link", Eigen::Vector3d>(),
+                            },
+                        },
                     },
                 },
             },

@@ -48,8 +48,21 @@ struct Joint {
     template <typename F>
     static constexpr auto foreach_df(F&& f) noexcept -> void {
         f.template operator()<Joint>();
-        auto recursion = [&]<class T>() { //
+        const auto recursion = [&]<class T>() { //
             T::foreach_df(std::forward<F>(f));
+        };
+        (recursion.template operator()<Ts_>(), ...);
+    }
+
+    template <typename F>
+    static constexpr auto foreach_df_with_parent(F&& f) noexcept -> void {
+        static_assert(
+            requires { f.template operator()<Joint>(std::string_view {}); },
+            "\n错误的函数类型，它应该形如："
+            "\n  []<class Joint>(std::string_view father){ ... }\n");
+        f.template operator()<Joint>(std::string_view {});
+        auto recursion = [&]<class T>() {
+            T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);
     }
@@ -57,6 +70,10 @@ struct Joint {
     template <StaticString query_name>
     static constexpr auto find(auto&& callback) noexcept -> bool {
         if constexpr (query_name == name) {
+            static_assert(
+                requires { callback.template operator()<Joint>(); },
+                "\n错误的函数类型，它应该形如："
+                "\n  []<class Joint>(){ ... }\n");
             callback.template operator()<Joint>();
             return true;
         } else {
@@ -75,12 +92,12 @@ struct Joint {
 
     template <StaticString child>
     static constexpr auto child_distance() noexcept -> std::size_t {
-        static_assert(Joint::contains<child>(), "Child was not found");
+        static_assert(Joint::contains<child>(), "子节点未找到");
         return impl_traversal_child<child>();
     }
     template <StaticString a, StaticString b>
     static constexpr auto distance() noexcept {
-        static_assert(a != b, "They are the same node");
+        static_assert(a != b, "它们是同一个节点");
 
         constexpr auto to_a = child_path<a>(true);
         constexpr auto to_b = child_path<b>(true);
@@ -93,8 +110,8 @@ struct Joint {
 
     template <StaticString parent, StaticString child>
     static constexpr auto child_distance() noexcept -> std::size_t {
-        static_assert(Joint::contains<parent>(), "Parent was not found");
-        static_assert(Joint::contains<child>(), "Child was not found");
+        static_assert(Joint::contains<parent>(), "父节点未找到");
+        static_assert(Joint::contains<child>(), "子节点未找到");
 
         auto result = std::size_t { 0 };
         Joint::find<parent>([&]<class T>() {
@@ -105,7 +122,7 @@ struct Joint {
 
     template <StaticString child, std::size_t N = child_distance<child>()>
     static constexpr auto child_path(bool traversal_down = false) noexcept {
-        static_assert(Joint::contains<child>(), "Child was not found");
+        static_assert(Joint::contains<child>(), "子节点未找到");
 
         auto result = std::array<std::string_view, N> {};
         if (N == 0) return result;
@@ -123,9 +140,9 @@ struct Joint {
 
     template <StaticString parent, StaticString child>
     static constexpr auto child_path(bool traversal_down = false) noexcept {
-        static_assert(parent != child, "They are the same node, bro");
-        static_assert(Joint::contains<parent>(), "Parent was not found");
-        static_assert(Joint::contains<child>(), "Child was not found");
+        static_assert(parent != child, "它们是同一个节点");
+        static_assert(Joint::contains<parent>(), "父节点未找到");
+        static_assert(Joint::contains<child>(), "子节点未找到");
 
         constexpr auto n { child_distance<parent, child>() };
         auto result = std::array<std::string_view, n> {};
@@ -139,7 +156,7 @@ struct Joint {
 
     template <StaticString a, StaticString b>
     static constexpr auto find_lca() noexcept {
-        static_assert(a != b, "They are the same node");
+        static_assert(a != b, "它们是同一个节点");
 
         constexpr auto to_a = child_path<a>(true);
         constexpr auto to_b = child_path<b>(true);
@@ -150,7 +167,7 @@ struct Joint {
 
     template <StaticString a, StaticString b>
     static constexpr auto distance_to_lca() noexcept {
-        static_assert(a != b, "They are the same node");
+        static_assert(a != b, "它们是同一个节点");
 
         constexpr auto to_a = child_path<a>(true);
         constexpr auto to_b = child_path<b>(true);
@@ -183,54 +200,54 @@ struct Joint {
         return result;
     }
 
-    template <StaticString name>
-    constexpr static auto get_state(auto&& callback) noexcept {
-        static_assert(Joint::contains<name>(), "Name was not found");
-        std::ignore = find<name>([&]<class T> {
-            using State = T::State;
-            callback(tf::details::JointTransfroms<Joint, name, State>::state);
-        });
-    }
-    template <StaticString name>
-    constexpr static auto get_state(auto& dst) noexcept {
-        get_state<name>([&](const auto& state) { dst = state; });
-    }
-    template <StaticString name, typename T>
-    constexpr static auto get_state() noexcept {
-        auto result = T {};
-        get_state<name>([&](const auto& state) { result = T { state }; });
-        return result;
-    }
-    template <StaticString name>
-    constexpr static auto set_state(const auto& _state) noexcept {
-        get_state<name>([&](auto& state) { state = _state; });
-    }
-
     template <StaticString name, typename T>
     using Transforms = tf::details::JointTransfroms<Joint, name, T>;
 
-    /// @param: callback
-    /// - name: std::string_view
-    /// - state: SE3
-    /// - is_begin: bool
-    template <StaticString begin, StaticString final, class SE3>
-    constexpr static auto look_up(auto&& callback) noexcept
-        requires requires { callback(std::string_view {}, SE3 {}, bool {}); }
-    {
-        auto [begin_len, final_len] = distance_to_lca<begin, final>();
-        // calculate tf from begin to lca
-        impl_traversal_child<begin>([&]<class T>() {
-            using State = typename T::State;
-            if (begin_len-- > 0) {
-                callback(T::name, Transforms<T::static_name, State>::state, true);
-            }
+    /// Index using type
+    template <class T = Joint>
+    constexpr static auto get_type_state(auto&& callback) noexcept {
+        static_assert(
+            requires { callback(Transforms<T::static_name, typename T::State>::state); },
+            "错误的回调类型，它应该类似这样: callback(state&) 或者 callback(const state&)");
+        callback(Transforms<T::static_name, typename T::State>::state);
+    }
+    template <class T = Joint, typename return_type>
+    constexpr static auto get_type_state() noexcept {
+        auto result = return_type {};
+        get_type_state<T>([&]<typename S>(const S& state) {
+            static_assert(
+                std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
+            result = return_type { state };
         });
-        // calculate tf from final to lca>
-        impl_traversal_child<final>([&]<class T>() {
-            using State = typename T::State;
-            if (final_len-- > 0) {
-                callback(T::name, Transforms<T::static_name, State>::state, false);
-            }
+        return result;
+    }
+    template <class T = Joint>
+    constexpr static auto set_type_state(const auto& _state) noexcept {
+        get_type_state<T>([&](auto& state) { state = _state; });
+    }
+
+    /// Index using name
+    template <StaticString name>
+    constexpr static auto get_state(auto&& callback) noexcept {
+        static_assert(Joint::contains<name>(), "变换的名称不存在");
+        std::ignore = find<name>([&]<class T> { get_type_state<T>(callback); });
+    }
+    template <StaticString name, typename return_type>
+    constexpr static auto get_state() noexcept {
+        auto result = return_type {};
+        get_state<name>([&]<typename S>(const S& state) {
+            static_assert(
+                std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
+            result = return_type { state };
+        });
+        return result;
+    }
+    template <StaticString name>
+    constexpr static auto set_state(const auto& state) noexcept {
+        get_state<name>([&](auto& state_) {
+            static_assert(
+                requires { state_ = state; }, "State 无法被输入值赋值，请检查类型是否正确");
+            state_ = state;
         });
     }
 
@@ -239,7 +256,7 @@ struct Joint {
     constexpr static auto look_up() noexcept {
         auto lca_to_begin = SE3::Identity();
         auto lca_to_final = SE3::Identity();
-        Joint::look_up<begin, final, SE3>([&]([[maybe_unused]] auto, auto se3, bool is_begin) {
+        Joint::impl_look_up<begin, final, SE3>([&]([[maybe_unused]] auto, auto se3, bool is_begin) {
             if (is_begin == true) {
                 lca_to_begin = lca_to_begin * se3;
             }
@@ -251,6 +268,15 @@ struct Joint {
     }
 
 public:
+    template <StaticString parent_name, typename F>
+    static constexpr auto foreach_df_with_parent_impl(F&& f) noexcept -> void {
+        f.template operator()<Joint>(parent_name.view());
+        auto recursion = [&]<class T>() {
+            T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
+        };
+        (recursion.template operator()<Ts_>(), ...);
+    }
+
     template <StaticString child>
     static constexpr auto impl_traversal_child(auto&& on_recursion) noexcept -> std::size_t {
         auto result    = std::size_t { 0 };
@@ -270,6 +296,27 @@ public:
     template <StaticString child>
     static constexpr auto impl_traversal_child() noexcept {
         return impl_traversal_child<child>([]<typename T>() { });
+    }
+
+    template <StaticString begin, StaticString final, class SE3>
+    constexpr static auto impl_look_up(auto&& callback) noexcept
+        requires requires { callback(std::string_view {}, SE3 {}, bool {}); }
+    {
+        auto [begin_len, final_len] = distance_to_lca<begin, final>();
+        // calculate tf from begin to lca
+        impl_traversal_child<begin>([&]<class T>() {
+            using State = typename T::State;
+            if (begin_len-- > 0) {
+                callback(T::name, Transforms<T::static_name, State>::state, true);
+            }
+        });
+        // calculate tf from final to lca>
+        impl_traversal_child<final>([&]<class T>() {
+            using State = typename T::State;
+            if (final_len-- > 0) {
+                callback(T::name, Transforms<T::static_name, State>::state, false);
+            }
+        });
     }
 };
 

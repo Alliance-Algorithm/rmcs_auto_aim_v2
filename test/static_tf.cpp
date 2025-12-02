@@ -31,10 +31,8 @@ constexpr auto static_tf = Joint {
 using SentryTf = decltype(static_tf);
 
 TEST(static_tf, construct) {
-    SentryTf::foreach_df([]<typename T>() {
-        // Use static function
-        std::println("name: {}", T::name);
-    });
+    SentryTf::foreach_df_with_parent(
+        []<class T>(auto parent) { std::println("{} -> {}", parent, T::name); });
 
     static_assert(SentryTf::name == "0");
     static_assert(SentryTf::child_amount > 0);
@@ -78,7 +76,7 @@ TEST(static_tf, look_up_begin) {
         SentryTf::set_state<"0.1.1">(transfrom);
         expect_begin = transfrom * expect_begin;
     }
-    SentryTf::look_up<"0.1.1", "0", Eigen::Isometry3d>(
+    SentryTf::impl_look_up<"0.1.1", "0", Eigen::Isometry3d>(
         [&](auto name, const Eigen::Isometry3d& se3, auto is_begin) {
             std::println("[{} | {:10}]", is_begin ? "begin" : "final", name);
             std::println("  t: {:.2}", Eigen::Vector3d { se3.translation() });
@@ -111,7 +109,7 @@ TEST(static_tf, loop_up_final) {
         SentryTf::set_state<"0.0.0.0">(transfrom);
         expect_final = transfrom * expect_final;
     }
-    SentryTf::look_up<"0", "0.0.0.0", Eigen::Isometry3d>(
+    SentryTf::impl_look_up<"0", "0.0.0.0", Eigen::Isometry3d>(
         [&](auto name, const Eigen::Isometry3d& se3, auto is_begin) {
             std::println("[{} | {:10}]", is_begin ? "begin" : "final", name);
             std::println("  t: {:.2}", Eigen::Vector3d { se3.translation() });
