@@ -21,6 +21,28 @@ public:
     }
 
     auto update() -> void override {
+        using namespace rmcs_description;
+        if (rmcs_tf.ready()) [[likely]] {
+            auto camera_odom =
+                fast_tf::lookup_transform<rmcs_description::CameraLink, rmcs_description::OdomImu>(
+                    *rmcs_tf);
+            auto odom_to_muzzle =
+                fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
+                    *rmcs_tf);
+
+            control_state.timestamp = Clock::now();
+
+            control_state.camera_to_odom_transform.posture = camera_odom.translation();
+            control_state.camera_to_odom_transform.orientation =
+                Eigen::Quaterniond(camera_odom.rotation());
+
+            control_state.odom_to_muzzle_transform.posture = odom_to_muzzle.translation();
+            control_state.odom_to_muzzle_transform.orientation =
+                Eigen::Quaterniond(odom_to_muzzle.rotation());
+
+            //...
+        }
+
         recv_state();
         send_state();
     }
@@ -32,6 +54,8 @@ private:
 
     ControlClient::Send shm_send;
     ControlClient::Recv shm_recv;
+
+    ControlState control_state;
 
     FramerateCounter framerate;
 
@@ -67,8 +91,9 @@ private:
             return;
         }
 
-        shm_send.with_write([](ControlState& state) {
-            state.timestamp = Clock::now();
+        shm_send.with_write([&](ControlState& state) {
+            state = control_state;
+
             // ...
         });
     }

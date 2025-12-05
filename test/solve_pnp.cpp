@@ -119,8 +119,8 @@ TEST_F(PnpSolverTest, BasicSmallArmor) {
     EXPECT_NO_THROW(solution.solve());
 
     // 验证结果
-    EXPECT_GT(solution.result.translation.z, 0.0) //
-        << "Translation z should be positive (in front of camera)";
+    EXPECT_GT(solution.result.translation.x, 0.0) //
+        << "Translation x should be positive (in front of camera)";
 
     EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
         << "Quaternion should be normalized";
@@ -152,8 +152,8 @@ TEST_F(PnpSolverTest, BigArmor) {
     EXPECT_NO_THROW(solution.solve());
 
     // 验证结果
-    EXPECT_GT(solution.result.translation.z, 0.0) //
-        << "Translation z should be positive (in front of camera)";
+    EXPECT_GT(solution.result.translation.x, 0.0) //
+        << "Translation x should be positive (in front of camera)";
 
     EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
         << "Quaternion should be normalized";
@@ -188,7 +188,7 @@ TEST_F(PnpSolverTest, DifferentDistances) {
         EXPECT_NO_THROW(solution.solve());
 
         // 验证结果
-        const auto distance_error = std::abs(solution.result.translation.z - expected_distance);
+        const auto distance_error = std::abs(solution.result.translation.x - expected_distance);
 
         EXPECT_LT(distance_error, expected_distance * 0.5) //
             << "Distance error too large for expected distance " << expected_distance;
@@ -218,8 +218,8 @@ TEST_F(PnpSolverTest, EdgeCaseSmallDetection) {
     EXPECT_NO_THROW(solution.solve());
 
     // 验证结果
-    EXPECT_GT(solution.result.translation.z, 0.0) //
-        << "Translation z should be positive (in front of camera)";
+    EXPECT_GT(solution.result.translation.x, 0.0) //
+        << "Translation x should be positive (in front of camera)";
 
     EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
         << "Quaternion should be normalized";
@@ -245,8 +245,8 @@ TEST_F(PnpSolverTest, WithDistortion) {
     EXPECT_NO_THROW(solution.solve());
 
     // 验证结果
-    EXPECT_GT(solution.result.translation.z, 0.0) //
-        << "Translation z should be positive (in front of camera)";
+    EXPECT_GT(solution.result.translation.x, 0.0) //
+        << "Translation x should be positive (in front of camera)";
 
     EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
         << "Quaternion should be normalized";

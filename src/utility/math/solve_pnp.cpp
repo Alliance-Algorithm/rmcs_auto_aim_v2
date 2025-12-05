@@ -1,4 +1,5 @@
 #include "solve_pnp.hpp"
+#include "utility/math/conversion.hpp"
 #include <eigen3/Eigen/Dense>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/mat.hpp>
@@ -53,26 +54,29 @@ auto PnpSolution::solve() noexcept -> void {
     cv::solvePnP(armor_shape, armor_detection, camera_matrix, distort_coeff, rota_vec, tran_vec,
         false, cv::SOLVEPNP_IPPE);
 
-    {
-        result.translation.x = tran_vec[0];
-        result.translation.y = tran_vec[1];
-        result.translation.z = tran_vec[2];
-    }
-    {
-        auto rotation_opencv = cv::Mat {};
-        cv::Rodrigues(rota_vec, rotation_opencv);
+    auto tran_vec_eigen_opencv = Eigen::Vector3d {};
+    tran_vec_eigen_opencv.x()  = tran_vec[0];
+    tran_vec_eigen_opencv.y()  = tran_vec[1];
+    tran_vec_eigen_opencv.z()  = tran_vec[2];
 
-        auto rotation_eigen = Eigen::Matrix3d {};
-        rotation_eigen <<                     // Col Major
-            rotation_opencv.at<double>(0, 0), // [0,0]
-            rotation_opencv.at<double>(0, 1), // [0,1]
-            rotation_opencv.at<double>(0, 2), // [0,2]
-            rotation_opencv.at<double>(1, 0), // [1,0]
-            rotation_opencv.at<double>(1, 1), // [1,1]
-            rotation_opencv.at<double>(1, 2), // [1,2]
-            rotation_opencv.at<double>(2, 0), // [2,0]
-            rotation_opencv.at<double>(2, 1), // [2,1]
-            rotation_opencv.at<double>(2, 2); // [2,2]
-        result.orientation = Eigen::Quaterniond { rotation_eigen };
-    }
+    auto rotation_opencv = cv::Mat {};
+    cv::Rodrigues(rota_vec, rotation_opencv);
+
+    auto rotation_eigen_opencv = Eigen::Matrix3d {};
+    rotation_eigen_opencv <<              // Col Major
+        rotation_opencv.at<double>(0, 0), // [0,0]
+        rotation_opencv.at<double>(0, 1), // [0,1]
+        rotation_opencv.at<double>(0, 2), // [0,2]
+        rotation_opencv.at<double>(1, 0), // [1,0]
+        rotation_opencv.at<double>(1, 1), // [1,1]
+        rotation_opencv.at<double>(1, 2), // [1,2]
+        rotation_opencv.at<double>(2, 0), // [2,0]
+        rotation_opencv.at<double>(2, 1), // [2,1]
+        rotation_opencv.at<double>(2, 2); // [2,2]
+
+    auto [rotation_eigen_ros, tran_vec_eigen_ros] =
+        rmcs::util::cv_optical_to_ros_camera_link(rotation_eigen_opencv, tran_vec_eigen_opencv);
+
+    result.translation = tran_vec_eigen_ros;
+    result.orientation = Eigen::Quaterniond { rotation_eigen_ros };
 }

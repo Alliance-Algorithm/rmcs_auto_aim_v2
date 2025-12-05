@@ -108,6 +108,19 @@ target_link_libraries(
     yaml-cpp::yaml-cpp
 )
 
+# Conversion
+ament_add_gtest(
+    test_conversion
+    ${TEST_DIR}/convertion.cpp
+)
+
+# Transform Communication
+ament_add_gtest(
+    test_transform_communication
+    ${TEST_DIR}/transform_communication.cpp
+)
+
+
 # Visualization
 add_executable(
     example_visualization
