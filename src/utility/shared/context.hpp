@@ -16,6 +16,11 @@ enum class ShootMode {
     BUFF_LARGE,
 };
 
+struct Transform {
+    Direction3d posture {};
+    Orientation orientation {};
+};
+
 struct AutoAimState {
     Stamp timestamp {};
 
@@ -33,6 +38,14 @@ struct ControlState {
 
     double bullet_speed {};
     Orientation imu_state {};
+
+    /*Note:
+     * 对应关系：
+     * odom<->fast_tf::OdomImu,muzzle_link<->fast_tf::MuzzleLink
+     * camera<->fast_tf::CameraLink
+     * */
+    Transform odom_to_muzzle_transform {};
+    Transform camera_to_odom_transform {};
 
     DeviceIds targets { DeviceIds::Full() };
 };
