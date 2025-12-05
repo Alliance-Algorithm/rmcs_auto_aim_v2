@@ -16,7 +16,7 @@ public:
 
     bool enable = true;
 
-    auto set_intetval(std::chrono::milliseconds ms) noexcept { interval = ms; }
+    auto set_interval(std::chrono::milliseconds ms) noexcept { interval = ms; }
 
     auto fps() const noexcept { return frame_times.size(); }
 

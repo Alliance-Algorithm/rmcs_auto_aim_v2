@@ -43,6 +43,8 @@ struct Armor2D {
     }
 };
 
+struct Armor3D { };
+
 struct Armor { };
 using Armors = std::vector<Armor>;
 

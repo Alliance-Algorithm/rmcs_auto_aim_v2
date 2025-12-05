@@ -48,6 +48,8 @@ struct PoseEstimator::Impl {
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
+
+    auto transform() { }
 };
 
 auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept

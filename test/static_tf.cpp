@@ -10,13 +10,10 @@ using namespace rmcs::util;
 
 constexpr auto static_tf = Joint {
     Link<"0">(),
-
     Joint {
         Link<"0.0", Eigen::Isometry3d>(),
-
         Joint {
             Link<"0.0.0", Eigen::Isometry3d>(),
-
             Joint { Link<"0.0.0.0", Eigen::Isometry3d>() },
             Joint { Link<"0.0.0.1", Eigen::Isometry3d>() },
             Joint { Link<"0.0.0.2", Eigen::Isometry3d>() },
@@ -25,7 +22,6 @@ constexpr auto static_tf = Joint {
     },
     Joint {
         Link<"0.1", Eigen::Isometry3d>(),
-
         Joint { Link<"0.1.0", Eigen::Isometry3d>() },
         Joint { Link<"0.1.1", Eigen::Isometry3d>() },
     },
@@ -35,6 +31,10 @@ using SentryTf = decltype(static_tf);
 TEST(static_tf, construct) {
     SentryTf::foreach_df_with_parent(
         []<class T>(auto parent) { std::println("{} -> {}", parent, T::name); });
+
+    using Result = SentryTf::Find<"0.0.0">::Result;
+
+    constexpr auto result = SentryTf::find<"0.0.0">();
 
     static_assert(SentryTf::name == "0");
     static_assert(SentryTf::child_amount > 0);
@@ -133,6 +133,8 @@ TEST(static_tf, look_up) {
     std::println("result: {:.2}", result);
     std::println("expect: {:.2}", expect);
     EXPECT_TRUE(result.isApprox(expect));
+
+    SentryTf::look_up<"0", "0.0", Eigen::Isometry3d>();
 }
 
 TEST(static_tf, serialize_from_yaml) {

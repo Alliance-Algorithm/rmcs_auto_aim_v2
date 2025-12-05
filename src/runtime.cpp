@@ -33,7 +33,7 @@ auto main() -> int try {
     };
 
     auto framerate = FramerateCounter {};
-    framerate.set_intetval(5s);
+    framerate.set_interval(5s);
 
     /// Runtime
     ///
@@ -42,7 +42,7 @@ auto main() -> int try {
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
-    auto control_ststem = kernel::ControlSystem {};
+    auto control_system = kernel::ControlSystem {};
 
     /// Configure
     ///
@@ -99,12 +99,16 @@ auto main() -> int try {
                     util::draw(*image, armor_2d);
             }
 
+            // TODO: pose estimator
+            // TODO: predictor
+            // TODO: control
+
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
 
             using namespace rmcs::util;
-            control_ststem.update_state({
+            control_system.update_state({
                 .timestamp = Clock::now(),
             });
         }
