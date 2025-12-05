@@ -35,6 +35,7 @@ auto main() -> int {
 
     auto framerate = FramerateCounter {};
     framerate.set_interval(5s);
+    framerate.set_interval(5s);
 
     /// Runtime
     ///
@@ -109,8 +110,18 @@ auto main() -> int {
                 .timestamp = Clock::now(),
             });
 
-            if (framerate.tick()) {
-                rclcpp_node.info("Framerate: {}hz", framerate.fps());
+            auto armors_3d = pose_estimator.solve_pnp(armors_2d);
+            if (!armors_3d.has_value()) {
+                continue;
+            }
+
+            // TODO: pose estimator
+            // TODO: predictor
+            // TODO: control
+
+            if (visualization.initialized()) {
+                visualization.send_image(*image);
+                std::ignore = visualization.visualize_armors(*armors_3d);
             }
         }
 
