@@ -98,3 +98,65 @@ target_link_libraries(
     test_static_tf
     yaml-cpp::yaml-cpp
 )
+
+# Conversion
+ament_add_gtest(
+    test_conversion
+    ${TEST_DIR}/convertion.cpp
+)
+
+# Transform Communication
+ament_add_gtest(
+    test_transform_communication
+    ${TEST_DIR}/transform_communication.cpp
+)
+
+
+# Visualization
+add_executable(
+    example_visualization
+    ${TEST_DIR}/visualization.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/posture.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_armors.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    example_visualization
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+)
+
+if(HIKCAMERA_AVAILABLE)
+    # Hikcamera
+    add_executable(
+        example_hikcamera
+        ${TEST_DIR}/hikcamera.cpp
+    )
+    target_link_libraries(
+        example_hikcamera
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+    )
+
+    # RTP Streaming
+    add_executable(
+        example_streaming
+        ${TEST_DIR}/streaming.cpp
+        ${RMCS_SRC_DIR}/module/capturer/hikcamera.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
+        ${RMCS_SRC_DIR}/utility/image/image.cpp
+        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+    )
+    target_link_libraries(
+        example_streaming
+        rclcpp::rclcpp
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+    )
+else()
+    message(STATUS "hikcamera 未检测到，跳过相关构建")
+endif()
