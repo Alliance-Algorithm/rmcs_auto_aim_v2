@@ -3,6 +3,8 @@
 #include "utility/rclcpp/visual/movable.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
+#include <rclcpp/publisher.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 namespace rmcs::util::visual {
 
@@ -19,6 +21,8 @@ public:
     };
 
     explicit Armor(const Config&) noexcept;
+    explicit Armor(Config const&,
+        std::shared_ptr<rclcpp::Publisher<visualization_msgs::msg::Marker>> const&) noexcept;
     ~Armor() noexcept;
 
     Armor(const Armor&)            = delete;

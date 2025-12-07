@@ -6,6 +6,7 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -23,6 +24,7 @@ auto main() -> int try {
     std::signal(SIGINT, [](int) { util::set_running(false); });
 
     auto rclcpp_node = util::RclcppNode { "AutoAim" };
+    rclcpp_node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -46,9 +48,10 @@ auto main() -> int try {
 
     /// Configure
     ///
-    auto configuration     = util::configuration();
-    auto use_visualization = configuration["use_visualization"].as<bool>();
-    auto use_painted_image = configuration["use_painted_image"].as<bool>();
+    auto configuration                 = util::configuration();
+    auto use_visualization             = configuration["use_visualization"].as<bool>();
+    auto use_painted_image             = configuration["use_painted_image"].as<bool>();
+    auto open_solved_pnp_visualization = configuration["open_solved_pnp_visualization"].as<bool>();
 
     // CAPTURER
     {
@@ -79,6 +82,8 @@ auto main() -> int try {
         auto result = visualization.initialize(config);
         handle_result("visualization", result);
     }
+
+    rmcs::Printer printer { "rmcs_auto_aim" };
 
     for (;;) {
         if (!util::get_running()) [[unlikely]]
@@ -111,6 +116,14 @@ auto main() -> int try {
             if (framerate.tick()) {
                 rclcpp_node.info("Framerate: {}hz", framerate.fps());
             }
+
+            pose_estimator.solve_pnp(armors_2d);
+
+            if (open_solved_pnp_visualization) {
+                pose_estimator.visualize(rclcpp_node);
+            }
+
+       
         }
 
         rclcpp_node.spin_once();
@@ -121,3 +134,4 @@ auto main() -> int try {
     using namespace rmcs;
     util::panic(std::format("exception uncatched | {}", e.what()));
 }
+

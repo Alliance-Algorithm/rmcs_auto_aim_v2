@@ -86,8 +86,9 @@ struct DeviceIds {
     static constexpr auto None() { return DeviceIds {}; }
     static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
 
-    constexpr DeviceIds()                 = default;
-    constexpr DeviceIds(const DeviceIds&) = default;
+    constexpr DeviceIds()                            = default;
+    constexpr DeviceIds(const DeviceIds&)            = default;
+    constexpr DeviceIds& operator=(const DeviceIds&) = default;
 
     constexpr explicit DeviceIds(uint16_t data) noexcept
         : data { data } { };

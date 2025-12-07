@@ -26,19 +26,12 @@ public:
             auto camera_odom =
                 fast_tf::lookup_transform<rmcs_description::CameraLink, rmcs_description::OdomImu>(
                     *rmcs_tf);
-            auto odom_to_muzzle =
-                fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
-                    *rmcs_tf);
 
             control_state.timestamp = Clock::now();
 
             control_state.camera_to_odom_transform.posture = camera_odom.translation();
             control_state.camera_to_odom_transform.orientation =
                 Eigen::Quaterniond(camera_odom.rotation());
-
-            control_state.odom_to_muzzle_transform.posture = odom_to_muzzle.translation();
-            control_state.odom_to_muzzle_transform.orientation =
-                Eigen::Quaterniond(odom_to_muzzle.rotation());
 
             //...
         }

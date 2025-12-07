@@ -1,4 +1,5 @@
 #include "utility/math/solve_pnp.hpp"
+#include "module/pose_estimator/pnp_solution.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/point.hpp"
 

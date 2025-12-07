@@ -41,10 +41,9 @@ struct ControlState {
 
     /*Note:
      * 对应关系：
-     * odom<->fast_tf::OdomImu,muzzle_link<->fast_tf::MuzzleLink
+     * odom<->fast_tf::OdomImu,
      * camera<->fast_tf::CameraLink
      * */
-    Transform odom_to_muzzle_transform {};
     Transform camera_to_odom_transform {};
 
     DeviceIds targets { DeviceIds::Full() };
