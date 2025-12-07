@@ -6,6 +6,7 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -45,12 +46,14 @@ auto main() -> int {
     auto visualization  = kernel::Visualization {};
 
     auto control_system = kernel::ControlSystem {};
+    auto control_system = kernel::ControlSystem {};
 
     /// Configure
     ///
-    auto configuration     = util::configuration();
-    auto use_visualization = configuration["use_visualization"].as<bool>();
-    auto use_painted_image = configuration["use_painted_image"].as<bool>();
+    auto configuration                 = util::configuration();
+    auto use_visualization             = configuration["use_visualization"].as<bool>();
+    auto use_painted_image             = configuration["use_painted_image"].as<bool>();
+    auto open_solved_pnp_visualization = configuration["open_solved_pnp_visualization"].as<bool>();
 
     // CAPTURER
     {
@@ -82,6 +85,8 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
+    rmcs::Printer printer { "rmcs_auto_aim" };
+
     for (;;) {
         if (!util::get_running()) [[unlikely]]
             break;
@@ -106,6 +111,7 @@ auto main() -> int {
             auto future_state = std::ignore;
 
             using namespace rmcs::util;
+            
             control_system.update_state({
                 .timestamp = Clock::now(),
             });
@@ -130,3 +136,4 @@ auto main() -> int {
 
     rclcpp_node.shutdown();
 }
+

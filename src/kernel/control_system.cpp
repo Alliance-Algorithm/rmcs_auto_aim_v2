@@ -10,18 +10,6 @@ struct ControlSystem::Impl {
 
     ControlState control_state {};
 
-<<<<<<< HEAD
-    Impl() noexcept {
-        if (!shm_recv.open(util::shared_control_state_name)) {
-            util::panic("Failed to open shared control state");
-        }
-        if (!shm_send.open(util::shared_autoaim_state_name)) {
-            util::panic("Failed to open shared autoaim state");
-        }
-    }
-
-=======
->>>>>>> 49d27c5 (Update doc and fix init bug of shared memory util)
     /// Send
 
     template <std::invocable<AutoAimState&> F>
