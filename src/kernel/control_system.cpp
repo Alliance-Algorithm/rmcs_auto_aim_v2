@@ -10,6 +10,15 @@ struct ControlSystem::Impl {
 
     ControlState control_state {};
 
+    Impl() noexcept {
+        if (!shm_recv.open(util::shared_control_state_name)) {
+            util::panic("Failed to open shared control state");
+        }
+        if (!shm_send.open(util::shared_autoaim_state_name)) {
+            util::panic("Failed to open shared autoaim state");
+        }
+    }
+
     /// Send
 
     template <std::invocable<AutoAimState&> F>

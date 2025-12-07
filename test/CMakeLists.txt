@@ -81,11 +81,17 @@ ament_add_gtest(
 ament_add_gtest(
     test_solve_pnp
     ${TEST_DIR}/solve_pnp.cpp
-    ${RMCS_SRC_DIR}/utility/math/solve_pnp.cpp
+    ${RMCS_SRC_DIR}/module/pose_estimator/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
 )
 target_link_libraries(
     test_solve_pnp
     ${OpenCV_LIBRARIES}
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
 )
 
 # Static TF
