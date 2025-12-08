@@ -21,6 +21,7 @@ public:
     }
 
     auto update() -> void override {
+<<<<<<< HEAD
         using namespace rmcs_description;
         if (rmcs_tf.ready()) [[likely]] {
             auto camera_odom =
@@ -36,6 +37,8 @@ public:
             //...
         }
 
+=======
+>>>>>>> 49d27c5 (Update doc and fix init bug of shared memory util)
         recv_state();
         send_state();
     }
