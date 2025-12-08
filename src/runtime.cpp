@@ -63,9 +63,9 @@ auto main() -> int {
     {
         auto config = configuration["identifier"];
 
-        const auto path = std::filesystem::path { util::Parameters::share_location() }
+        const auto model_location = std::filesystem::path { util::Parameters::share_location() }
             / std::filesystem::path { config["model_location"].as<std::string>() };
-        config["model_location"] = path.string();
+        config["model_location"] = model_location.string();
 
         auto result = identifier.initialize(config);
         handle_result("identifier", result);
@@ -123,4 +123,3 @@ auto main() -> int {
 
     rclcpp_node.shutdown();
 }
-
