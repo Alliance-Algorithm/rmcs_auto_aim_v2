@@ -6,7 +6,7 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "hikcamera"
+  source: "local_video"
   hikcamera:
     # int
     timeout_ms: 500
@@ -22,7 +22,7 @@ capturer:
     trigger_mode: false
     fixed_framerate: true
   local_video:
-    location: ""
+    location: "/workspaces/RMCS/solve_pnp.mp4"
     loop_play: true
 
 identifier:

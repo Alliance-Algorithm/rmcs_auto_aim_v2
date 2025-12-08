@@ -12,12 +12,15 @@ class LocalVideo {
 public:
     struct ConfigDetail {
         std::string location;
+        bool loop_play;
     };
 
     struct Config : ConfigDetail, util::Serializable {
         constexpr static std::tuple metas {
             &Config::location,
             "location",
+            &Config::loop_play,
+            "loop_play",
         };
     };
 
@@ -25,7 +28,7 @@ public:
 
     auto connect() noexcept -> std::expected<void, std::string>;
 
-    auto disconnect() noexcept { }
+    auto disconnect() noexcept -> void;
 
     auto connected() const noexcept -> bool;
 
