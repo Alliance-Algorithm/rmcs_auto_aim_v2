@@ -24,7 +24,7 @@ constexpr node_checker_type node_checker;
 
 template <typename Token, StaticString name, typename T>
 struct JointTransfroms {
-    static inline T state = T {};
+    static inline T state = T { };
 };
 
 }
@@ -94,6 +94,9 @@ struct Joint {
         using Result = typename FindInTuple<query_name, typename Node::Tuple>::Result;
     };
 
+    /// Path
+    /// TODO:
+
     ///
     /// Function Based
     ///
@@ -110,10 +113,10 @@ struct Joint {
     template <typename F>
     static constexpr auto foreach_df_with_parent(F&& f) noexcept -> void {
         static_assert(
-            requires { f.template operator()<Joint>(std::string_view {}); },
+            requires { f.template operator()<Joint>(std::string_view { }); },
             "\n错误的函数类型，它应该形如："
             "\n  []<class Joint>(std::string_view father){ ... }\n");
-        f.template operator()<Joint>(std::string_view {});
+        f.template operator()<Joint>(std::string_view { });
         [[maybe_unused]] const auto recursion = [&]<class T>() {
             T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
         };
@@ -124,7 +127,7 @@ struct Joint {
     static constexpr auto find() noexcept {
         using Result = typename Find<query_name, Joint>::Result;
         static_assert(!std::same_as<Result, void>, "没有找到你想要的变换节点");
-        return Result {};
+        return Result { };
     }
 
     template <StaticString query_name>
@@ -184,7 +187,7 @@ struct Joint {
     static constexpr auto child_path(bool traversal_down = false) noexcept {
         static_assert(Joint::contains<child>(), "子节点未找到");
 
-        auto result = std::array<std::string_view, N> {};
+        auto result = std::array<std::string_view, N> { };
         if (N == 0) return result;
 
         auto index = traversal_down ? N - 1 : 0;
@@ -205,7 +208,7 @@ struct Joint {
         static_assert(Joint::contains<child>(), "子节点未找到");
 
         constexpr auto n { child_distance<parent, child>() };
-        auto result = std::array<std::string_view, n> {};
+        auto result = std::array<std::string_view, n> { };
 
         find<parent>([&]<class T>() {
             // Specify the result length to let lsp take a rest
@@ -248,7 +251,7 @@ struct Joint {
 
         auto begin_to_lca = to_begin.size() - common_len;
 
-        auto result = std::array<std::string_view, N> {};
+        auto result = std::array<std::string_view, N> { };
         auto index  = 0;
         for (std::size_t i = 0; i < begin_to_lca; ++i) {
             auto side       = to_begin.size() - 1;
@@ -273,7 +276,7 @@ struct Joint {
     }
     template <class T = Joint, typename return_type>
     constexpr static auto get_type_state() noexcept {
-        auto result = return_type {};
+        auto result = return_type { };
         get_type_state<T>([&]<typename S>(const S& state) {
             static_assert(
                 std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
@@ -294,7 +297,7 @@ struct Joint {
     }
     template <StaticString name, typename return_type>
     constexpr static auto get_state() noexcept {
-        auto result = return_type {};
+        auto result = return_type { };
         get_state<name>([&]<typename S>(const S& state) {
             static_assert(
                 std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
@@ -374,7 +377,7 @@ public:
 
     template <StaticString begin, StaticString final, class SE3>
     constexpr static auto impl_look_up(auto&& callback) noexcept
-        requires requires { callback(std::string_view {}, SE3 {}, bool {}); }
+        requires requires { callback(std::string_view { }, SE3 { }, bool { }); }
     {
 
         constexpr auto distance  = distance_to_lca<begin, final>();

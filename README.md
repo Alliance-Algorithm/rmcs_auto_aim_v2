@@ -60,6 +60,10 @@ TODO
 
 ## 调试指南
 
+### Ros2 Topic 可视化
+
+TODO
+
 ### OPENCV 可视化窗口
 
 如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可
@@ -124,3 +128,7 @@ creeper@localhost's password:
 脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
 
 愉快调试吧！
+
+### 视频流录制
+
+TODO

@@ -32,10 +32,6 @@ TEST(static_tf, construct) {
     SentryTf::foreach_df_with_parent(
         []<class T>(auto parent) { std::println("{} -> {}", parent, T::name); });
 
-    using Result = SentryTf::Find<"0.0.0">::Result;
-
-    constexpr auto result = SentryTf::find<"0.0.0">();
-
     static_assert(SentryTf::name == "0");
     static_assert(SentryTf::child_amount > 0);
     static_assert(SentryTf::total_amount > 0);
@@ -44,6 +40,10 @@ TEST(static_tf, construct) {
     static_assert(SentryTf::child_distance<"0.1.1">() == 2);
     static_assert(SentryTf::child_distance<"0", "0.1.1">() == 2);
 
+    {
+        constexpr auto result = SentryTf::find<"0.0.0">();
+        static_assert(!result.contains<"0.0">());
+    }
     {
         constexpr auto traversal_down { true };
         constexpr auto result = SentryTf::child_path<"0", "0.0.0.2">(traversal_down);
