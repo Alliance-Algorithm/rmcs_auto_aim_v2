@@ -10,65 +10,68 @@
 
 ## 核心概念
 
-### 依赖隐藏：
+### 0. 依赖隐藏：
 
 C++ 中的一个对象只要内存布局确定，就可以被传递，即便是不完整的类型，著名的 `Impl` 模式就是这样，同样地，我们可以利用这个写法，将一些比较膨胀的依赖隐藏在一个前置声明的类型中，只有当我们真正需要该依赖的上下文时，用过引入完整定义，来使用被隐藏起来的依赖
 
 比如：
+
 ```cpp
 // object.hpp
 struct Object {
-  struct Details;
-  auto details() -> Details&;
+    struct Details;
+    auto details() -> Details&;
 };
 // object.details.hpp
 struct Object::Details {
-  // 一些庞大的上下文，比如 Ros2 和 OpenCV 对象
+    // 一些庞大的上下文，比如 Ros2 和 OpenCV 对象
 };
 ```
 
 在声明接口时，我们可以仅包含 `object.hpp`，作为对象传递，而在 `cpp` 文件中真正需要该上下文以实现功能时，就可以引入 `object.details.hpp`，这样，就实现了依赖的隐藏，头文件细节可以有效收束在实现的编译单元，不会随着头文件的引入而传播：
 
 ```cpp
-// Export as function
+// use_object.hpp
 #include "object.hpp"
 auto use_object(Object&) -> void;
 
-// Implementation
+// use_object.cpp
+#include "use_object.hpp"
 #include "object.details.hpp"
 auto use_object(Object& object) -> void {
-  auto& details = object.details();
-  // 取出一些惊人而膨胀的上下文，比如：`rclcpp::Node`
+    auto& details = object.details();
+    // 取出一些惊人而膨胀的上下文，比如：`rclcpp::Node`
 }
 ```
 
 通过这种方式，我们可以有效缩短**增量编译**的时间，特别是用到了诸如 `rclcpp`，`eigen`，`opencv` 等庞然大物时
 
-### 非侵入式：
+### 1. 非侵入式：
 
 使用继承与虚函数作为接口是**典型的侵入式多态**，但这并不意味着我们不能使用虚函数，相反，我们不得不用虚函数，它作为 Cpp 主要的运行时多态实现（还有一个是类型擦除），是实现运行时方法和上下文注册所必要的
 
 现代 Cpp 常以 concept 作为接口，比如协程对象的实现，是“组合”理念的体现
 
 对于“组合优于继承”，我们有：
+
 - 实现 concept 约束不需要引入依赖（即接口声明的头文件），即非侵入式，重构开销更小，和依赖隐藏的理念契合
 - concept 的组合的开销小于抽象类的组合
 - 最小化运行时抽象，使用最少的虚函数来完成运行时注册，面向用户的编译期多态通过模板实现
 - concept 可以利用 `static_assert` 等工具来提供更友善的编写期提示
 
-一个典型的例子：[`capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/b80584118d2361840c647f4f90cc0ca97a065dc6/src/kernel/capturer.cpp#L39)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
+一个典型的例子：[`kernel/capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/b80584118d2361840c647f4f90cc0ca97a065dc6/src/kernel/capturer.cpp#L39)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
 
-### 提前编写期检查：
+### 2. 提前编写期检查：
 
 书接上回，在使用 concept 作为接口约束时，应大量使用 `requires`，`static_assert` 等手段来约束，特别是 `static_assert`，它可以将信息用文字传达给开发者，相当友好
 
-### 推迟运行时多态：
+### 3. 推迟运行时多态：
 
 我们需要思考，运行时多态是必要的吗？很多时候我们引入了虚函数，多了很多重复性代码，使用基类指针持有对象，但对于真正的运行时，其实并没有那么多接口需求
 
-### 自动化与测试：
+### 4. 自动化与测试：
 
-一个工程化项目，其测试代码应该占据一半左右的代码量，特别是对于 RM 这种对代码稳定性有高要求的场景，同时 CI/CD 的妥善使用，可以大大降低我们在更新，部署等场景所花费的精力
+一个工程化项目，其测试代码应该占据**一半左右**的代码量，特别是对于 RM 这种对代码稳定性有高要求的场景，同时 `CI/CD` 的妥善使用，可以大大降低我们在更新，部署等场景所花费的精力
 
 ## 部署步骤
 
@@ -112,12 +115,60 @@ TODO
 
 ### Ros2 Topic 可视化
 
-- Foxglove 桌面端
+**Foxglove 转发端**
 
-- Foxglove 转发端
+在 Docker 开发容器或者机器人 NUC 容器中下载并启动对应的转发端：
 
-- 确认 Topic 的常见指令
+```sh
+sudo apt install ros-$ROS_DISTRO-foxglove-bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+```
 
+在哪里运行程序发布 Topic，就在哪里启动该转发端
+
+**Foxglove 桌面端**
+
+我们可以在浏览器访问 [foxglove网页端](https://app.foxglove.dev/)，或者下载桌面端软件
+
+在 Debian 系中，可以访问该网址 [Download](https://foxglove.dev/download) 下载 Deb 包，或者运行下面指令来安装：
+
+```sh
+sudo apt update && sudo apt install foxglove-studio
+```
+
+如果使用 ArchLinux，则可以通过 AUR 源来安装：
+
+```sh
+paru -S foxglove-bin
+```
+
+然后在 `Open Connection` 中打开 `ws://localhost:8765` 这个 `URL`
+
+> 要注意的是，上述 IP 地址取决于运行程序的主机，如果是在机器人上运行的，则需要修改为机器人的 IP，比如：`ws://169.254.233.233:8765`
+
+**确认 Topic 的常见指令**
+
+```sh
+# 列举当前正在发布的话题名称
+ros2 topic list
+
+# 测量话题的发布频率
+ros2 topic hz /topic-name
+
+# 测量话题的发布带宽
+ros2 topic bw /topic-name
+
+# 直接输出话题
+ros2 topic echo /topic-name
+```
+
+**测试**
+
+可以运行自瞄测试下的 `example_visualization` 来测试可视化：
+
+```sh
+./build/example_visualization
+```
 
 ### OPENCV 可视化窗口
 
@@ -186,4 +237,12 @@ creeper@localhost's password:
 
 ### 视频流录制
 
-TODO
+可以通过 FFmpeg 来录制 RTP 流：
+
+```sh
+ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy video.mp4
+```
+
+将 `169.254.233.233` 修改为机器人或者测试主机的 IP，将 `video.mp4` 修改为自定义名字
+
+> 目前 RTP 流只能被一个消费者读取，所以使用 VLC 打开流和使用 FFmpeg 录制流不能同时进行，如果要同时进行，可以使用 FFmpeg 将流复制一份，像这样：`ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy -f mpegts udp://127.0.0.1:1234`
