@@ -17,12 +17,12 @@ C++ 中的一个对象只要内存布局确定，就可以被传递，即便是�
 比如：
 ```cpp
 // object.hpp
-struct Object{
+struct Object {
   struct Details;
   auto details() -> Details&;
 };
 // object.details.hpp
-struct Object::Details{
+struct Object::Details {
   // 一些庞大的上下文，比如 Ros2 和 OpenCV 对象
 };
 ```
@@ -38,7 +38,7 @@ auto use_object(Object&) -> void;
 #include "object.details.hpp"
 auto use_object(Object& object) -> void {
   auto& details = object.details();
-  // 取出一些惊人而膨胀的上下文
+  // 取出一些惊人而膨胀的上下文，比如：`rclcpp::Node`
 }
 ```
 
@@ -46,11 +46,29 @@ auto use_object(Object& object) -> void {
 
 ### 非侵入式：
 
+使用继承与虚函数作为接口是**典型的侵入式多态**，但这并不意味着我们不能使用虚函数，相反，我们不得不用虚函数，它作为 Cpp 主要的运行时多态实现（还有一个是类型擦除），是实现运行时方法和上下文注册所必要的
+
+现代 Cpp 常以 concept 作为接口，比如协程对象的实现，是“组合”理念的体现
+
+对于“组合优于继承”，我们有：
+- 实现 concept 约束不需要引入依赖（即接口声明的头文件），即非侵入式，重构开销更小，和依赖隐藏的理念契合
+- concept 的组合的开销小于抽象类的组合
+- 最小化运行时抽象，使用最少的虚函数来完成运行时注册，面向用户的编译期多态通过模板实现
+- concept 可以利用 `static_assert` 等工具来提供更友善的编写期提示
+
+一个典型的例子：[`capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/b80584118d2361840c647f4f90cc0ca97a065dc6/src/kernel/capturer.cpp#L39)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
+
 ### 提前编写期检查：
+
+书接上回，在使用 concept 作为接口约束时，应大量使用 `requires`，`static_assert` 等手段来约束，特别是 `static_assert`，它可以将信息用文字传达给开发者，相当友好
 
 ### 推迟运行时多态：
 
+我们需要思考，运行时多态是必要的吗？很多时候我们引入了虚函数，多了很多重复性代码，使用基类指针持有对象，但对于真正的运行时，其实并没有那么多接口需求
+
 ### 自动化与测试：
+
+一个工程化项目，其测试代码应该占据一半左右的代码量，特别是对于 RM 这种对代码稳定性有高要求的场景，同时 CI/CD 的妥善使用，可以大大降低我们在更新，部署等场景所花费的精力
 
 ## 部署步骤
 
@@ -94,7 +112,12 @@ TODO
 
 ### Ros2 Topic 可视化
 
-TODO
+- Foxglove 桌面端
+
+- Foxglove 转发端
+
+- 确认 Topic 的常见指令
+
 
 ### OPENCV 可视化窗口
 
