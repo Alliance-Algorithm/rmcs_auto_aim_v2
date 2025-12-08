@@ -42,12 +42,17 @@ public:
         }
     }
 
+    static_assert(requires(Impl& impl) { impl.wait_image(); }, "实现必须拥有 wait_image 函数");
     auto wait_image() noexcept -> ImageResult override { return Impl::wait_image(); }
 
+    static_assert(requires(Impl& impl) { impl.connect(); }, "实现必须拥有 connect 函数");
     auto connect() noexcept -> NormalResult override { return Impl::connect(); }
 
+    static_assert(requires(Impl& impl) { impl.disconnect(); }, "实现必须拥有 disconnect 函数");
     auto disconnect() noexcept -> void override { Impl::disconnect(); }
 
+    static_assert(
+        requires(Impl& impl) { bool { impl.connected() }; }, "实现必须拥有 connected 函数");
     auto connected() const noexcept -> bool override { return Impl::connected(); }
 };
 

@@ -65,7 +65,7 @@ struct Capturer::Impl {
         auto show_loss_framerate_interval = yaml["show_loss_framerate_interval"].as<int>();
 
         loss_image_framerate.enable = show_loss_framerate;
-        loss_image_framerate.set_intetval(
+        loss_image_framerate.set_interval(
             std::chrono::milliseconds { show_loss_framerate_interval });
 
         reconnect_wait_interval =

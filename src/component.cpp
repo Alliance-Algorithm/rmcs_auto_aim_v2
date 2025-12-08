@@ -17,7 +17,7 @@ public:
         : rclcpp { get_component_name() } {
 
         using namespace std::chrono_literals;
-        framerate.set_intetval(2s);
+        framerate.set_interval(2s);
 
         if (!shm_recv.open(util::shared_autoaim_state_name)) {
             rclcpp.error("Failed to open shared autoaim state");
@@ -29,11 +29,11 @@ public:
 
     auto update() -> void override {
 
-        if (rmcs_tf.ready()) [[likely]] {
-            auto odom_to_imu =
-                fast_tf::lookup_transform<rmcs_description::BaseLink, rmcs_description::OdomImu>(
-                    *rmcs_tf);
-        }
+        // if (rmcs_tf.ready()) [[likely]] {
+        //     auto odom_to_imu =
+        //         fast_tf::lookup_transform<rmcs_description::BaseLink, rmcs_description::OdomImu>(
+        //             *rmcs_tf);
+        // }
 
         recv_state();
         send_state();
@@ -59,7 +59,7 @@ private:
         }
 
         if (shm_recv.is_updated()) {
-            auto timestamp = Stamp { };
+            auto timestamp = Stamp {};
             shm_recv.with_read([&](const auto& state) { timestamp = state.timestamp; });
 
             if (shm_recv.is_updated()) {

@@ -24,7 +24,7 @@ constexpr node_checker_type node_checker;
 
 template <typename Token, StaticString name, typename T>
 struct JointTransfroms {
-    static inline T state = T {};
+    static inline T state = T { };
 };
 
 }
@@ -35,15 +35,71 @@ struct Link { };
 
 template <StaticString name_, class State_ = tf::details::MonoState, class... Ts_>
 struct Joint {
-    using State = State_;
-
+    constexpr explicit Joint() noexcept = default;
     constexpr explicit Joint(Link<name_, State_>, Ts_...) noexcept { }
+
+    ///
+    /// Meta Export
+    ///
+    using State = State_;
+    using Tuple = std::tuple<Ts_...>;
 
     static constexpr std::size_t child_amount = sizeof...(Ts_);
     static constexpr std::size_t total_amount = 1 + (0 + ... + Ts_::total_amount);
 
     static constexpr auto name        = name_.view();
     static constexpr auto static_name = name_;
+
+    ///
+    /// Template Meta
+    ///
+
+    /// Find
+    template <StaticString query_name, class JointNode = Joint>
+    struct Find {
+        using Result = void;
+    };
+
+    template <StaticString query_name, class JointNode>
+        requires(query_name == JointNode::static_name)
+    struct Find<query_name, JointNode> {
+        using Result = JointNode;
+    };
+
+    template <StaticString query_name, class JointTuple>
+    struct FindInTuple;
+
+    template <StaticString query_name, class... Ts>
+    struct FindInTuple<query_name, std::tuple<Ts...>> {
+    private:
+        template <class... Us>
+        struct Helper {
+            using Result = void;
+        };
+        template <class T, class... Rest>
+        struct Helper<T, Rest...> {
+            constexpr static auto condition =
+                !std::same_as<typename Find<query_name, T>::Result, void>;
+            using Result = std::conditional_t<condition, typename Find<query_name, T>::Result,
+                typename Helper<Rest...>::Result>;
+        };
+
+    public:
+        using Result = typename Helper<Ts...>::Result;
+    };
+
+    template <StaticString query_name, class Node>
+        requires(query_name != Node::static_name)
+    struct Find<query_name, Node> {
+        using Result = typename FindInTuple<query_name, typename Node::Tuple>::Result;
+    };
+
+    /// Path
+    /// TODO:
+
+    ///
+    /// Function Based
+    ///
 
     template <typename F>
     static constexpr auto foreach_df(F&& f) noexcept -> void {
@@ -57,14 +113,21 @@ struct Joint {
     template <typename F>
     static constexpr auto foreach_df_with_parent(F&& f) noexcept -> void {
         static_assert(
-            requires { f.template operator()<Joint>(std::string_view {}); },
+            requires { f.template operator()<Joint>(std::string_view { }); },
             "\n错误的函数类型，它应该形如："
             "\n  []<class Joint>(std::string_view father){ ... }\n");
-        f.template operator()<Joint>(std::string_view {});
+        f.template operator()<Joint>(std::string_view { });
         [[maybe_unused]] const auto recursion = [&]<class T>() {
             T::template foreach_df_with_parent_impl<static_name>(std::forward<F>(f));
         };
         (recursion.template operator()<Ts_>(), ...);
+    }
+
+    template <StaticString query_name>
+    static constexpr auto find() noexcept {
+        using Result = typename Find<query_name, Joint>::Result;
+        static_assert(!std::same_as<Result, void>, "没有找到你想要的变换节点");
+        return Result { };
     }
 
     template <StaticString query_name>
@@ -124,7 +187,7 @@ struct Joint {
     static constexpr auto child_path(bool traversal_down = false) noexcept {
         static_assert(Joint::contains<child>(), "子节点未找到");
 
-        auto result = std::array<std::string_view, N> {};
+        auto result = std::array<std::string_view, N> { };
         if (N == 0) return result;
 
         auto index = traversal_down ? N - 1 : 0;
@@ -145,7 +208,7 @@ struct Joint {
         static_assert(Joint::contains<child>(), "子节点未找到");
 
         constexpr auto n { child_distance<parent, child>() };
-        auto result = std::array<std::string_view, n> {};
+        auto result = std::array<std::string_view, n> { };
 
         find<parent>([&]<class T>() {
             // Specify the result length to let lsp take a rest
@@ -188,7 +251,7 @@ struct Joint {
 
         auto begin_to_lca = to_begin.size() - common_len;
 
-        auto result = std::array<std::string_view, N> {};
+        auto result = std::array<std::string_view, N> { };
         auto index  = 0;
         for (std::size_t i = 0; i < begin_to_lca; ++i) {
             auto side       = to_begin.size() - 1;
@@ -213,7 +276,7 @@ struct Joint {
     }
     template <class T = Joint, typename return_type>
     constexpr static auto get_type_state() noexcept {
-        auto result = return_type {};
+        auto result = return_type { };
         get_type_state<T>([&]<typename S>(const S& state) {
             static_assert(
                 std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
@@ -234,7 +297,7 @@ struct Joint {
     }
     template <StaticString name, typename return_type>
     constexpr static auto get_state() noexcept {
-        auto result = return_type {};
+        auto result = return_type { };
         get_state<name>([&]<typename S>(const S& state) {
             static_assert(
                 std::constructible_from<return_type, S>, "返回值的类型无法以 state 为构造参数构造");
@@ -251,17 +314,31 @@ struct Joint {
         });
     }
 
+    // Parent 无任何作用，只是为了写明关系而存在的接口
+    template <StaticString unused_parent, StaticString child>
+    constexpr static auto set_state(const auto& state) noexcept {
+        static_assert(contains<unused_parent>(), "父变换不存在");
+        set_state<child>(state);
+    }
+
     template <StaticString begin, StaticString final, class SE3>
-        requires requires { SE3::Identity(); }
     constexpr static auto look_up() noexcept {
+        static_assert(requires { SE3::Identity(); }, "SE3 不是一个标准的变换类型");
+
         auto lca_to_begin = SE3::Identity();
         auto lca_to_final = SE3::Identity();
+
         Joint::impl_look_up<begin, final, SE3>([&]([[maybe_unused]] auto, auto se3, bool is_begin) {
-            if (is_begin == true) {
-                lca_to_begin = lca_to_begin * se3;
-            }
-            if (is_begin == false) {
-                lca_to_final = lca_to_final * se3;
+            constexpr auto can_mul = requires { se3 * std::declval<SE3>(); };
+            constexpr auto can_add = requires { SE3 { se3 }; };
+
+            if constexpr (can_mul && can_add) {
+                if (is_begin == true) {
+                    lca_to_begin = SE3 { lca_to_begin * se3 };
+                }
+                if (is_begin == false) {
+                    lca_to_final = SE3 { lca_to_final * se3 };
+                }
             }
         });
         return SE3 { lca_to_begin.inverse() * lca_to_final };
@@ -300,24 +377,30 @@ public:
 
     template <StaticString begin, StaticString final, class SE3>
     constexpr static auto impl_look_up(auto&& callback) noexcept
-        requires requires { callback(std::string_view {}, SE3 {}, bool {}); }
+        requires requires { callback(std::string_view { }, SE3 { }, bool { }); }
     {
-        auto [begin_len, final_len] = distance_to_lca<begin, final>();
+
+        constexpr auto distance  = distance_to_lca<begin, final>();
+        constexpr auto begin_len = std::get<0>(distance);
+        constexpr auto final_len = std::get<1>(distance);
+
         // calculate tf from begin to lca
+        auto begin_step = begin_len;
         impl_traversal_child<begin>([&]<class T>() {
             using State = typename T::State;
-            if (begin_len-- > 0) {
+            if (begin_step-- > 0) {
                 callback(T::name, Transforms<T::static_name, State>::state, true);
             }
         });
+
         // calculate tf from final to lca>
+        auto final_step = final_len;
         impl_traversal_child<final>([&]<class T>() {
             using State = typename T::State;
-            if (final_len-- > 0) {
+            if (final_step-- > 0) {
                 callback(T::name, Transforms<T::static_name, State>::state, false);
             }
         });
     }
 };
-
 }
