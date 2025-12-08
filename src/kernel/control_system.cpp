@@ -1,5 +1,4 @@
 #include "control_system.hpp"
-#include "utility/panic.hpp"
 #include "utility/shared/client.hpp"
 
 using namespace rmcs::kernel;
@@ -10,15 +9,6 @@ struct ControlSystem::Impl {
     AutoAimClient::Recv shm_recv {};
 
     ControlState control_state {};
-
-    Impl() noexcept {
-        if (!shm_recv.open(util::shared_control_state_name)) {
-            util::panic("Failed to open shared control state");
-        }
-        if (!shm_send.open(util::shared_autoaim_state_name)) {
-            util::panic("Failed to open shared autoaim state");
-        }
-    }
 
     /// Send
 

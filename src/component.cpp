@@ -18,23 +18,9 @@ public:
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
-
-        if (!shm_recv.open(util::shared_autoaim_state_name)) {
-            rclcpp.error("Failed to open shared autoaim state");
-        }
-        if (!shm_send.open(util::shared_control_state_name)) {
-            rclcpp.error("Failed to open shared control state");
-        }
     }
 
     auto update() -> void override {
-
-        // if (rmcs_tf.ready()) [[likely]] {
-        //     auto odom_to_imu =
-        //         fast_tf::lookup_transform<rmcs_description::BaseLink, rmcs_description::OdomImu>(
-        //             *rmcs_tf);
-        // }
-
         recv_state();
         send_state();
     }

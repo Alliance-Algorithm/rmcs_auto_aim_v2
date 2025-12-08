@@ -85,9 +85,6 @@ auto main() -> int try {
             break;
 
         if (auto image = capturer.fetch_image()) {
-            if (framerate.tick()) {
-                rclcpp_node.info("Framerate: {}hz", framerate.fps());
-            }
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
@@ -98,19 +95,22 @@ auto main() -> int try {
                 for (const auto& armor_2d : *armors_2d)
                     util::draw(*image, armor_2d);
             }
-
-            // TODO: pose estimator
-            // TODO: predictor
-            // TODO: control
-
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
+
+            auto armor_3d = std::ignore;
+
+            auto future_state = std::ignore;
 
             using namespace rmcs::util;
             control_system.update_state({
                 .timestamp = Clock::now(),
             });
+
+            if (framerate.tick()) {
+                rclcpp_node.info("Framerate: {}hz", framerate.fps());
+            }
         }
 
         rclcpp_node.spin_once();

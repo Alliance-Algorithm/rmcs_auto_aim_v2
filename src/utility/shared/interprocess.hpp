@@ -20,14 +20,14 @@ template <typename T>
 struct Client {
     using Context = SharedContext<T>;
 
-    static constexpr auto context_len = sizeof(Context);
-    static constexpr auto data_len    = sizeof(T);
+    static constexpr auto kContextLen = sizeof(Context);
+    static constexpr auto kDataLen    = sizeof(T);
 
     class Send final {
     public:
         ~Send() noexcept {
             if (context) {
-                munmap(static_cast<void*>(context), context_len);
+                munmap(static_cast<void*>(context), kContextLen);
             }
             if (shm_fd != -1) {
                 close(shm_fd);
@@ -38,13 +38,13 @@ struct Client {
             if (shm_fd == -1) {
                 return false;
             }
-            if (ftruncate(shm_fd, context_len) == -1) {
+            if (ftruncate(shm_fd, kContextLen) == -1) {
                 close(shm_fd);
                 return false;
             }
 
             auto* shm_ptr =
-                mmap(nullptr, context_len, PROT_WRITE | PROT_READ, MAP_SHARED, shm_fd, 0);
+                mmap(nullptr, kContextLen, PROT_WRITE | PROT_READ, MAP_SHARED, shm_fd, 0);
             if (shm_ptr == MAP_FAILED) {
                 close(shm_fd);
                 return false;
@@ -81,7 +81,7 @@ struct Client {
     public:
         ~Recv() noexcept {
             if (context) {
-                munmap(static_cast<void*>(context), context_len);
+                munmap(static_cast<void*>(context), kContextLen);
             }
             if (shm_fd != -1) {
                 close(shm_fd);
@@ -95,7 +95,7 @@ struct Client {
             }
 
             auto* shm_ptr =
-                mmap(nullptr, context_len, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+                mmap(nullptr, kContextLen, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
             if (shm_ptr == MAP_FAILED) {
                 close(shm_fd);
                 return false;

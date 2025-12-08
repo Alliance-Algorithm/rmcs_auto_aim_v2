@@ -210,6 +210,8 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 [...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
 ```
 
+对于 `VLC`，需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg`
+
 接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
 
 ```sh
