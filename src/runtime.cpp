@@ -136,4 +136,3 @@ auto main() -> int {
 
     rclcpp_node.shutdown();
 }
-
