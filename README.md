@@ -10,15 +10,47 @@
 
 ## 核心概念
 
-依赖隐藏：
+### 依赖隐藏：
 
-非侵入式：
+C++ 中的一个对象只要内存布局确定，就可以被传递，即便是不完整的类型，著名的 `Impl` 模式就是这样，同样地，我们可以利用这个写法，将一些比较膨胀的依赖隐藏在一个前置声明的类型中，只有当我们真正需要该依赖的上下文时，用过引入完整定义，来使用被隐藏起来的依赖
 
-提前编写期检查：
+比如：
+```cpp
+// object.hpp
+struct Object{
+  struct Details;
+  auto details() -> Details&;
+};
+// object.details.hpp
+struct Object::Details{
+  // 一些庞大的上下文，比如 Ros2 和 OpenCV 对象
+};
+```
 
-推迟运行时多态：
+在声明接口时，我们可以仅包含 `object.hpp`，作为对象传递，而在 `cpp` 文件中真正需要该上下文以实现功能时，就可以引入 `object.details.hpp`，这样，就实现了依赖的隐藏，头文件细节可以有效收束在实现的编译单元，不会随着头文件的引入而传播：
 
-自动化与测试：
+```cpp
+// Export as function
+#include "object.hpp"
+auto use_object(Object&) -> void;
+
+// Implementation
+#include "object.details.hpp"
+auto use_object(Object& object) -> void {
+  auto& details = object.details();
+  // 取出一些惊人而膨胀的上下文
+}
+```
+
+通过这种方式，我们可以有效缩短**增量编译**的时间，特别是用到了诸如 `rclcpp`，`eigen`，`opencv` 等庞然大物时
+
+### 非侵入式：
+
+### 提前编写期检查：
+
+### 推迟运行时多态：
+
+### 自动化与测试：
 
 ## 部署步骤
 
