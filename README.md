@@ -8,6 +8,183 @@
 
 本项目以工程化为最终目的，为机器人提供一个测试与工作流完备，配置友好，重构开销小，错误提示拟人的自瞄系统，方便队员的后续维护和持续开发，为迭代提供舒适的代码基础
 
+## 部署步骤
+
+先确保海康相机的 SDK 正确构建，再保证 `rmcs_exetutor` 正确构建，如果要运行 RMCS 控制系统的话
+
+```sh
+# 进入工作空间的 src/ 目录下
+git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --branch 2.0 --depth 1
+git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
+
+# 构建依赖
+build-rmcs
+
+# 启动运行时
+ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
+
+# 运行示例程序
+cd /path/to/rmcs_auto_aim_v2/test/
+cmake -B build
+cmake --build build -j
+
+# 以 example 开头的程序包含了很多具体业务的单独运行时实现
+./build/example_xxx
+```
+
+## 项目架构
+
+### 文件排布
+
+- `kernel`: 运行时封装，与业务逻辑强相关，包含业务流程，数据流动，参数配置等
+
+- `module`: 特定特务的通用实现模块，但不包含运行时逻辑
+
+- `utility`: 和运行业务无关的基本数据结果，基本算法和辅助工具，与一些第三方库的有限接口封装
+
+### 架构设计
+
+## 调试指南
+
+### Ros2 Topic 可视化
+
+**Foxglove 转发端**
+
+在 Docker 开发容器或者机器人 NUC 容器中下载并启动对应的转发端：
+
+```sh
+sudo apt install ros-$ROS_DISTRO-foxglove-bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+```
+
+在哪里运行程序发布 Topic，就在哪里启动该转发端
+
+**Foxglove 桌面端**
+
+我们可以在浏览器访问 [foxglove网页端](https://app.foxglove.dev/)，或者下载桌面端软件
+
+在 Debian 系中，可以访问该网址 [Download](https://foxglove.dev/download) 下载 Deb 包，或者运行下面指令来安装：
+
+```sh
+sudo apt update && sudo apt install foxglove-studio
+```
+
+如果使用 ArchLinux，则可以通过 AUR 源来安装：
+
+```sh
+paru -S foxglove-bin
+```
+
+然后在 `Open Connection` 中打开 `ws://localhost:8765` 这个 `URL`
+
+> 要注意的是，上述 IP 地址取决于运行程序的主机，如果是在机器人上运行的，则需要修改为机器人的 IP，比如：`ws://169.254.233.233:8765`
+
+**确认 Topic 的常见指令**
+
+```sh
+# 列举当前正在发布的话题名称
+ros2 topic list
+
+# 测量话题的发布频率
+ros2 topic hz /topic-name
+
+# 测量话题的发布带宽
+ros2 topic bw /topic-name
+
+# 直接输出话题
+ros2 topic echo /topic-name
+```
+
+**测试**
+
+可以运行自瞄测试下的 `example_visualization` 来测试可视化：
+
+```sh
+./build/example_visualization
+```
+
+### OPENCV 可视化窗口
+
+如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可，另外，其他的 X11 协议的 GUI 程序也可能栽在这里，都可以通过此办法解决
+
+```
+# F*** Nvidia
+export LIBGL_ALWAYS_SOFTWARE=1
+```
+
+### 视频流播放
+
+诚然，依靠 ROS2 的 Topic 来发布 `cv::Mat`，然后使用 `rviz` 或者 `foxglove` 来查看图像不失为一个方便的方法，但经验告诉我们，网络带宽和 ROS2 的性能无法支撑起高帧率高画质的视频显示，所以我们采用 RTP 推流的方式来串流自瞄画面，这会带来一些的延迟（大概1s吧），但推流完全支撑得起 100hz 以上的流畅显示，且在较差的网络环境也能相对流畅地串流，这是 ROS2 不能带给我们的良好体验，至于延迟，我想也没有人同时看着枪口和视频画面调参吧，网络较好的情况下，延迟不足 1s
+
+首先打开`config/config.yaml`文件，将 `use_visualization`设置为`true`，然后配置推流参数：
+
+```yaml
+visualization:
+    # ......
+    framerate: 80
+    monitor_host: "127.0.0.1"
+    monitor_port: "5000"
+    # ......
+```
+
+需要配置的只有帧率和主机网络地址，帧率需要同`capturer`模块的帧率一致（也许应该自动读取相机的帧率，以后再论吧），`host`填自己电脑的 IPv4 地址（注意是和运行自瞄的主机同一局域网下的地址），端口随意，别和本机服务冲突就行了
+
+然后启动项目：
+
+```sh
+ros2 launch rmcs_auto_aim_v2 launch.py
+```
+
+如果相机正常连接的话，且推流模块正确加载，则会看到以下日志：
+
+```
+[...] [INFO] [...] [Capturer]: Connect to capturer successfully
+[...] [INFO] [...] [visualization]: Visualization session is opened
+[...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
+```
+
+随后在本机下载 `VLC`，此外，还需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg` 以支持播放推流
+
+接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
+
+```sh
+# - 如果自瞄运行在机器人上，就加上 --remote 参数
+# - 'username' 是本机的用户名，即打开 VLC 的环境，通过 ssh 远程打开
+# - 如果你需要在第三台设备打开第二台设备的视频播放器，就使用 --ip 指定该设备的 ip（一般不用）
+# - 如果已经拷贝完配置文件，就可以使用 --no-copy 直接打开播放器，跳过拷贝
+play-autoaim --user username [--remote][--no-copy][--ip]
+```
+
+随后你会看到这样的输出：
+
+```
+/workspaces/RMCS/main/RMCS (main*) » play-autoaim --user creeper                                       ubuntu@creeper
+creeper@localhost's password: 
+auto_aim.sdp                                                                       100%   70   330.8KB/s   00:00    
+✅ 文件已拷贝到宿主机：/tmp/auto_aim.sdp
+creeper@localhost's password: 
+---------------------------------------------------------------------------------------------------------------------
+/workspaces/RMCS/main/RMCS (main*) » [0000565203226630] main libvlc: 正在以默认界面运行 vlc。使用“cvlc”可以无界面-
+```
+
+电脑便自动打开 VLC 播放视频流了，SDP 文件会经过`机器人 -> 容器 -> 本地`到 `/tmp/auto_aim.sdp/` 目录
+
+脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
+
+愉快调试吧！
+
+### 视频流录制
+
+可以通过 FFmpeg 来录制 RTP 流：
+
+```sh
+ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy video.mp4
+```
+
+将 `169.254.233.233` 修改为机器人或者测试主机的 IP，将 `video.mp4` 修改为自定义名字
+
+> 目前 RTP 流只能被一个消费者读取，所以使用 VLC 打开流和使用 FFmpeg 录制流不能同时进行，如果要同时进行，可以使用 FFmpeg 将流复制一份，像这样：`ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy -f mpegts udp://127.0.0.1:1234`
+
 ## 核心概念
 
 ### 0. 依赖隐藏：
@@ -72,179 +249,3 @@ auto use_object(Object& object) -> void {
 ### 4. 自动化与测试：
 
 一个工程化项目，其测试代码应该占据**一半左右**的代码量，特别是对于 RM 这种对代码稳定性有高要求的场景，同时 `CI/CD` 的妥善使用，可以大大降低我们在更新，部署等场景所花费的精力
-
-## 部署步骤
-
-先确保海康相机的 SDK 正确构建，再保证 `rmcs_exetutor` 正确构建，如果要运行 RMCS 控制系统的话
-
-```sh
-# 进入工作空间的 src/ 目录下
-git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --branch 2.0 --depth 1
-git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
-
-# 构建依赖
-build-rmcs
-
-# 启动运行时
-ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
-
-# 运行示例程序
-cd /path/to/rmcs_auto_aim_v2/test/
-cmake -B build
-cmake --build build -j
-
-# 以 example 开头的程序包含了很多具体业务的单独运行时实现
-./build/example_xxx
-```
-
-## 项目架构
-
-### 文件排布
-
-- `kernel`: 运行时封装，与业务逻辑强相关，包含业务流程，数据流动，参数配置等
-
-- `module`: 特定特务的通用实现模块，但不包含运行时逻辑
-
-- `utility`: 和运行业务无关的基本数据结果，基本算法和辅助工具，与一些第三方库的有限接口封装
-
-### 任务调度
-
-TODO
-
-## 调试指南
-
-### Ros2 Topic 可视化
-
-**Foxglove 转发端**
-
-在 Docker 开发容器或者机器人 NUC 容器中下载并启动对应的转发端：
-
-```sh
-sudo apt install ros-$ROS_DISTRO-foxglove-bridge
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
-```
-
-在哪里运行程序发布 Topic，就在哪里启动该转发端
-
-**Foxglove 桌面端**
-
-我们可以在浏览器访问 [foxglove网页端](https://app.foxglove.dev/)，或者下载桌面端软件
-
-在 Debian 系中，可以访问该网址 [Download](https://foxglove.dev/download) 下载 Deb 包，或者运行下面指令来安装：
-
-```sh
-sudo apt update && sudo apt install foxglove-studio
-```
-
-如果使用 ArchLinux，则可以通过 AUR 源来安装：
-
-```sh
-paru -S foxglove-bin
-```
-
-然后在 `Open Connection` 中打开 `ws://localhost:8765` 这个 `URL`
-
-> 要注意的是，上述 IP 地址取决于运行程序的主机，如果是在机器人上运行的，则需要修改为机器人的 IP，比如：`ws://169.254.233.233:8765`
-
-**确认 Topic 的常见指令**
-
-```sh
-# 列举当前正在发布的话题名称
-ros2 topic list
-
-# 测量话题的发布频率
-ros2 topic hz /topic-name
-
-# 测量话题的发布带宽
-ros2 topic bw /topic-name
-
-# 直接输出话题
-ros2 topic echo /topic-name
-```
-
-**测试**
-
-可以运行自瞄测试下的 `example_visualization` 来测试可视化：
-
-```sh
-./build/example_visualization
-```
-
-### OPENCV 可视化窗口
-
-如果你使用英伟达 GPU，那你的 OPENCV 的可视化可能会在这一步被拿下，比如`cv::imshow`，设置环境变量永远使用 CPU 渲染即可
-
-```
-# F*** Nvidia
-export LIBGL_ALWAYS_SOFTWARE=1
-```
-
-### 视频流播放
-
-诚然，依靠 ROS2 的 Topic 来发布 `cv::Mat`，然后使用 `rviz` 或者 `foxglove` 来查看图像不失为一个方便的方法，但经验告诉我们，网络带宽和 ROS2 的性能无法支撑起高帧率高画质的视频显示，所以我们采用 RTP 推流的方式来串流自瞄画面，这会带来一些的延迟（大概1s吧），但推流完全支撑得起 100hz 以上的流畅显示，且在较差的网络环境也能相对流畅地串流，这是 ROS2 不能带给我们的良好体验，至于延迟，我想也没有人同时看着枪口和视频画面调参吧，网络较好的情况下，延迟不足 1s
-
-首先打开`config/config.yaml`文件，将 `use_visualization`设置为`true`，然后配置推流参数：
-
-```yaml
-visualization:
-    # ......
-    framerate: 80
-    monitor_host: "127.0.0.1"
-    monitor_port: "5000"
-    # ......
-```
-
-需要配置的只有帧率和主机网络地址，帧率需要同`capturer`模块的帧率一致（也许应该自动读取相机的帧率，以后再论吧），`host`填自己电脑的 IPv4 地址（注意是和运行自瞄的主机同一局域网下的地址），端口随意，别和本机服务冲突就行了
-
-然后启动项目：
-
-```sh
-ros2 launch rmcs_auto_aim_v2 launch.py
-```
-
-如果相机正常连接的话，且推流模块正确加载，则会看到以下日志：
-
-```
-[...] [INFO] [...] [Capturer]: Connect to capturer successfully
-[...] [INFO] [...] [visualization]: Visualization session is opened
-[...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
-```
-
-对于 `VLC`，需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg`
-
-接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
-
-```sh
-# 如果自瞄运行在机器人上，就加上 --remote 参数
-play-autoaim --user username [--remote][--no-copy]
-```
-
-随后你会看到这样的输出：
-
-```
-/workspaces/RMCS/main/RMCS (main*) » play-autoaim --user creeper                                       ubuntu@creeper
-creeper@localhost's password: 
-auto_aim.sdp                                                                       100%   70   330.8KB/s   00:00    
-✅ 文件已拷贝到宿主机：/tmp/auto_aim.sdp
-creeper@localhost's password: 
----------------------------------------------------------------------------------------------------------------------
-/workspaces/RMCS/main/RMCS (main*) » [0000565203226630] main libvlc: 正在以默认界面运行 vlc。使用“cvlc”可以无界面-
-```
-
-电脑便自动打开 VLC 播放视频流了，SDP 文件会经过`机器人 -> 容器 -> 本地`到 `/tmp/auto_aim.sdp/` 目录
-
-脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
-
-愉快调试吧！
-
-### 视频流录制
-
-可以通过 FFmpeg 来录制 RTP 流：
-
-```sh
-ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy video.mp4
-```
-
-将 `169.254.233.233` 修改为机器人或者测试主机的 IP，将 `video.mp4` 修改为自定义名字
-
-> 目前 RTP 流只能被一个消费者读取，所以使用 VLC 打开流和使用 FFmpeg 录制流不能同时进行，如果要同时进行，可以使用 FFmpeg 将流复制一份，像这样：`ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy -f mpegts udp://127.0.0.1:1234`

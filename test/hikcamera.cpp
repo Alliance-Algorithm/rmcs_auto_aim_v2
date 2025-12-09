@@ -10,11 +10,16 @@ std::atomic<bool> running = true;
 auto main() -> int {
     std::signal(SIGINT, [](auto) { running = false; });
 
+    auto config = hikcamera::Config {
+        .timeout_ms  = 2'000,
+        .exposure_us = 1'500,
+        // ...
+    };
     auto camera = hikcamera::Camera {};
-    camera.configure({});
+    camera.configure(config);
 
     if (auto result = camera.connect()) {
-        std::println("[hikcamera] Camera connect successfully\n");
+        std::println("[hikcamera] Camera connect successfully");
     } else {
         std::println("[hikcamera] {}", result.error());
     }

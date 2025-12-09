@@ -23,7 +23,8 @@ struct RclcppNode::Details {
     std::shared_ptr<rclcpp::Node> rclcpp;
 
     explicit Details(const std::string& name) noexcept
-        : rclcpp { std::make_shared<rclcpp::Node>(name) } { }
+        : rclcpp { std::make_shared<rclcpp::Node>(name,
+              rclcpp::NodeOptions {}.automatically_declare_parameters_from_overrides(true)) } { }
 
     auto spin_once() const noexcept { rclcpp::spin_some(rclcpp); }
 
