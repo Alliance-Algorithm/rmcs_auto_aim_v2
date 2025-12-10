@@ -88,8 +88,8 @@ constexpr std::array<Point3d, 4> kSmallArmorShapeOpenCV {
 
 constexpr std::array<Point3d, 4> kLargeArmorShapeRos {
     Point3d { 0.0, 0.115, 0.028 },   // Top-left
-    Point3d { 0.0, -0.115, 0.028 },  // Top-right
     Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
+    Point3d { 0.0, -0.115, 0.028 },  // Top-right
     Point3d { 0.0, 0.115, -0.028 }   // Bottom-left
 };
 constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
