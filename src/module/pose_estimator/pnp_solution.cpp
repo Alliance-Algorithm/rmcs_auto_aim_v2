@@ -30,7 +30,7 @@ auto PnpSolution::solve() noexcept -> void {
     cv::Rodrigues(rota_vec, rotation_opencv);
 
     auto rotation_eigen_opencv = Eigen::Matrix3d {};
-    rotation_eigen_opencv <<              // Row Major
+    rotation_eigen_opencv <<              // Major
         rotation_opencv.at<double>(0, 0), // [0,0]
         rotation_opencv.at<double>(0, 1), // [0,1]
         rotation_opencv.at<double>(0, 2), // [0,2]
@@ -43,11 +43,12 @@ auto PnpSolution::solve() noexcept -> void {
 
     auto [rotation_eigen_ros, tran_vec_eigen_ros] =
         cv_optical_to_ros_camera_link(rotation_eigen_opencv, tran_vec_eigen_opencv);
+    auto orientation_ros = Eigen::Quaterniond(rotation_eigen_ros).normalized();
 
     result.genre       = input.genre;
     result.color       = input.color;
     result.translation = tran_vec_eigen_ros;
-    result.orientation = Eigen::Quaterniond { rotation_eigen_ros };
+    result.orientation = orientation_ros;
 }
 
 auto PnpSolution::visualize(RclcppNode& visual_node) noexcept -> void {
