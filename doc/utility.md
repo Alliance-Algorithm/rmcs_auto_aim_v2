@@ -53,6 +53,7 @@
 - **[math/sigmoid.hpp](../src/utility/math/sigmoid.hpp)**: 提供 sigmoid 函数实现，用于数值稳定计算。
 - **[math/solve_armors.hpp](../src/utility/math/solve_armors.hpp)**: 提供装甲板正解和逆解算法。`ArmorsForwardSolution` 用于根据机器人位姿计算四个装甲板的位置和姿态。
 - **[math/solve_armors.cpp](../src/utility/math/solve_armors.cpp)**: 正解算法的实现。
+- **[math/solve_pnp.hpp](../src/utility/math/solve_pnp.cpp)**: 提供将相机内外参的转换函数供pnp解算使用。
 
 ### ROS2 扩展 (rclcpp 包装器)
 - **[rclcpp/node.hpp](../src/utility/rclcpp/node.hpp)**: 提供 `RclcppNode` 类，封装 ROS2 节点的基本功能，包括日志、发布主题前缀管理等。**使用 PIMPL 模式完全隐藏 rclcpp 头文件**，推荐在需要避免编译依赖时使用。
