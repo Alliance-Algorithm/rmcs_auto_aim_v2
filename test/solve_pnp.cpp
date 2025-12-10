@@ -2,6 +2,7 @@
 #include "module/pose_estimator/pnp_solution.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/point.hpp"
+#include "utility/robot/armor.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -26,42 +27,13 @@ PnpSolution::Input create_test_input(double focal_length = 800.0, double cx = 32
     return input;
 }
 
-// 辅助函数：创建小装甲板的 3D 点
+// 辅助函数：使用 OpenCV 坐标系定义的装甲板 3D 点（z 轴向外）
 std::array<Point3d, 4> create_small_armor_shape() {
-    constexpr double ARMOR_WIDTH  = 0.135; // 135mm
-    constexpr double ARMOR_HEIGHT = 0.056; // 56mm
-
-    const auto eigen_points = std::array {
-        Point3d { 0.0, ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },   // 右上
-        Point3d { 0.0, -ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },  // 右下
-        Point3d { 0.0, -ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }, // 左下
-        Point3d { 0.0, ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 }   // 左上
-    };
-
-    auto points = std::array<Point3d, 4>();
-    for (size_t i = 0; i < 4; i++) {
-        points[i] = Point3d(eigen_points[i]);
-    }
-    return points;
+    return rmcs::kSmallArmorShapeOpenCV;
 }
 
-// 辅助函数：创建大装甲板的 3D 点
 std::array<Point3d, 4> create_big_armor_shape() {
-    constexpr double BIG_ARMOR_WIDTH = 0.230; // 230mm
-    constexpr double ARMOR_HEIGHT    = 0.056; // 56mm
-
-    const auto eigen_points = std::array {
-        Point3d { 0.0, BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
-        Point3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, ARMOR_HEIGHT / 2.0 },
-        Point3d { 0.0, -BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
-        Point3d { 0.0, BIG_ARMOR_WIDTH / 2.0, -ARMOR_HEIGHT / 2.0 },
-    };
-
-    auto points = std::array<Point3d, 4>();
-    for (size_t i = 0; i < 4; i++) {
-        points[i] = Point3d(eigen_points[i]);
-    }
-    return points;
+    return rmcs::kLargeArmorShapeOpenCV;
 }
 
 // 辅助函数：从 Eigen::Vector2d 创建 Point2d 数组
@@ -107,11 +79,12 @@ TEST_F(PnpSolverTest, BasicSmallArmor) {
     solution.input.armor_shape = create_small_armor_shape();
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
+    // 像素点按 TL,BR,TR,BL 顺序
     const auto eigen_detection = std::array {
-        Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
-        Vector2d { 290.0, 260.0 },
-        Vector2d { 350.0, 260.0 },
+        Vector2d { 290.0, 220.0 }, // TL
+        Vector2d { 350.0, 260.0 }, // BR
+        Vector2d { 350.0, 220.0 }, // TR
+        Vector2d { 290.0, 260.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -141,10 +114,10 @@ TEST_F(PnpSolverTest, BigArmor) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
-        Vector2d { 380.0, 200.0 },
-        Vector2d { 260.0, 200.0 },
-        Vector2d { 260.0, 280.0 },
-        Vector2d { 380.0, 280.0 },
+        Vector2d { 260.0, 200.0 }, // TL
+        Vector2d { 380.0, 280.0 }, // BR
+        Vector2d { 380.0, 200.0 }, // TR
+        Vector2d { 260.0, 280.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -177,10 +150,10 @@ TEST_F(PnpSolverTest, DifferentDistances) {
         const auto center     = Vector2d { 320.0, 240.0 };
 
         const auto eigen_detection = std::array<Vector2d, 4> {
-            center + Vector2d { pixel_size / 2, -pixel_size * 0.2 },
-            center + Vector2d { -pixel_size / 2, -pixel_size * 0.2 },
-            center + Vector2d { -pixel_size / 2, pixel_size * 0.2 },
-            center + Vector2d { pixel_size / 2, pixel_size * 0.2 },
+            center + Vector2d { -pixel_size / 2, -pixel_size * 0.2 }, // TL
+            center + Vector2d { pixel_size / 2, pixel_size * 0.2 },   // BR
+            center + Vector2d { pixel_size / 2, -pixel_size * 0.2 },  // TR
+            center + Vector2d { -pixel_size / 2, pixel_size * 0.2 },  // BL
         };
 
         solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -191,7 +164,7 @@ TEST_F(PnpSolverTest, DifferentDistances) {
         // 验证结果
         const auto distance_error = std::abs(solution.result.translation.x - expected_distance);
 
-        EXPECT_LT(distance_error, expected_distance * 0.5) //
+        EXPECT_LT(distance_error, expected_distance * 0.05) //误差5%
             << "Distance error too large for expected distance " << expected_distance;
 
         EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
@@ -207,10 +180,10 @@ TEST_F(PnpSolverTest, EdgeCaseSmallDetection) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点（小检测框，远距离）
     const auto eigen_detection = std::array {
-        Vector2d { 322.0, 238.0 },
-        Vector2d { 318.0, 238.0 },
-        Vector2d { 318.0, 242.0 },
-        Vector2d { 322.0, 242.0 },
+        Vector2d { 318.0, 238.0 }, // TL
+        Vector2d { 322.0, 242.0 }, // BR
+        Vector2d { 322.0, 238.0 }, // TR
+        Vector2d { 318.0, 242.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -234,10 +207,10 @@ TEST_F(PnpSolverTest, WithDistortion) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
-        Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
-        Vector2d { 290.0, 260.0 },
-        Vector2d { 350.0, 260.0 },
+        Vector2d { 290.0, 220.0 }, // TL
+        Vector2d { 350.0, 260.0 }, // BR
+        Vector2d { 350.0, 220.0 }, // TR
+        Vector2d { 290.0, 260.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -261,10 +234,10 @@ TEST_F(PnpSolverTest, QuaternionValidity) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
-        Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
-        Vector2d { 290.0, 260.0 },
-        Vector2d { 350.0, 260.0 },
+        Vector2d { 290.0, 220.0 }, // TL
+        Vector2d { 350.0, 260.0 }, // BR
+        Vector2d { 350.0, 220.0 }, // TR
+        Vector2d { 290.0, 260.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -293,10 +266,10 @@ TEST_F(PnpSolverTest, TranslationValidity) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
-        Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
-        Vector2d { 290.0, 260.0 },
-        Vector2d { 350.0, 260.0 },
+        Vector2d { 290.0, 220.0 }, // TL
+        Vector2d { 350.0, 260.0 }, // BR
+        Vector2d { 350.0, 220.0 }, // TR
+        Vector2d { 290.0, 260.0 }, // BL
     };
 
     solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -311,7 +284,7 @@ TEST_F(PnpSolverTest, TranslationValidity) {
     EXPECT_TRUE(std::isfinite(t.y)) << "Translation y should be finite";
     EXPECT_TRUE(std::isfinite(t.z)) << "Translation z should be finite";
 
-    EXPECT_GT(t.z, 0.0) << "Translation z should be positive";
+    EXPECT_GT(t.x, 0.0) << "Translation x should be positive";
 }
 
 TEST_F(PnpSolverTest, DifferentFocalLengths) {
@@ -328,10 +301,10 @@ TEST_F(PnpSolverTest, DifferentFocalLengths) {
         const auto offset = Vector2d { 30.0, 20.0 };
 
         const auto eigen_detection = std::array<Vector2d, 4> {
-            center + Vector2d { offset.x() * scale, -offset.y() * scale },
-            center + Vector2d { -offset.x() * scale, -offset.y() * scale },
-            center + Vector2d { -offset.x() * scale, offset.y() * scale },
-            center + Vector2d { offset.x() * scale, offset.y() * scale },
+            center + Vector2d { -offset.x() * scale, -offset.y() * scale }, // TL
+            center + Vector2d { offset.x() * scale, offset.y() * scale },   // BR
+            center + Vector2d { offset.x() * scale, -offset.y() * scale },  // TR
+            center + Vector2d { -offset.x() * scale, offset.y() * scale },  // BL
         };
 
         solution.input.armor_detection = create_armor_detection(eigen_detection);
@@ -340,8 +313,8 @@ TEST_F(PnpSolverTest, DifferentFocalLengths) {
         EXPECT_NO_THROW(solution.solve());
 
         // 验证结果
-        EXPECT_GT(solution.result.translation.z, 0.0) //
-            << "Translation z should be positive (in front of camera)";
+        EXPECT_GT(solution.result.translation.x, 0.0) //
+            << "Translation x should be positive (in front of camera)";
 
         EXPECT_TRUE(is_quaternion_normalized(solution.result.orientation)) //
             << "Quaternion should be normalized";
@@ -357,10 +330,10 @@ TEST_F(PnpSolverTest, Consistency) {
 
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
-        Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
-        Vector2d { 290.0, 260.0 },
-        Vector2d { 350.0, 260.0 },
+        Vector2d { 290.0, 220.0 }, // TL
+        Vector2d { 350.0, 260.0 }, // BR
+        Vector2d { 350.0, 220.0 }, // TR
+        Vector2d { 290.0, 260.0 }, // BL
     };
 
     solution1.input.armor_detection = create_armor_detection(eigen_detection);
@@ -394,8 +367,8 @@ TEST_F(PnpSolverTest, Performance) {
     // 使用 Eigen::Vector2d 创建 2D 检测点
     const auto eigen_detection = std::array {
         Vector2d { 350.0, 220.0 },
-        Vector2d { 290.0, 220.0 },
         Vector2d { 290.0, 260.0 },
+        Vector2d { 290.0, 220.0 },
         Vector2d { 350.0, 260.0 },
     };
 
