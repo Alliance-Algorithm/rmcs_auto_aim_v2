@@ -29,6 +29,7 @@ struct PnpSolution {
     } result;
 
     std::unique_ptr<visual::Armor> visualized_armor;
+    std::unique_ptr<visual::Armor> target_armor;
 
     PnpSolution() noexcept = default;
 
