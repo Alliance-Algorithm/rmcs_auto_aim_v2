@@ -234,6 +234,7 @@ struct OpenVinoNet::Impl {
         for (std::size_t row = 0; row < rows; row++) {
 
             auto line = armor_type {};
+            //(0,1) 顶左，(2,3) 底左，(4,5) 底右，(6,7) 顶右
             line.unsafe_from(std::span { data + row * cols, cols });
             line.confidence = util::sigmoid(line.confidence);
 

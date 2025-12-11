@@ -9,15 +9,16 @@ struct ArmorInferResult {
     using Point = cv::Point_<precision_type>;
     using Rect  = cv::Rect_<precision_type>;
 
+    //(0,1) 顶左，(2,3) 底左，(4,5) 底右，(6,7) 顶右
     struct Corners {
         precision_type lt_x;
         precision_type lt_y;
+        precision_type lb_x;
+        precision_type lb_y;
         precision_type rb_x;
         precision_type rb_y;
         precision_type rt_x;
         precision_type rt_y;
-        precision_type lb_x;
-        precision_type lb_y;
         auto lt() const noexcept { return Point { lt_x, lt_y }; }
         auto rb() const noexcept { return Point { rb_x, rb_y }; }
         auto rt() const noexcept { return Point { rt_x, rt_y }; }

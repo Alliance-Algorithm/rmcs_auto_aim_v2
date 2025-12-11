@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE "Release")
 add_compile_options(-Wall -Wextra -Wpedantic -O3)
-
+add_definitions(-DOPENCV_DISABLE_EIGEN_TENSOR_SUPPORT)
 ## 依赖查找
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)

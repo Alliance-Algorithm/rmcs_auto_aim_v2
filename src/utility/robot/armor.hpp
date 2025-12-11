@@ -54,22 +54,22 @@ constexpr double kSmallArmorWidth = 0.135;
 
 constexpr std::array<Point3d, 4> kLargeArmorShapeOpenCV {
     Point3d { -0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
-    Point3d { 0.5 * kLargeArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
     Point3d { 0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 },  // Top-right
+    Point3d { 0.5 * kLargeArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
     Point3d { -0.5 * kLargeArmorWidth, 0.5 * kLightBarHeight, -0.0 }  // Bottom-left
 };
 
 constexpr std::array<Point3d, 4> kSmallArmorShapeOpenCV {
     Point3d { -0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
-    Point3d { 0.5 * kSmallArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
     Point3d { 0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 },  // Top-right
+    Point3d { 0.5 * kSmallArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
     Point3d { -0.5 * kSmallArmorWidth, 0.5 * kLightBarHeight, -0.0 }  // Bottom-left
 };
 
 constexpr std::array<Point3d, 4> kLargeArmorShapeRos {
     Point3d { 0.0, 0.115, 0.028 },   // Top-left
-    Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
     Point3d { 0.0, -0.115, 0.028 },  // Top-right
+    Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
     Point3d { 0.0, 0.115, -0.028 }   // Bottom-left
 };
 constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
@@ -78,5 +78,4 @@ constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
     Point3d { 0.0, -0.0675, -0.028 }, // Bottom-right
     Point3d { 0.0, 0.0675, -0.028 }   // Bottom-left
 };
-
 }
