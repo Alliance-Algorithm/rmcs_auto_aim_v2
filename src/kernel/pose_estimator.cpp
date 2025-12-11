@@ -65,9 +65,9 @@ struct PoseEstimator::Impl {
 
         auto shape = [](ArmorShape shape) -> std::array<Point3d, 4> {
             if (shape == ArmorShape::SMALL) {
-                return rmcs::kLargeArmorShapeOpenCV;
-            } else {
                 return rmcs::kSmallArmorShapeOpenCV;
+            } else {
+                return rmcs::kLargeArmorShapeOpenCV;
             }
         };
 

@@ -38,6 +38,7 @@ static auto cast_opencv_matrix(std::array<std::array<scale, cols>, rows>& source
 
 template <typename Input, typename Output>
 concept ConvertibleTo = std::is_convertible_v<Input, Output>;
+
 /*  @Note: Row-Major */
 template <typename input_type, std::size_t N, typename output_type, std::size_t rows,
     std::size_t cols>
