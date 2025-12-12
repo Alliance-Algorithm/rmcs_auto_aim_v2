@@ -1,6 +1,5 @@
 use_visualization: true
 use_painted_image: true
-open_solved_pnp_visualization: true
 
 capturer:
   show_loss_framerate: false

@@ -50,10 +50,9 @@ auto main() -> int {
 
     /// Configure
     ///
-    auto configuration                 = util::configuration();
-    auto use_visualization             = configuration["use_visualization"].as<bool>();
-    auto use_painted_image             = configuration["use_painted_image"].as<bool>();
-    auto open_solved_pnp_visualization = configuration["open_solved_pnp_visualization"].as<bool>();
+    auto configuration     = util::configuration();
+    auto use_visualization = configuration["use_visualization"].as<bool>();
+    auto use_painted_image = configuration["use_painted_image"].as<bool>();
 
     // CAPTURER
     {
@@ -84,8 +83,6 @@ auto main() -> int {
         auto result = visualization.initialize(config, rclcpp_node);
         handle_result("visualization", result);
     }
-
-    rmcs::Printer printer { "rmcs_auto_aim" };
 
     for (;;) {
         if (!util::get_running()) [[unlikely]]

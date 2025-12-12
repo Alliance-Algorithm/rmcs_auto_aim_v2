@@ -17,8 +17,6 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto solve_pnp(std::optional<std::vector<Armor2D>> const&) const noexcept -> void;
-
     auto visualize(RclcppNode& visual_node) -> void;
 
     auto solve_pnp(std::optional<std::vector<Armor2D>> const&) const noexcept
