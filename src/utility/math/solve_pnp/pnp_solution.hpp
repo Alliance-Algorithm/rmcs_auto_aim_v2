@@ -4,8 +4,6 @@
 
 #include "utility/math/linear.hpp"
 #include "utility/math/point.hpp"
-#include "utility/rclcpp/node.hpp"
-#include "utility/rclcpp/visual/armor.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
 
@@ -28,13 +26,8 @@ struct PnpSolution {
         CampColor color;
     } result;
 
-    std::unique_ptr<visual::Armor> visualized_armor;
-    std::unique_ptr<visual::Armor> target_armor;
-
     PnpSolution() noexcept = default;
 
     auto solve() noexcept -> void;
-
-    auto visualize(RclcppNode&) noexcept -> void;
 };
 }

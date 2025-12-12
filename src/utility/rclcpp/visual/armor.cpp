@@ -26,7 +26,7 @@ struct Armor::Impl {
     static auto create_rclcpp_publisher(Config const& config)
         -> std::shared_ptr<rclcpp::Publisher<MarkerArray>> {
 
-        const auto topic_name { config.rclcpp.get_pub_topic_prefix() + config.id };
+        const auto topic_name { config.rclcpp.get_pub_topic_prefix() + config.name };
 
         if (!config.rclcpp.details) {
             util::panic("Rclcpp node details are required in config to create publisher.");
@@ -36,14 +36,14 @@ struct Armor::Impl {
     }
 
     auto initialize() -> void {
-        if (!prefix::check_naming(config->id) || !prefix::check_naming(config->tf)) {
-            util::panic(
-                std::format("Not a valid naming for armor id or tf: {}", prefix::naming_standard));
+        if (!prefix::check_naming(config->name) || !prefix::check_naming(config->tf)) {
+            util::panic(std::format(
+                "Not a valid naming for armor name or tf: {}", prefix::naming_standard));
         }
 
         marker.header.frame_id = config->tf;
-        marker.ns              = config->id;
-        marker.id              = 0;
+        marker.ns              = config->name;
+        marker.id              = config->id;
         marker.type            = Marker::CUBE;
         marker.action          = Marker::ADD;
         marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
@@ -66,8 +66,8 @@ struct Armor::Impl {
         }
 
         arrow_marker.header.frame_id = config->tf;
-        arrow_marker.ns              = config->id + std::string("_arrow");
-        arrow_marker.id              = 1;
+        arrow_marker.ns              = config->name + std::string("_arrow");
+        arrow_marker.id              = config->id;
         arrow_marker.type            = Marker::ARROW;
         arrow_marker.action          = Marker::ADD;
         arrow_marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
@@ -88,14 +88,9 @@ struct Armor::Impl {
         }
     }
 
-    auto set_external_rclcpp_publisher(
-        std::shared_ptr<rclcpp::Publisher<MarkerArray>> const& _rclcpp_pub) -> void {
-        rclcpp_pub = _rclcpp_pub;
-    }
-
     auto update() noexcept -> void {
         if (!rclcpp_pub) {
-            const auto topic_name { config->rclcpp.get_pub_topic_prefix() + config->id };
+            const auto topic_name { config->rclcpp.get_pub_topic_prefix() + config->name };
             rclcpp_pub = config->rclcpp.details->make_pub<MarkerArray>(topic_name, qos::debug);
         }
 
@@ -125,11 +120,5 @@ auto Armor::impl_move(const Translation& t, const Orientation& q) noexcept -> vo
 
 Armor::Armor(const Config& config) noexcept
     : pimpl { std::make_unique<Impl>(config) } { }
-
-Armor::Armor(
-    Config const& config, std::shared_ptr<rclcpp::Publisher<MarkerArray>> const& publisher) noexcept
-    : pimpl { std::make_unique<Impl>(config) } {
-    pimpl->set_external_rclcpp_publisher(publisher);
-}
 
 Armor::~Armor() noexcept = default;

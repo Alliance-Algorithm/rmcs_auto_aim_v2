@@ -3,6 +3,8 @@
 #include "kernel/transform_tree.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/solve_pnp.hpp"
+#include "utility/math/solve_pnp/pnp_solution.hpp"
+#include "utility/rclcpp/visual/armor.hpp"
 #include "utility/serializable.hpp"
 #include "utility/yaml/tf.hpp"
 
@@ -17,16 +19,17 @@ struct PoseEstimator::Impl {
         std::array<float, 9> camera_matrix;
         std::array<float, 5> distort_coeff;
 
-        // clang-format off
         constexpr static std::tuple metas {
-            &Config::camera_matrix, "camera_matrix",
-            &Config::distort_coeff, "distort_coeff",
+            &Config::camera_matrix,
+            "camera_matrix",
+            &Config::distort_coeff,
+            "distort_coeff",
         };
-        // clang-format on
     };
-    Config config;
 
-    std::vector<PnpSolution> pnp_solutions {};
+    Config config;
+    PnpSolution pnp_solution {};
+    std::vector<std::unique_ptr<visual::Armor>> visual_armors {};
 
     Printer log { "PoseEstimator" };
 
@@ -35,7 +38,6 @@ struct PoseEstimator::Impl {
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
-
         {
             auto result = serialize_from<tf::AutoAim>(yaml["transforms"]);
             if (!result.has_value()
@@ -44,26 +46,28 @@ struct PoseEstimator::Impl {
                     + util::to_string(result.error()) };
             }
         }
+        {
+            pnp_solution.input.camera_matrix =
+                reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
+            pnp_solution.input.distort_coeff =
+                reshape_array<float, 5, double>(config.distort_coeff);
+        }
 
         return {};
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
 
-    auto solve_pnp(std::optional<std::vector<Armor2D>> const& armors) noexcept -> void {
-        if (!armors.has_value()) return;
-
+    auto solve_pnp(std::optional<std::vector<Armor2D>> const& armors) noexcept
+        -> std::optional<std::vector<Armor3D>> {
+        if (!armors.has_value()) return std::nullopt;
         auto _armors = (*armors);
-        pnp_solutions.reserve(_armors.size());
-        pnp_solutions.resize(_armors.size());
 
-        auto color = [](ArmorColor const& color) -> CampColor {
-            if (color == ArmorColor::BLUE) return CampColor::BLUE;
-            if (color == ArmorColor::RED) return CampColor::RED;
-            return CampColor::UNKNOWN;
-        };
+        auto new_size = _armors.size();
+        visual_armors.reserve(new_size);
+        visual_armors.resize(new_size);
 
-        auto shape = [](ArmorShape shape) -> std::array<Point3d, 4> {
+        auto armor_shape = [](ArmorShape shape) {
             if (shape == ArmorShape::SMALL) {
                 return rmcs::kSmallArmorShapeOpenCV;
             } else {
@@ -71,30 +75,30 @@ struct PoseEstimator::Impl {
             }
         };
 
-        auto const _camera_matrix = reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
-        auto const _distort_coeff = reshape_array<float, 5, double>(config.distort_coeff);
+        auto armors_in_camera = std::vector<Armor3D> {};
 
-        std::ranges::for_each(std::views::zip(_armors, pnp_solutions),
-            [&color, &shape, &_camera_matrix, &_distort_coeff](auto&& pair) {
-                auto const& [armor, pnp_solution] = pair;
+        std::ranges::for_each(_armors | std::views::enumerate,
+            [&armors_in_camera, &armor_shape, this](auto const& item) {
+                auto [i, armor] = item;
 
-                PnpSolution& solution = const_cast<PnpSolution&>(pnp_solution);
+                pnp_solution.input.armor_shape = armor_shape(armor.shape);
+                pnp_solution.input.genre       = armor.genre;
+                pnp_solution.input.color       = armor_color2camp_color(armor.color);
+                std::ranges::copy(armor.corners(), pnp_solution.input.armor_detection.begin());
 
-                solution.input.armor_shape = shape(armor.shape);
-                solution.input.genre       = armor.genre;
-                solution.input.color       = color(armor.color);
-                std::ranges::copy(armor.corners(), solution.input.armor_detection.begin());
-                solution.input.camera_matrix = _camera_matrix;
-                solution.input.distort_coeff = _distort_coeff;
+                pnp_solution.solve();
 
-                solution.solve();
+                auto armor_3d  = Armor3D {};
+                armor_3d.genre = pnp_solution.result.genre;
+                armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
+                armor_3d.id    = i;
+                pnp_solution.result.translation.copy_to(armor_3d.translation);
+                pnp_solution.result.orientation.copy_to(armor_3d.orientation);
+
+                armors_in_camera.emplace_back(armor_3d);
             });
-    }
 
-    auto visualize(RclcppNode& visual_node) -> void {
-        for (auto& solution : pnp_solutions) {
-            solution.visualize(visual_node);
-        }
+        return armors_in_camera;
     }
 };
 
@@ -103,12 +107,9 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-void PoseEstimator::solve_pnp(std::optional<std::vector<Armor2D>> const& armors) const noexcept {
+auto PoseEstimator::solve_pnp(std::optional<std::vector<Armor2D>> const& armors) const noexcept
+    -> std::optional<std::vector<Armor3D>> {
     return pimpl->solve_pnp(armors);
-}
-
-auto PoseEstimator::visualize(RclcppNode& visual_node) -> void {
-    return pimpl->visualize(visual_node);
 }
 
 PoseEstimator::PoseEstimator() noexcept

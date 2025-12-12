@@ -39,19 +39,3 @@ auto PnpSolution::solve() noexcept -> void {
     result.orientation =
         Eigen::Quaterniond(ros2opencv_rotation(rotation_eigen_opencv)).normalized();
 }
-
-auto PnpSolution::visualize(RclcppNode& visual_node) noexcept -> void {
-    using namespace visual;
-    if (!visualized_armor) {
-        auto const config = Armor::Config {
-            .rclcpp = visual_node,
-            .device = result.genre,
-            .camp   = result.color,
-            .id     = "solved_pnp_armor",
-            .tf     = "camera_link",
-        };
-        visualized_armor = std::make_unique<visual::Armor>(config);
-    }
-    visualized_armor->move(result.translation, result.orientation);
-    visualized_armor->update();
-}
