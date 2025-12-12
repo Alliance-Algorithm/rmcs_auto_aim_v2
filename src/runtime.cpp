@@ -48,10 +48,9 @@ auto main() -> int try {
 
     /// Configure
     ///
-    auto configuration                 = util::configuration();
-    auto use_visualization             = configuration["use_visualization"].as<bool>();
-    auto use_painted_image             = configuration["use_painted_image"].as<bool>();
-    auto open_solved_pnp_visualization = configuration["open_solved_pnp_visualization"].as<bool>();
+    auto configuration     = util::configuration();
+    auto use_visualization = configuration["use_visualization"].as<bool>();
+    auto use_painted_image = configuration["use_painted_image"].as<bool>();
 
     // CAPTURER
     {
@@ -79,11 +78,9 @@ auto main() -> int try {
     // VISUALIZATION
     if (use_visualization) {
         auto config = configuration["visualization"];
-        auto result = visualization.initialize(config);
+        auto result = visualization.initialize(config, rclcpp_node);
         handle_result("visualization", result);
     }
-
-    rmcs::Printer printer { "rmcs_auto_aim" };
 
     for (;;) {
         if (!util::get_running()) [[unlikely]]
@@ -104,19 +101,19 @@ auto main() -> int try {
                     util::draw(*image, armor_2d);
             }
 
-            if (visualization.initialized()) {
-                visualization.send_image(*image);
-            }
-
             using namespace rmcs::util;
             control_system.update_state({
                 .timestamp = Clock::now(),
             });
 
-            pose_estimator.solve_pnp(armors_2d);
+            auto armors_3d = pose_estimator.solve_pnp(armors_2d);
+            if (!armors_3d.has_value()) {
+                continue;
+            }
 
-            if (open_solved_pnp_visualization) {
-                pose_estimator.visualize(rclcpp_node);
+            if (visualization.initialized()) {
+                visualization.send_image(*image);
+                std::ignore = visualization.visualize_armors(*armors_3d);
             }
         }
 

@@ -1,6 +1,8 @@
 #pragma once
 #include "utility/math/point.hpp"
+#include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
+#include <eigen3/Eigen/Geometry>
 #include <generator>
 #include <opencv2/core/types.hpp>
 
@@ -11,6 +13,17 @@ constexpr auto get_enum_name(ArmorColor color) noexcept {
     constexpr std::array details { "DARK", "RED", "BLUE", "MIX" };
     return details[std::to_underlying(color)];
 }
+inline constexpr auto armor_color2camp_color(ArmorColor const& color) -> CampColor {
+    if (color == ArmorColor::BLUE) return CampColor::BLUE;
+    if (color == ArmorColor::RED) return CampColor::RED;
+    return CampColor::UNKNOWN;
+};
+
+inline constexpr auto camp_color2armor_color(CampColor const& color) -> ArmorColor {
+    if (color == CampColor::BLUE) return ArmorColor::BLUE;
+    if (color == CampColor::RED) return ArmorColor::RED;
+    return ArmorColor::MIX;
+};
 
 enum class ArmorShape : bool { LARGE, SMALL };
 constexpr auto get_enum_name(ArmorShape shape) noexcept {
@@ -41,6 +54,15 @@ struct Armor2D {
         co_yield br;
         co_yield bl;
     }
+};
+
+struct Armor3D {
+    ArmorGenre genre;
+    ArmorColor color;
+    int id;
+
+    Eigen::Vector3d translation;
+    Eigen::Quaterniond orientation;
 };
 
 struct Armor { };
