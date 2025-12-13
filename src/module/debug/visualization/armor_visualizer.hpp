@@ -1,7 +1,5 @@
 #pragma once
 
-#include <expected>
-
 #include "utility/pimpl.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
@@ -15,6 +13,6 @@ class ArmorVisualizer {
 public:
     auto initialize(util::RclcppNode&) noexcept -> void;
 
-    auto visualize(std::span<Armor3D> const&) -> std::expected<void, std::string>;
+    auto visualize(std::span<Armor3D> const&) -> bool;
 };
 }

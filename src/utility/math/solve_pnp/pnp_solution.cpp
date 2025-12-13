@@ -37,5 +37,5 @@ auto PnpSolution::solve() noexcept -> void {
     result.color       = input.color;
     result.translation = opencv2ros_position(tran_vec_eigen_opencv);
     result.orientation =
-        Eigen::Quaterniond(ros2opencv_rotation(rotation_eigen_opencv)).normalized();
+        Eigen::Quaterniond(opencv2ros_rotation(rotation_eigen_opencv)).normalized();
 }

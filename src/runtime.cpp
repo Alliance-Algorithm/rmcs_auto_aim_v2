@@ -6,7 +6,6 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
-#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
