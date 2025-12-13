@@ -19,9 +19,9 @@ struct ArmorVisualizer::Impl final {
         node = std::ref(visual_node);
     }
 
-    auto visualize(std::span<Armor3D> const& _armors) -> std::expected<void, std::string> {
+    auto visualize(std::span<Armor3D> const& _armors) -> bool {
         if (!node.has_value()) {
-            return std::unexpected { "Visual node need to be initialized!" };
+            return false;
         }
 
         auto new_size = _armors.size();
@@ -57,7 +57,7 @@ struct ArmorVisualizer::Impl final {
             armor_ptr->update();
         }
 
-        return {};
+        return true;
     }
 
     static auto camp(ArmorColor const& color) -> CampColor {
@@ -79,8 +79,7 @@ auto ArmorVisualizer::initialize(util::RclcppNode& visual_node) noexcept -> void
     return pimpl->initialize(visual_node);
 }
 
-auto ArmorVisualizer::visualize(std::span<Armor3D> const& armors)
-    -> std::expected<void, std::string> {
+auto ArmorVisualizer::visualize(std::span<Armor3D> const& armors) -> bool {
     return pimpl->visualize(armors);
 }
 

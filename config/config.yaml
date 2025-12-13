@@ -66,7 +66,7 @@ pose_estimator:
 
 visualization:
   framerate: 60
-  monitor_host: "192.168.31.79" 
+  monitor_host: "192.168.167.79" 
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
   show_armors: true
