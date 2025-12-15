@@ -101,10 +101,6 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            auto armor_3d = std::ignore;
-
-            auto future_state = std::ignore;
-
             using namespace rmcs::util;
 
             control_system.update_state({
