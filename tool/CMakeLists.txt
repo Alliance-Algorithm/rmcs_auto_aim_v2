@@ -7,28 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
-find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 find_package(yaml-cpp REQUIRED)
-find_package(OpenVINO REQUIRED)
-find_package(OpenCV 4.5 REQUIRED)
-
-find_package(hikcamera QUIET)
-
-set(HIKCAMERA_AVAILABLE OFF)
-if(hikcamera_FOUND)
-    set(HIKCAMERA_AVAILABLE ON)
-elseif(DEFINED hikcamera_LIBRARIES)
-    set(HIKCAMERA_AVAILABLE ON)
-endif()
+find_package(OpenCV 4 REQUIRED)
 
 include_directories(
     ${RMCS_SRC_DIR}
-    ${hikcamera_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
@@ -54,7 +41,20 @@ target_link_libraries(
     ${geometry_msgs_LIBRARIES}
 )
 
+find_package(hikcamera QUIET)
+
+set(HIKCAMERA_AVAILABLE OFF)
+if(hikcamera_FOUND)
+    set(HIKCAMERA_AVAILABLE ON)
+elseif(DEFINED hikcamera_LIBRARIES)
+    set(HIKCAMERA_AVAILABLE ON)
+endif()
+
 if(HIKCAMERA_AVAILABLE)
+    include_directories(
+        ${hikcamera_INCLUDE_DIRS}
+    )
+
     # Hikcamera
     add_executable(
         hikcamera
