@@ -41,7 +41,7 @@ auto panic(const std::string& message, const std::source_location& loc) -> void 
 
     std::cerr << panic_tail << std::endl;
 
-    std::abort();
+    throw std::runtime_error { "PANIC HERE" };
 }
 
 } // namespace rmcs::util
