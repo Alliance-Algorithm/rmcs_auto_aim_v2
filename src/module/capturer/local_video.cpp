@@ -61,13 +61,11 @@ struct LocalVideo::Impl {
 
     auto connected() const noexcept -> bool { return capturer.has_value() && capturer->isOpened(); }
 
-    auto disconnect() noexcept -> std::expected<void, std::string> {
+    auto disconnect() noexcept -> void {
         if (capturer.has_value()) {
             capturer.reset();
         }
         interval_duration = std::chrono::nanoseconds { 0 };
-
-        return {};
     }
 
     auto wait_image() noexcept -> std::expected<std::unique_ptr<Image>, std::string> {
@@ -122,9 +120,7 @@ auto LocalVideo::connect() noexcept -> std::expected<void, std::string> { return
 
 auto LocalVideo::connected() const noexcept -> bool { return pimpl->connected(); }
 
-auto LocalVideo::disconnect() noexcept -> std::expected<void, std::string> {
-    return pimpl->disconnect();
-}
+auto LocalVideo::disconnect() noexcept -> void { return pimpl->disconnect(); }
 
 LocalVideo::LocalVideo() noexcept
     : pimpl { std::make_unique<Impl>() } { }

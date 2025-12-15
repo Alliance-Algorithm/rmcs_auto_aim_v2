@@ -4,7 +4,6 @@
 #include "utility/logging/printer.hpp"
 #include "utility/math/solve_pnp.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
-#include "utility/rclcpp/visual/armor.hpp"
 #include "utility/serializable.hpp"
 #include "utility/yaml/tf.hpp"
 
