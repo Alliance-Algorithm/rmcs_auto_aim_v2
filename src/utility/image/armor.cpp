@@ -19,8 +19,6 @@ auto draw(Image& canvas, const Armor2D& armor) noexcept -> void {
     auto genre = get_enum_name(armor.genre);
     auto shape = get_enum_name(armor.shape);
 
-    auto conf_str = std::format("{:.2f} {} {}", armor.confidence, genre, shape);
-
     auto first    = cv::Point2f {};
     auto prev     = cv::Point2f {};
     auto is_first = true;
@@ -41,12 +39,18 @@ auto draw(Image& canvas, const Armor2D& armor) noexcept -> void {
         cv::line(opencv_mat, prev, first, color, 2, cv::LINE_AA);
     }
 
-    const auto thickness = 2;
+    const auto thickness = 1;
     const auto font      = cv::FONT_HERSHEY_SIMPLEX;
     const auto scale     = 0.6;
+    const auto white     = cv::Scalar { 255, 255, 255 };
 
-    cv::putText(opencv_mat, conf_str, armor.tl + cv::Point2f { 0, -5 }, font, scale, color,
-        thickness, cv::LINE_AA);
+    cv::putText(opencv_mat, "TR", armor.tr, font, scale, white, thickness, cv::LINE_AA);
+    cv::putText(opencv_mat, "BL", armor.bl, font, scale, white, thickness, cv::LINE_AA);
+    cv::putText(opencv_mat, "BR", armor.br, font, scale, white, thickness, cv::LINE_AA);
+
+    auto info = std::format("{:.2f} {} {}", armor.confidence, genre, shape);
+    cv::putText(opencv_mat, info, armor.tl + cv::Point2f { 0, -5 }, font, scale, white, thickness,
+        cv::LINE_AA);
 }
 
 }
