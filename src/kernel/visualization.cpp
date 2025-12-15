@@ -128,8 +128,8 @@ struct Visualization::Impl {
 
         return session->push_frame(mat);
     }
-
     auto visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+        if (!is_initialized) return false;
         return armor_visualizer->visualize(armors);
     }
 };
