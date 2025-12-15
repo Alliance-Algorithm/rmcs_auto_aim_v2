@@ -29,8 +29,6 @@ struct Visualization::Impl {
 
         util::string_t stream_type = "RTP_JEPG";
 
-        bool show_armors = false;
-
         static constexpr auto metas = std::tuple {
             &Config::framerate,
             "framerate",
@@ -40,8 +38,6 @@ struct Visualization::Impl {
             "monitor_port",
             &Config::stream_type,
             "stream_type",
-            &Config::show_armors,
-            "show_armors",
         };
     };
 

@@ -69,4 +69,3 @@ visualization:
   monitor_host: "127.0.0.1"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
-  show_armors: true

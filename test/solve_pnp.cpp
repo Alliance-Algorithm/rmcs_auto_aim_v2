@@ -25,6 +25,10 @@ using Eigen::Vector2d;
 using Eigen::Vector3d;
 
 // --- 资源路径 ---
+// 测试资源路径配置:
+// - 优先使用环境变量 TEST_ASSETS_ROOT
+// - 未设置时默认使用 /tmp/auto_aim
+// - 运行前需执行: cd test && ./download_assets.sh
 static std::filesystem::path asset_root() {
     if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
         return std::filesystem::path { env };
