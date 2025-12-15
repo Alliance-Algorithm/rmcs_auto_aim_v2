@@ -29,7 +29,6 @@ struct PoseEstimator::Impl {
 
     Config config;
     PnpSolution pnp_solution {};
-    std::vector<std::unique_ptr<visual::Armor>> visual_armors {};
 
     Printer log { "PoseEstimator" };
 
@@ -61,11 +60,7 @@ struct PoseEstimator::Impl {
     auto solve_pnp(std::optional<std::vector<Armor2D>> const& armors) noexcept
         -> std::optional<std::vector<Armor3D>> {
         if (!armors.has_value()) return std::nullopt;
-        auto _armors = (*armors);
-
-        auto new_size = _armors.size();
-        visual_armors.reserve(new_size);
-        visual_armors.resize(new_size);
+        auto const& _armors = *armors;
 
         auto armor_shape = [](ArmorShape shape) {
             if (shape == ArmorShape::SMALL) {
