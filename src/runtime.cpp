@@ -17,7 +17,7 @@
 
 using namespace rmcs;
 
-auto main() -> int try {
+auto main() -> int {
     using namespace std::chrono_literals;
 
     std::signal(SIGINT, [](int) { util::set_running(false); });
@@ -117,7 +117,4 @@ auto main() -> int try {
     }
 
     rclcpp_node.shutdown();
-} catch (const std::exception& e) {
-    using namespace rmcs;
-    util::panic(std::format("exception uncatched | {}", e.what()));
 }
