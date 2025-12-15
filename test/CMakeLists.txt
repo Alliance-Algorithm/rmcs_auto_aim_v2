@@ -117,24 +117,6 @@ ament_add_gtest(
     ${TEST_DIR}/transform_communication.cpp
 )
 
-if(NOT DEFINED BUILD_VIS_EXAMPLE OR BUILD_VIS_EXAMPLE)
-    add_executable(
-        example_visualization
-        ${TEST_DIR}/visualization.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/visual/posture.cpp
-        ${RMCS_SRC_DIR}/utility/panic.cpp
-        ${RMCS_SRC_DIR}/utility/math/solve_armors.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
-    )
-    target_link_libraries(
-        example_visualization
-        rclcpp::rclcpp
-        ${visualization_msgs_LIBRARIES}
-        ${geometry_msgs_LIBRARIES}
-    )
-endif()
-
 if(HIKCAMERA_AVAILABLE)
     # Hikcamera
     add_executable(
