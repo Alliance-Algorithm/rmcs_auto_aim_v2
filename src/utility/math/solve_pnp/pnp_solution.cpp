@@ -22,8 +22,10 @@ auto PnpSolution::solve() noexcept -> void {
 
     auto rota_vec = cv::Vec3d {};
     auto tran_vec = cv::Vec3d {};
-    cv::solvePnP(armor_shape, armor_detection, camera_matrix, distort_coeff, rota_vec, tran_vec,
-        false, cv::SOLVEPNP_IPPE);
+    auto success  = cv::solvePnP(armor_shape, armor_detection, camera_matrix, distort_coeff,
+         rota_vec, tran_vec, false, cv::SOLVEPNP_IPPE);
+
+    if (!success) return;
 
     auto tran_vec_eigen_opencv = Eigen::Vector3d {};
     cv::cv2eigen(tran_vec, tran_vec_eigen_opencv);
