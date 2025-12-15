@@ -25,12 +25,10 @@ struct Armor::Impl {
 
     static auto create_rclcpp_publisher(Config const& config)
         -> std::shared_ptr<rclcpp::Publisher<MarkerArray>> {
-
         const auto topic_name { config.rclcpp.get_pub_topic_prefix() + config.name };
 
-        if (!config.rclcpp.details) {
+        if (!config.rclcpp.details)
             util::panic("Rclcpp node details are required in config to create publisher.");
-        }
 
         return config.rclcpp.details->make_pub<MarkerArray>(topic_name, qos::debug);
     }
@@ -90,8 +88,7 @@ struct Armor::Impl {
 
     auto update() noexcept -> void {
         if (!rclcpp_pub) {
-            const auto topic_name { config->rclcpp.get_pub_topic_prefix() + config->name };
-            rclcpp_pub = config->rclcpp.details->make_pub<MarkerArray>(topic_name, qos::debug);
+            rclcpp_pub = create_rclcpp_publisher(*config);
         }
 
         MarkerArray visual_marker;
