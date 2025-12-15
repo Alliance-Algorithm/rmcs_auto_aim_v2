@@ -51,6 +51,7 @@ struct ArmorVisualizer::Impl final {
 
                 shadow.genre = input.genre;
                 shadow.color = input.color;
+                shadow.id    = input.id;
             }
 
             armor_ptr->move(input.translation, input.orientation);
