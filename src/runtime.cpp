@@ -45,7 +45,6 @@ auto main() -> int {
     auto visualization  = kernel::Visualization {};
 
     auto control_system = kernel::ControlSystem {};
-    auto control_system = kernel::ControlSystem {};
 
     /// Configure
     ///
@@ -107,7 +106,7 @@ auto main() -> int {
             auto future_state = std::ignore;
 
             using namespace rmcs::util;
-            
+
             control_system.update_state({
                 .timestamp = Clock::now(),
             });
