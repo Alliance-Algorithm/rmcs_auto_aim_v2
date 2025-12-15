@@ -39,8 +39,11 @@ auto main() -> int {
             .name   = "visual_test_armor",
             .tf     = "camera_link",
         };
-        std::ranges::for_each(
-            armors, [&](auto& armor) { armor = std::make_unique<visual::Armor>(config); });
+
+        for (auto i = 0; i < (int)armors.size(); ++i) {
+            config.id = i;
+            armors[i] = std::make_unique<visual::Armor>(config);
+        }
     }
 
     auto posture = std::make_unique<Posture>( //
