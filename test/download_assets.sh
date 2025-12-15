@@ -3,16 +3,14 @@
 # 设置：如果任何命令失败，立即退出，对管道也生效
 set -eo pipefail
 
-# --- 全局变量 ---
-DOWNLOAD_DIR="/tmp/auto_aim"
-# 初始化为空字符串，表示当前没有文件在下载**
-CURRENT_DOWNLOAD_PATH=""
-# ------------------
-
 # --- 配置 ---
-# 1. 获取脚本自身的目录，用于定位配置文件
+#  获取脚本自身的目录，用于定位配置文件
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 CONFIG_YML="$SCRIPT_DIR/asset.yml"
+# 资源存放目录，优先使用 TEST_ASSETS_ROOT，默认为 /tmp/auto_aim（与测试代码一致）
+DOWNLOAD_DIR="${TEST_ASSETS_ROOT:-/tmp/auto_aim}"
+# 初始化为空字符串，表示当前没有文件在下载**
+CURRENT_DOWNLOAD_PATH=""
 # -----------------
 
 # --- 信号处理函数 ---
@@ -43,14 +41,16 @@ check_dependencies() {
 download_asset() {
     local asset_id="$1"
     local url="$2"
-    local local_path="$DOWNLOAD_DIR/$asset_id"
+    local filename
+    filename=$(basename "$url")
+    local local_path="$DOWNLOAD_DIR/$filename"
     
     if [ -f "$local_path" ]; then
         echo "  [SKIP] $asset_id 已存在。"
         return 0
     fi
     
-    echo "  [INFO] 正在下载 $asset_id..."
+    echo "  [INFO] 正在下载 $asset_id -> $filename..."
  
     CURRENT_DOWNLOAD_PATH="$local_path"
 

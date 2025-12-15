@@ -1,12 +1,13 @@
 #include <algorithm> // for std::clamp, std::replace
+#include <cstdlib>   // for std::getenv
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <iomanip>  // for std::setprecision
 #include <iostream> // for structured output
-#include <unordered_map>
+#include <string>
+#include <string_view>
 #include <vector>
 
-#include <curl/curl.h>
 #include <eigen3/Eigen/Dense>
 #include <opencv2/imgcodecs.hpp>
 #include <yaml-cpp/yaml.h>
@@ -23,59 +24,41 @@ using Eigen::Quaterniond;
 using Eigen::Vector2d;
 using Eigen::Vector3d;
 
+// --- 资源路径 ---
+static std::filesystem::path asset_root() {
+    if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
+        return std::filesystem::path { env };
+    }
+    
+    const char* default_path = "/tmp/auto_aim"; 
+    
+    return std::filesystem::path { default_path };
+}
+
+static std::filesystem::path asset_path(std::string_view filename) {
+    return asset_root() / filename;
+}
+
 // --- 测试数据 ---
 struct PnpTestCase {
-    std::string url;
+    std::string filename;
     double expected_distance_m; // 预期的目标距离（米）
     double expected_angle_deg;  // 预期的偏航角（度，0 或 45）
 };
 
-// 所有 URL 测试数据
+// 所有本地测试数据
 const std::vector<PnpTestCase> kPnpTestCases = {
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-0.5m.jpg", 0.5, 0.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-0.5m-45degree.jpg", 0.5, 45.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-1.0m.jpg", 1.0, 0.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-1.0m-45degree.jpg", 1.0, 45.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-2.0m.jpg", 2.0, 0.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-2.0m-45degree.jpg", 2.0, 45.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-3.0m.jpg", 3.0, 0.0 },
-    { "https://heyeuuu19.com/auto_aim/pnp/blue-3.0m-45degree.jpg", 3.0, 45.0 },
+    { "blue-0.5m.jpg", 0.5, 0.0 },
+    { "blue-0.5m-45degree.jpg", 0.5, 45.0 },
+    { "blue-1.0m.jpg", 1.0, 0.0 },
+    { "blue-1.0m-45degree.jpg", 1.0, 45.0 },
+    { "blue-2.0m.jpg", 2.0, 0.0 },
+    { "blue-2.0m-45degree.jpg", 2.0, 45.0 },
+    { "blue-3.0m.jpg", 3.0, 0.0 },
+    { "blue-3.0m-45degree.jpg", 3.0, 45.0 },
 };
 
-// --- 网络/模型推理辅助函数 ---
-static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    size_t total_size          = size * nmemb;
-    std::vector<uchar>* buffer = static_cast<std::vector<uchar>*>(userp);
-    buffer->insert(buffer->end(), (uchar*)contents, (uchar*)contents + total_size);
-    return total_size;
-}
-
-std::vector<uchar> download_image_to_buffer(const std::string& url) {
-    CURL* curl;
-    CURLcode res;
-    std::vector<uchar> buffer;
-
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    curl = curl_easy_init();
-
-    if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-
-        res = curl_easy_perform(curl);
-        if (res != CURLE_OK) {
-            buffer.clear();
-        }
-
-        curl_easy_cleanup(curl);
-    }
-    curl_global_cleanup();
-
-    return buffer;
-}
+// --- 资源读取辅助函数 ---
 // --- 核心辅助函数：相机/装甲板参数 ---
 // 辅助函数：创建测试用的相机内参
 PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
@@ -99,7 +82,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
 // [Top Left, Top Right, Bottom Right, Bottom Left]
 std::array<Point3d, 4> create_small_armor_shape() { return rmcs::kSmallArmorShapeOpenCV; }
 
-std::array<Point2d, 4> infer_armor_detection_from_url(std::string_view image_url) {
+std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename) {
     using namespace rmcs::identifier;
 
     constexpr auto config_yaml = R"(
@@ -128,14 +111,10 @@ std::array<Point2d, 4> infer_armor_detection_from_url(std::string_view image_url
         throw std::runtime_error("Failed to configure OpenVinoNet: " + cfg_result.error());
     }
 
-    const auto buffer = download_image_to_buffer(std::string { image_url });
-    if (buffer.empty()) {
-        throw std::runtime_error("Failed to download image from url: " + std::string { image_url });
-    }
-    auto cv_mat = cv::imdecode(buffer, cv::IMREAD_COLOR);
+    const auto full_path = asset_path(filename);
+    auto cv_mat          = cv::imread(full_path.string(), cv::IMREAD_COLOR);
     if (cv_mat.empty()) {
-        throw std::runtime_error(
-            "Failed to decode image from buffer for url: " + std::string { image_url });
+        throw std::runtime_error("Failed to read image: " + full_path.string());
     }
 
     auto image          = rmcs::Image {};
@@ -147,7 +126,7 @@ std::array<Point2d, 4> infer_armor_detection_from_url(std::string_view image_url
     }
     const auto& armors = infer_result.value();
     if (armors.empty()) {
-        throw std::runtime_error("No armor detected from image: " + std::string { image_url });
+        throw std::runtime_error("No armor detected from image: " + full_path.string());
     }
 
     const auto& armor = armors.front();
@@ -158,17 +137,6 @@ std::array<Point2d, 4> infer_armor_detection_from_url(std::string_view image_url
         Point2d { armor.br() }, // 2
         Point2d { armor.bl() }, // 3
     };
-}
-
-// 缓存推理结果，避免重复下载和推理
-std::array<Point2d, 4> cached_detection(std::string_view url) {
-    static std::unordered_map<std::string, std::array<Point2d, 4>> cache;
-    if (auto it = cache.find(std::string { url }); it != cache.end()) {
-        return it->second;
-    }
-    auto det = infer_armor_detection_from_url(url);
-    cache.emplace(url, det);
-    return det;
 }
 
 // --- PnP 结果处理辅助函数 ---
@@ -222,20 +190,21 @@ protected:
         solution.input             = create_test_input();
         solution.input.armor_shape = create_small_armor_shape();
 
-        const auto detection           = cached_detection(test_case.url);
+        const auto detection           = infer_armor_detection_from_file(test_case.filename);
         solution.input.armor_detection = detection;
 
         std::cerr << std::fixed << std::setprecision(1);
-        std::cerr << "[2D_POINTS] | URL: " << test_case.url << " | TL(" << detection[0].x << ","
-                  << detection[0].y << ")"
+        std::cerr << "[2D_POINTS] | FILE: " << test_case.filename << " | TL(" << detection[0].x
+                  << "," << detection[0].y << ")"
                   << " TR(" << detection[1].x << "," << detection[1].y << ")"
                   << " BR(" << detection[2].x << "," << detection[2].y << ")"
                   << " BL(" << detection[3].x << "," << detection[3].y << ")" << std::endl;
         std::cerr << std::defaultfloat; // 恢复默认浮点格式
 
-        SCOPED_TRACE(test_case.url);
+        SCOPED_TRACE(test_case.filename);
 
-        EXPECT_NO_THROW(solution.solve()) << "Pnp solve failed for URL: " << test_case.url;
+        EXPECT_NO_THROW(solution.solve())
+            << "Pnp solve failed for file: " << asset_path(test_case.filename);
 
         // --- 解算结果处理 ---
         const auto& result = solution.result;
@@ -253,7 +222,7 @@ protected:
     // 打印结构化报告
     void PrintStructuredReport() const {
         std::cerr << std::fixed << std::setprecision(4);
-        std::cerr << "[TEST_REPORT] |" << std::left << std::setw(50) << test_case.url << "|";
+        std::cerr << "[TEST_REPORT] |" << std::left << std::setw(50) << test_case.filename << "|";
 
         // 距离信息
         std::cerr << " DISTANCE: " << std::setw(6) << actual_distance << "m (Exp: " << std::setw(4)
@@ -287,22 +256,18 @@ TEST_P(PnpSolverParameterizedTest, DistanceAndAngleAccuracy) {
 
     EXPECT_LT(this->distance_error, max_dist_error)
         << "Distance error (" << this->distance_error << "m) exceeded " << max_dist_error
-        << "m for " << GetParam().url;
+        << "m for " << GetParam().filename;
 
     // 2. 角度断言 (15度误差)
     EXPECT_LT(this->yaw_error, this->max_allowed_yaw_error_deg)
         << "Yaw error (" << this->yaw_error << "deg) exceeded " << this->max_allowed_yaw_error_deg
-        << "deg for " << GetParam().url;
+        << "deg for " << GetParam().filename;
 }
 
 // 注册参数化测试
 INSTANTIATE_TEST_SUITE_P(AllImageTests, PnpSolverParameterizedTest,
     ::testing::ValuesIn(kPnpTestCases), [](const ::testing::TestParamInfo<PnpTestCase>& info) {
-        std::string name = info.param.url;
-        size_t pos       = name.find_last_of('/');
-        if (pos != std::string::npos) {
-            name = name.substr(pos + 1);
-        }
+        std::string name = info.param.filename;
         std::replace(name.begin(), name.end(), '.', '_');
         std::replace(name.begin(), name.end(), '-', '_');
         return name;

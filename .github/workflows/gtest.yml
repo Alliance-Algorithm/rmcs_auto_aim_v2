@@ -16,8 +16,7 @@ jobs:
     env:
       WS_DIR: ${{ github.workspace }}/ws
       SRC_DIR: ${{ github.workspace }}/ws/src
-      IMAGE_URL: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
-      IMAGE_PATH: /tmp/model_infer_example.jpg
+      TEST_ASSETS_ROOT: /tmp/auto_aim
 
     steps:
       - name: Checkout repository into ROS2 workspace
@@ -26,9 +25,11 @@ jobs:
           repository: Alliance-Algorithm/rmcs_auto_aim_v2
           path: ws/src/rmcs_auto_aim_v2
 
-      - name: Download test frame
+      - name: Download test assets
+        shell: bash
         run: |
-          curl -fsSL "$IMAGE_URL" -o "$IMAGE_PATH"
+          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          TEST_ASSETS_ROOT="$TEST_ASSETS_ROOT" ./download_assets.sh
 
       - name: Configure test project
         shell: bash
@@ -49,4 +50,4 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           cd "$SRC_DIR/rmcs_auto_aim_v2/test"
-          IMAGE="$IMAGE_PATH" ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure

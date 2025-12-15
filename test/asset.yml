@@ -1,10 +1,8 @@
 resources:
-  # 资源ID
-  b4_front_2_armors: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
-  b1_orientation: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/orientation.mp4
-  b1_translation: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/translation.mp4
+  #model_infer
+  model_infer_img: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
 
-  #pnp
+  #solve_pnp
   blue_0_5m_0deg: "https://heyeuuu19.com/auto_aim/pnp/blue-0.5m.jpg"
   blue_0_5m_45deg: "https://heyeuuu19.com/auto_aim/pnp/blue-0.5m-45degree.jpg"
   blue_1_0m_0deg: "https://heyeuuu19.com/auto_aim/pnp/blue-1.0m.jpg"

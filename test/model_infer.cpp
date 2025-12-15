@@ -29,6 +29,21 @@ constexpr auto config = R"(
     nms_threshold: 0.3
 )";
 
+// --- 资源路径 ---
+static std::filesystem::path asset_root() {
+    if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
+        return std::filesystem::path { env };
+    }
+
+    const char* default_path = "/tmp/auto_aim";
+
+    return std::filesystem::path { default_path };
+}
+
+static std::filesystem::path asset_path(std::string_view filename) {
+    return asset_root() / filename;
+}
+
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
@@ -41,13 +56,12 @@ TEST(model, sync_infer) {
     auto result = net.configure(yaml);
     ASSERT_TRUE(result.has_value()) << error_head << result.error();
 
-    auto image_location = std::getenv("IMAGE");
-    ASSERT_NE(image_location, nullptr) << error_head << "Set env 'IMAGE' to pass infer source";
+    const auto image_location = asset_path("model_infer_example.jpg");
 
     auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
-        << error_head << std::format("Failed to read image from '{}'", image_location);
+        << error_head << "Failed to read image from " + std::string(image_location);
 
     const auto use_roi_segment = yaml["use_roi_segment"].as<bool>();
     const auto roi_cols        = yaml["roi_cols"].as<int>();

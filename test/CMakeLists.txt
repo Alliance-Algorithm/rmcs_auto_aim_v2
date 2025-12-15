@@ -16,7 +16,6 @@ find_package(geometry_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(OpenVINO REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
-find_package(CURL REQUIRED)
 
 include_directories(
     ${RMCS_SRC_DIR}
@@ -97,7 +96,6 @@ target_link_libraries(
     ${OpenCV_LIBRARIES}
     openvino::runtime
     yaml-cpp::yaml-cpp
-    CURL::libcurl
 )
 
 # Static TF
