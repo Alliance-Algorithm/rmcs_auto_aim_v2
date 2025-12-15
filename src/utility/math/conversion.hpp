@@ -5,17 +5,21 @@
 
 namespace rmcs::util {
 
+// OpenCV 与 ROS 坐标系之间的变换矩阵
+static const Eigen::Matrix3d kCoordTransformMatrix =
+    // clang-format off
+    (Eigen::Matrix3d() << 0, 0, 1,
+                         -1, 0, 0,
+                          0,-1, 0).finished();
+// clang-format on
+
 static inline auto opencv2ros_position(const Eigen::Vector3d& position) -> Eigen::Vector3d {
     auto result = Eigen::Vector3d(position.z(), -position.x(), -position.y());
     return result;
 }
 
 static inline Eigen::Matrix3d opencv2ros_rotation(const Eigen::Matrix3d& rotation_matrix) {
-    Eigen::Matrix3d t;
-    t << 0, 0, 1, //
-        -1, 0, 0, //
-        0, -1, 0; //
-    return t * rotation_matrix * t.transpose();
+    return kCoordTransformMatrix * rotation_matrix * kCoordTransformMatrix.transpose();
 }
 
 static inline Eigen::Vector3d ros2opencv_position(const Eigen::Vector3d& position) {
@@ -24,11 +28,8 @@ static inline Eigen::Vector3d ros2opencv_position(const Eigen::Vector3d& positio
 }
 
 static inline Eigen::Matrix3d ros2opencv_rotation(const Eigen::Matrix3d& rotation_matrix) {
-    Eigen::Matrix3d t;
-    t << 0, 0, 1, //
-        -1, 0, 0, //
-        0, -1, 0; //
-    return t.transpose() * rotation_matrix * t;
+
+    return kCoordTransformMatrix.transpose() * rotation_matrix * kCoordTransformMatrix;
 }
 
 }

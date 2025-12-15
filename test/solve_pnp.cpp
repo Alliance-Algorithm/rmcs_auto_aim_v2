@@ -29,9 +29,9 @@ static std::filesystem::path asset_root() {
     if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
         return std::filesystem::path { env };
     }
-    
-    const char* default_path = "/tmp/auto_aim"; 
-    
+
+    const char* default_path = "/tmp/auto_aim";
+
     return std::filesystem::path { default_path };
 }
 
@@ -67,7 +67,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
     double k2 = -0.087667493884102, double k3 = 0.792381808294582) {
 
     auto distort_coeff = std::array<double, 5> { k1, k2, 0, 0, k3 };
-    PnpSolution::Input input;
+    PnpSolution::Input input {};
     input.camera_matrix = { {
         { fx, 0.0, cx },
         { 0.0, fy, cy },

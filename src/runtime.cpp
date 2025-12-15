@@ -35,7 +35,6 @@ auto main() -> int {
 
     auto framerate = FramerateCounter {};
     framerate.set_interval(5s);
-    framerate.set_interval(5s);
 
     /// Runtime
     ///

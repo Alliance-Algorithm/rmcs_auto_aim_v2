@@ -1,6 +1,7 @@
 #include "armor_visualizer.hpp"
 
 #include "utility/rclcpp/visual/armor.hpp"
+#include "utility/robot/armor.hpp"
 
 using namespace rmcs::debug;
 using VisualArmor = rmcs::util::visual::Armor;
@@ -41,7 +42,7 @@ struct ArmorVisualizer::Impl final {
                 auto const config = VisualArmor::Config {
                     .rclcpp = node.value().get(),
                     .device = input.genre,
-                    .camp   = camp(input.color),
+                    .camp   = armor_color2camp_color(input.color),
                     .id     = input.id,
                     .name   = "solved_pnp_armor",
                     .tf     = "camera_link",
@@ -61,11 +62,11 @@ struct ArmorVisualizer::Impl final {
         return true;
     }
 
-    static auto camp(ArmorColor const& color) -> CampColor {
-        if (color == ArmorColor::BLUE) return CampColor::BLUE;
-        if (color == ArmorColor::RED) return CampColor::RED;
-        return CampColor::UNKNOWN;
-    };
+    // static auto camp(ArmorColor const& color) -> CampColor {
+    //     if (color == ArmorColor::BLUE) return CampColor::BLUE;
+    //     if (color == ArmorColor::RED) return CampColor::RED;
+    //     return CampColor::UNKNOWN;
+    // };
 
     static bool needs_rebuild(ArmorShadow shadow, Armor3D const& input) {
         return shadow.genre != input.genre || shadow.color != input.color || shadow.id != input.id;

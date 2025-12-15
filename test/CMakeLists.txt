@@ -123,7 +123,7 @@ if(HIKCAMERA_AVAILABLE)
     )
     target_link_libraries(
         example_hikcamera
-        ${OpenCV_LIBS}
+        ${OpenCV_LIBRARIES}
         ${hikcamera_LIBRARIES}
     )
 
@@ -140,7 +140,7 @@ if(HIKCAMERA_AVAILABLE)
     target_link_libraries(
         example_streaming
         rclcpp::rclcpp
-        ${OpenCV_LIBS}
+        ${OpenCV_LIBRARIES}
         ${hikcamera_LIBRARIES}
     )
 else()
