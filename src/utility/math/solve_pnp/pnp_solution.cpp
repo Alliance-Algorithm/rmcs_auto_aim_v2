@@ -10,7 +10,7 @@
 #include <opencv2/core/eigen.hpp>
 
 using namespace rmcs::util;
-auto PnpSolution::solve() noexcept -> void {
+auto PnpSolution::solve() noexcept -> bool {
     const auto camera_matrix = cast_opencv_matrix(input.camera_matrix);
     const auto distort_coeff = cast_opencv_matrix(input.distort_coeff);
 
@@ -25,7 +25,7 @@ auto PnpSolution::solve() noexcept -> void {
     auto success  = cv::solvePnP(armor_shape, armor_detection, camera_matrix, distort_coeff,
          rota_vec, tran_vec, false, cv::SOLVEPNP_IPPE);
 
-    if (!success) return;
+    if (!success) return false;
 
     auto tran_vec_eigen_opencv = Eigen::Vector3d {};
     cv::cv2eigen(tran_vec, tran_vec_eigen_opencv);
@@ -40,4 +40,6 @@ auto PnpSolution::solve() noexcept -> void {
     result.translation = opencv2ros_position(tran_vec_eigen_opencv);
     result.orientation =
         Eigen::Quaterniond(opencv2ros_rotation(rotation_eigen_opencv)).normalized();
+
+    return true;
 }

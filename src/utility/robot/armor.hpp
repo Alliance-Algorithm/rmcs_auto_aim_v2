@@ -94,8 +94,8 @@ constexpr std::array<Point3d, 4> kLargeArmorShapeRos {
 };
 constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
     Point3d { 0.0, 0.0675, 0.028 },   // Top-left
-    Point3d { 0.0, -0.0675, 0.028 },  // Top-right
     Point3d { 0.0, -0.0675, -0.028 }, // Bottom-right
+    Point3d { 0.0, -0.0675, 0.028 },  // Top-right
     Point3d { 0.0, 0.0675, -0.028 }   // Bottom-left
 };
 }

@@ -96,6 +96,7 @@ auto main() -> int {
                 for (const auto& armor_2d : *armors_2d)
                     util::draw(*image, armor_2d);
             }
+
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
@@ -107,22 +108,17 @@ auto main() -> int {
             });
 
             auto armors_3d = pose_estimator.solve_pnp(armors_2d);
-            if (!armors_3d.has_value()) {
-                continue;
-            }
 
+            if (!armors_3d.has_value()) continue;
+
+            if (visualization.initialized()) {
+                visualization.visualize_armors(*armors_3d);
+            }
             // TODO: pose estimator
             // TODO: predictor
             // TODO: control
-
-            if (visualization.initialized()) {
-                visualization.send_image(*image);
-                std::ignore = visualization.visualize_armors(*armors_3d);
-            }
+            rclcpp_node.spin_once();
         }
-
-        rclcpp_node.spin_once();
     }
-
     rclcpp_node.shutdown();
 }

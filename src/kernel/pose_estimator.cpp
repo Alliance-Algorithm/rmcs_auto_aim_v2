@@ -80,7 +80,12 @@ struct PoseEstimator::Impl {
                 pnp_solution.input.color       = armor_color2camp_color(armor.color);
                 std::ranges::copy(armor.corners(), pnp_solution.input.armor_detection.begin());
 
-                pnp_solution.solve();
+                auto solved = pnp_solution.solve();
+                if (!solved) {
+                    log.warn("solvePnP failed for armor {} ({} {})", i,
+                        get_enum_name(armor.genre), get_enum_name(armor.color));
+                    return;
+                }
 
                 auto armor_3d  = Armor3D {};
                 armor_3d.genre = pnp_solution.result.genre;
