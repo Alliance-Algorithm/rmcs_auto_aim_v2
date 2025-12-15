@@ -25,6 +25,11 @@ jobs:
           repository: Alliance-Algorithm/rmcs_auto_aim_v2
           path: ws/src/rmcs_auto_aim_v2
 
+      - name: Install yq dependency
+        run: |
+          apt-get update
+          apt-get install -y yq
+
       - name: Download test assets
         shell: bash
         run: |
