@@ -1,3 +1,4 @@
+#include "assets_manager.hpp"
 #include "module/identifier/model.hpp"
 #include "utility/image/image.details.hpp"
 
@@ -30,19 +31,11 @@ constexpr auto config = R"(
 )";
 
 // --- 资源路径 ---
-static std::filesystem::path asset_root() {
-    if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
-        return std::filesystem::path { env };
-    }
-
-    const char* default_path = "/tmp/auto_aim";
-
-    return std::filesystem::path { default_path };
-}
-
-static std::filesystem::path asset_path(std::string_view filename) {
-    return asset_root() / filename;
-}
+// 测试资源路径配置:
+// - 优先使用环境变量 TEST_ASSETS_ROOT
+// - 未设置时默认使用 /tmp/auto_aim
+// - 运行前需执行: cd test && ./download_assets.sh
+AssetsManager assets_manager;
 
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
@@ -56,7 +49,7 @@ TEST(model, sync_infer) {
     auto result = net.configure(yaml);
     ASSERT_TRUE(result.has_value()) << error_head << result.error();
 
-    const auto image_location = asset_path("model_infer_example.jpg");
+    const auto image_location = assets_manager.path("model_infer_example.jpg");
 
     auto image { Image {} };
     image.details().mat = cv::imread(image_location);

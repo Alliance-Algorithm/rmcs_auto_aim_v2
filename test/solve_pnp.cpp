@@ -12,6 +12,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <yaml-cpp/yaml.h>
 
+#include "assets_manager.hpp"
 #include "module/identifier/model.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/math/point.hpp"
@@ -29,19 +30,7 @@ using Eigen::Vector3d;
 // - 优先使用环境变量 TEST_ASSETS_ROOT
 // - 未设置时默认使用 /tmp/auto_aim
 // - 运行前需执行: cd test && ./download_assets.sh
-static std::filesystem::path asset_root() {
-    if (const char* env = std::getenv("TEST_ASSETS_ROOT"); env && *env) {
-        return std::filesystem::path { env };
-    }
-
-    const char* default_path = "/tmp/auto_aim";
-
-    return std::filesystem::path { default_path };
-}
-
-static std::filesystem::path asset_path(std::string_view filename) {
-    return asset_root() / filename;
-}
+AssetsManager assets_manager;
 
 // --- 测试数据 ---
 struct PnpTestCase {
@@ -115,7 +104,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         throw std::runtime_error("Failed to configure OpenVinoNet: " + cfg_result.error());
     }
 
-    const auto full_path = asset_path(filename);
+    const auto full_path = assets_manager.path(filename);
     auto cv_mat          = cv::imread(full_path.string(), cv::IMREAD_COLOR);
     if (cv_mat.empty()) {
         throw std::runtime_error("Failed to read image: " + full_path.string());
@@ -208,7 +197,7 @@ protected:
         SCOPED_TRACE(test_case.filename);
 
         EXPECT_TRUE(solution.solve())
-            << "Pnp solve failed for file: " << asset_path(test_case.filename);
+            << "Pnp solve failed for file: " << assets_manager.path(test_case.filename);
 
         // --- 解算结果处理 ---
         const auto& result = solution.result;
