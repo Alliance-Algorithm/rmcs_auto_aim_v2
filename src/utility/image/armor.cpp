@@ -47,7 +47,6 @@ auto draw(Image& canvas, const Armor2D& armor) noexcept -> void {
     cv::putText(opencv_mat, "TR", armor.tr, font, scale, white, thickness, cv::LINE_AA);
     cv::putText(opencv_mat, "BL", armor.bl, font, scale, white, thickness, cv::LINE_AA);
     cv::putText(opencv_mat, "BR", armor.br, font, scale, white, thickness, cv::LINE_AA);
-    cv::putText(opencv_mat, "TL", armor.tl, font, scale, white, thickness, cv::LINE_AA);
 
     auto info = std::format("{:.2f} {} {}", armor.confidence, genre, shape);
     cv::putText(opencv_mat, info, armor.tl + cv::Point2f { 0, -5 }, font, scale, white, thickness,

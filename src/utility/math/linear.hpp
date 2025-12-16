@@ -93,7 +93,7 @@ struct Scalar3d {
     double y = 0;
     double z = 0;
 
-    constexpr explicit Scalar3d() noexcept = default;
+    constexpr Scalar3d() noexcept = default;
     constexpr explicit Scalar3d(double x, double y, double z) noexcept
         : x { x }
         , y { y }
@@ -124,7 +124,7 @@ struct Orientation {
     double z = 0;
     double w = 1;
 
-    constexpr explicit Orientation() noexcept = default;
+    constexpr Orientation() noexcept = default;
     constexpr explicit Orientation(double x, double y, double z, double w) noexcept
         : x { x }
         , y { y }

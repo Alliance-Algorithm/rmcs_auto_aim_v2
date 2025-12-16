@@ -1,8 +1,8 @@
 #pragma once
+#include "utility/math/linear.hpp"
 #include "utility/math/point.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
-#include <eigen3/Eigen/Geometry>
 #include <generator>
 #include <opencv2/core/types.hpp>
 
@@ -13,13 +13,13 @@ constexpr auto get_enum_name(ArmorColor color) noexcept {
     constexpr std::array details { "DARK", "RED", "BLUE", "MIX" };
     return details[std::to_underlying(color)];
 }
-inline constexpr auto armor_color2camp_color(ArmorColor const& color) -> CampColor {
+constexpr auto armor_color2camp_color(ArmorColor color) -> CampColor {
     if (color == ArmorColor::BLUE) return CampColor::BLUE;
     if (color == ArmorColor::RED) return CampColor::RED;
     return CampColor::UNKNOWN;
 };
 
-inline constexpr auto camp_color2armor_color(CampColor const& color) -> ArmorColor {
+constexpr auto camp_color2armor_color(CampColor color) -> ArmorColor {
     if (color == CampColor::BLUE) return ArmorColor::BLUE;
     if (color == CampColor::RED) return ArmorColor::RED;
     return ArmorColor::MIX;
@@ -61,41 +61,41 @@ struct Armor3D {
     ArmorColor color;
     int id;
 
-    Eigen::Vector3d translation;
-    Eigen::Quaterniond orientation;
+    Translation translation;
+    Orientation orientation;
 };
 
 struct Armor { };
 using Armors = std::vector<Armor>;
 
-constexpr double kLightBarHeight  = 0.056;
-constexpr double kLargeArmorWidth = 0.23;
-constexpr double kSmallArmorWidth = 0.135;
+constexpr auto kLightBarHeight  = 0.056;
+constexpr auto kLargeArmorWidth = 0.23;
+constexpr auto kSmallArmorWidth = 0.135;
 
 constexpr std::array<Point3d, 4> kLargeArmorShapeOpenCV {
     Point3d { -0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
-    Point3d { 0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 },  // Top-right
-    Point3d { 0.5 * kLargeArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
-    Point3d { -0.5 * kLargeArmorWidth, 0.5 * kLightBarHeight, -0.0 }  // Bottom-left
+    Point3d { +0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-right
+    Point3d { +0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight, 0.0 }, // Bottom-right
+    Point3d { -0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight, 0.0 }  // Bottom-left
 };
 
 constexpr std::array<Point3d, 4> kSmallArmorShapeOpenCV {
     Point3d { -0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
-    Point3d { 0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 },  // Top-right
-    Point3d { 0.5 * kSmallArmorWidth, 0.5 * kLightBarHeight, -0.0 },  // Bottom-right
-    Point3d { -0.5 * kSmallArmorWidth, 0.5 * kLightBarHeight, -0.0 }  // Bottom-left
+    Point3d { +0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-right
+    Point3d { +0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight, 0.0 }, // Bottom-right
+    Point3d { -0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight, 0.0 }  // Bottom-left
 };
 
 constexpr std::array<Point3d, 4> kLargeArmorShapeRos {
-    Point3d { 0.0, 0.115, 0.028 },   // Top-left
-    Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
-    Point3d { 0.0, -0.115, 0.028 },  // Top-right
-    Point3d { 0.0, 0.115, -0.028 }   // Bottom-left
+    Point3d { 0.0, +0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight }, // Top-left
+    Point3d { 0.0, -0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight }, // Bottom-right
+    Point3d { 0.0, -0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight }, // Top-right
+    Point3d { 0.0, +0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight }  // Bottom-left
 };
 constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
-    Point3d { 0.0, 0.0675, 0.028 },   // Top-left
-    Point3d { 0.0, -0.0675, -0.028 }, // Bottom-right
-    Point3d { 0.0, -0.0675, 0.028 },  // Top-right
-    Point3d { 0.0, 0.0675, -0.028 }   // Bottom-left
+    Point3d { 0.0, +0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight }, // Top-left
+    Point3d { 0.0, -0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight }, // Bottom-right
+    Point3d { 0.0, -0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight }, // Top-right
+    Point3d { 0.0, +0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight }  // Bottom-left
 };
 }

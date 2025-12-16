@@ -10,18 +10,6 @@
 
 本项目以工程化为最终目的，为机器人提供一个测试与工作流完备，配置友好，重构开销小，错误提示拟人的自瞄系统，方便队员的后续维护和持续开发，为迭代提供舒适的代码基础
 
-## 核心概念
-
-依赖隐藏：
-
-非侵入式：
-
-提前编写期检查：
-
-推迟运行时多态：
-
-自动化与测试：
-
 ## 部署步骤
 
 先确保海康相机的 SDK 正确构建，再保证 `rmcs_exetutor` 正确构建，如果要运行 RMCS 控制系统的话
@@ -157,7 +145,7 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 [...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
 ```
 
-对于 `VLC`，需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg`
+随后在本机下载 `VLC`，此外，还需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg` 以支持播放推流
 
 接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
 

@@ -17,7 +17,7 @@ enum class ShootMode {
 };
 
 struct Transform {
-    Direction3d posture {};
+    Translation posture {};
     Orientation orientation {};
 };
 
@@ -27,7 +27,7 @@ struct AutoAimState {
     bool should_control = false;
     bool should_shoot   = false;
 
-    Direction3d target_posture {};
+    Translation target_posture {};
     Orientation angular_speed {};
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);

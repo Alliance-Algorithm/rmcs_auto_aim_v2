@@ -3,7 +3,6 @@
 #include "utility/rclcpp/visual/movable.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
-#include <rclcpp/publisher.hpp>
 
 namespace rmcs::util::visual {
 

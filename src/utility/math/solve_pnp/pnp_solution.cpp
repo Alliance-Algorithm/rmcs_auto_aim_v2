@@ -1,13 +1,12 @@
 #include "pnp_solution.hpp"
 
-#include "utility/math/conversion.hpp"
-#include "utility/math/solve_pnp.hpp"
-#include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
 #include <ranges>
-
 #define OPENCV_DISABLE_EIGEN_TENSOR_SUPPORT
 #include <opencv2/core/eigen.hpp>
+
+#include "utility/math/conversion.hpp"
+#include "utility/math/solve_pnp/solve_pnp.hpp"
 
 using namespace rmcs::util;
 auto PnpSolution::solve() noexcept -> bool {
@@ -39,7 +38,7 @@ auto PnpSolution::solve() noexcept -> bool {
     result.color       = input.color;
     result.translation = opencv2ros_position(tran_vec_eigen_opencv);
     result.orientation =
-        Eigen::Quaterniond(opencv2ros_rotation(rotation_eigen_opencv)).normalized();
+        Eigen::Quaterniond { opencv2ros_rotation(rotation_eigen_opencv) }.normalized();
 
     return true;
 }

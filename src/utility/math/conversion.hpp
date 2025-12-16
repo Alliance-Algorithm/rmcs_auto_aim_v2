@@ -6,12 +6,14 @@
 namespace rmcs::util {
 
 // OpenCV 与 ROS 坐标系之间的变换矩阵
-static const Eigen::Matrix3d kCoordTransformMatrix =
+inline const Eigen::Matrix3d kCoordTransformMatrix {
     // clang-format off
-    (Eigen::Matrix3d() << 0, 0, 1,
-                         -1, 0, 0,
-                          0,-1, 0).finished();
-// clang-format on
+    { 0, 0, 1 }, 
+    { -1, 0, 0 },
+    { 0, -1, 0 }
+
+    // clang-format on
+};
 
 static inline auto opencv2ros_position(const Eigen::Vector3d& position) -> Eigen::Vector3d {
     auto result = Eigen::Vector3d(position.z(), -position.x(), -position.y());

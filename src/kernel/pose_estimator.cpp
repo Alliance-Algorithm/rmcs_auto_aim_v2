@@ -2,8 +2,8 @@
 
 #include "kernel/transform_tree.hpp"
 #include "utility/logging/printer.hpp"
-#include "utility/math/solve_pnp.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
+#include "utility/math/solve_pnp/solve_pnp.hpp"
 #include "utility/serializable.hpp"
 #include "utility/yaml/tf.hpp"
 
@@ -56,10 +56,9 @@ struct PoseEstimator::Impl {
         return std::unexpected { e.what() };
     }
 
-    auto solve_pnp(std::optional<std::vector<Armor2D>> const& armors) noexcept
+    auto solve_pnp(std::vector<Armor2D> const& armors) noexcept
         -> std::optional<std::vector<Armor3D>> {
-        if (!armors.has_value()) return std::nullopt;
-        auto const& _armors = *armors;
+        if (armors.empty()) return std::nullopt;
 
         auto armor_shape = [](ArmorShape shape) {
             if (shape == ArmorShape::SMALL) {
@@ -71,7 +70,7 @@ struct PoseEstimator::Impl {
 
         auto armors_in_camera = std::vector<Armor3D> {};
 
-        std::ranges::for_each(_armors | std::views::enumerate,
+        std::ranges::for_each(armors | std::views::enumerate,
             [&armors_in_camera, &armor_shape, this](auto const& item) {
                 auto [i, armor] = item;
 
@@ -82,8 +81,8 @@ struct PoseEstimator::Impl {
 
                 auto solved = pnp_solution.solve();
                 if (!solved) {
-                    log.warn("solvePnP failed for armor {} ({} {})", i,
-                        get_enum_name(armor.genre), get_enum_name(armor.color));
+                    log.warn("solvePnP failed for armor {} ({} {})", i, get_enum_name(armor.genre),
+                        get_enum_name(armor.color));
                     return;
                 }
 
@@ -106,7 +105,7 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto PoseEstimator::solve_pnp(std::optional<std::vector<Armor2D>> const& armors) const noexcept
+auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const noexcept
     -> std::optional<std::vector<Armor3D>> {
     return pimpl->solve_pnp(armors);
 }

@@ -114,35 +114,3 @@ ament_add_gtest(
     test_transform_communication
     ${TEST_DIR}/transform_communication.cpp
 )
-
-if(HIKCAMERA_AVAILABLE)
-    # Hikcamera
-    add_executable(
-        example_hikcamera
-        ${TEST_DIR}/hikcamera.cpp
-    )
-    target_link_libraries(
-        example_hikcamera
-        ${OpenCV_LIBRARIES}
-        ${hikcamera_LIBRARIES}
-    )
-
-    # RTP Streaming
-    add_executable(
-        example_streaming
-        ${TEST_DIR}/streaming.cpp
-        ${RMCS_SRC_DIR}/module/capturer/hikcamera.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
-        ${RMCS_SRC_DIR}/utility/image/image.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
-    )
-    target_link_libraries(
-        example_streaming
-        rclcpp::rclcpp
-        ${OpenCV_LIBRARIES}
-        ${hikcamera_LIBRARIES}
-    )
-else()
-    message(STATUS "hikcamera 未检测到，跳过相关构建")
-endif()

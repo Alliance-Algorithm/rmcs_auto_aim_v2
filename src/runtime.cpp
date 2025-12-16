@@ -107,7 +107,7 @@ auto main() -> int {
                 .timestamp = Clock::now(),
             });
 
-            auto armors_3d = pose_estimator.solve_pnp(armors_2d);
+            auto armors_3d = pose_estimator.solve_pnp(*armors_2d);
 
             if (!armors_3d.has_value()) continue;
 

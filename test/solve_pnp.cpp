@@ -207,7 +207,7 @@ protected:
 
         SCOPED_TRACE(test_case.filename);
 
-        EXPECT_NO_THROW(solution.solve())
+        EXPECT_TRUE(solution.solve())
             << "Pnp solve failed for file: " << asset_path(test_case.filename);
 
         // --- 解算结果处理 ---
