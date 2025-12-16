@@ -23,7 +23,10 @@ public:
 
     ~Armor() noexcept;
 
-    Armor(const Armor&)            = delete;
+    /**
+ * @brief 禁止拷贝构造以防止 Armor 实例被复制及其内部实现被共享。
+ */
+Armor(const Armor&)            = delete;
     Armor& operator=(const Armor&) = delete;
 
     auto update() noexcept -> void;

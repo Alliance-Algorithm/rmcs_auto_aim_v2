@@ -93,8 +93,20 @@ struct Scalar3d {
     double y = 0;
     double z = 0;
 
-    constexpr Scalar3d() noexcept = default;
-    constexpr explicit Scalar3d(double x, double y, double z) noexcept
+    /**
+ * @brief 构造一个坐标为 (0.0, 0.0, 0.0) 的 Scalar3d 实例。
+ *
+ * 默认将成员 x、y、z 初始化为 0.0。
+ */
+constexpr Scalar3d() noexcept = default;
+    /**
+         * @brief 使用给定的坐标值初始化三维标量的各分量。
+         *
+         * @param x x 分量的初始值。
+         * @param y y 分量的初始值。
+         * @param z z 分量的初始值。
+         */
+        constexpr explicit Scalar3d(double x, double y, double z) noexcept
         : x { x }
         , y { y }
         , z { z } { }
@@ -124,8 +136,23 @@ struct Orientation {
     double z = 0;
     double w = 1;
 
-    constexpr Orientation() noexcept = default;
-    constexpr explicit Orientation(double x, double y, double z, double w) noexcept
+    /**
+ * @brief 默认构造一个单位方向四元数。
+ *
+ * 构造后分量为 x = 0, y = 0, z = 0, w = 1。
+ */
+constexpr Orientation() noexcept = default;
+    /**
+         * @brief 使用给定分量初始化方向四元数。
+         *
+         * 使用参数 x、y、z、w 分别设置四元数的四个分量。
+         *
+         * @param x 四元数的 x 分量。
+         * @param y 四元数的 y 分量。
+         * @param z 四元数的 z 分量。
+         * @param w 四元数的 w 分量。
+         */
+        constexpr explicit Orientation(double x, double y, double z, double w) noexcept
         : x { x }
         , y { y }
         , z { z }

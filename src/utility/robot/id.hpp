@@ -83,14 +83,45 @@ constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
 struct DeviceIds {
     uint16_t data = std::to_underlying(DeviceId::UNKNOWN);
 
-    static constexpr auto None() { return DeviceIds {}; }
-    static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
+    /**
+ * @brief 创建表示无设备的 DeviceIds 实例。
+ *
+ * @return DeviceIds 其内部位掩码等于 `DeviceId::UNKNOWN` 的底层值（表示空集合）。
+ */
+static constexpr auto None() { return DeviceIds {}; }
+    /**
+ * @brief 构造一个包含所有已定义设备 ID 的 DeviceIds 实例。
+ *
+ * @return DeviceIds 包含所有 11 个设备 ID 的位掩码（内部数据的第 0 到 10 位都被置为 1）。
+ */
+static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
 
-    constexpr DeviceIds()                            = default;
-    constexpr DeviceIds(const DeviceIds&)            = default;
-    constexpr DeviceIds& operator=(const DeviceIds&) = default;
+    /**
+ * @brief 构造一个空的 DeviceIds 实例，data 初始化为 `DeviceId::UNKNOWN` 的底层值。
+ */
+constexpr DeviceIds()                            = default;
+    /**
+ * @brief 构造一个与给定 DeviceIds 值相同的副本。
+ *
+ * @param other 要复制的 DeviceIds 对象。
+ */
+constexpr DeviceIds(const DeviceIds&)            = default;
+    /**
+ * @brief 将另一个 DeviceIds 的位集合拷贝到当前对象。
+ *
+ * @param other 要复制的 DeviceIds 实例。
+ * @return DeviceIds& 引用到赋值后的当前对象（`*this`）。
+ */
+constexpr DeviceIds& operator=(const DeviceIds&) = default;
 
-    constexpr explicit DeviceIds(uint16_t data) noexcept
+    /**
+         * @brief 使用给定的原始位掩码创建一个 DeviceIds 实例。
+         *
+         * 将参数 `data` 作为内部位掩码直接存储，位含义按 DeviceId 的底层编码映射（每个设备对应各自的位）。
+         *
+         * @param data 用作内部位掩码的原始 `uint16_t` 值；各位表示相应的 `DeviceId` 是否存在。
+         */
+        constexpr explicit DeviceIds(uint16_t data) noexcept
         : data { data } { };
 
     template <std::same_as<DeviceId>... Ids>

@@ -13,6 +13,14 @@ using namespace rmcs;
 using namespace rmcs::util;
 using namespace rmcs::util::visual;
 
+/**
+ * @brief 启动 ROS2 可视化演示，周期性模拟并发布装甲目标与姿态的状态用于观察。
+ *
+ * 程序初始化 rclcpp 节点和可视化发布前缀，创建多个 Armor 实例与一个 Posture 实例，
+ * 然后在主循环中根据时间驱动的平移与旋转输入更新求解器并发布各对象的状态。
+ *
+ * @return int 进程退出码（正常结束返回 0）。
+ */
 auto main() -> int {
     for (auto line : ascii_banner) {
         std::println("\033[32m{}\033[0m", line);

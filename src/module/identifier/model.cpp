@@ -213,6 +213,15 @@ struct OpenVinoNet::Impl {
         return request;
     }
 
+    /**
+     * @brief 将已完成的 OpenVINO 推理输出解析为检测结果列表。
+     *
+     * 从 finished_request 的输出张量读取每一行特征，解码为装甲目标结构体，应用 sigmoid 到置信度，
+     * 根据配置的最小置信度过滤候选项，使用非极大值抑制（NMS）去重，并将检测框按当前缩放比例反算回原图尺度。
+     *
+     * @param finished_request 已完成推理的 InferRequest，包含模型的输出张量。
+     * @return Result 当解析成功时，返回包含经置信度筛选、NMS 处理并按输入图像尺度校正后的装甲目标列表；当输出张量的行长度与预期不符时，返回带错误信息的 unexpected。 
+     */
     auto explain_infer_result(ov::InferRequest& finished_request) const noexcept -> Result {
         using precision_type = float;
         using armor_type     = ArmorInferResult<precision_type>;

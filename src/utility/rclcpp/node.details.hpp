@@ -10,6 +10,12 @@ namespace qos {
     inline const auto real_time = rclcpp::QoS { 5 }.best_effort().keep_last(5);
 }
 namespace prefix {
+    /**
+     * @brief 验证名称是否只由小写字母、数字、下划线或斜杠组成且非空。
+     *
+     * @param name 要检查的名称字符串。
+     * @return `true` 如果 name 非空 且每个字符都是小写字母 `a`–`z`、数字 `0`–`9`、下划线 `'_'` 或斜杠 `'/'`，否则 `false`。
+     */
     constexpr auto check_naming(std::string_view name) noexcept -> bool {
         return std::ranges::all_of(name, [](char c) {
             return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (c == '_') || (c == '/');

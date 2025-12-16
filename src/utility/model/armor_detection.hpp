@@ -19,9 +19,24 @@ struct ArmorInferResult {
         precision_type rb_y;
         precision_type rt_x;
         precision_type rt_y;
-        auto lt() const noexcept { return Point { lt_x, lt_y }; }
-        auto rb() const noexcept { return Point { rb_x, rb_y }; }
-        auto rt() const noexcept { return Point { rt_x, rt_y }; }
+        /**
+ * @brief 获取左上角坐标点。
+ *
+ * @return Point 表示左上角坐标，值为 (lt_x, lt_y)。
+ */
+auto lt() const noexcept { return Point { lt_x, lt_y }; }
+        /**
+ * @brief 获取表示右下角的点。
+ *
+ * @return Point 由成员 `rb_x` 和 `rb_y` 构成的右下角坐标。
+ */
+auto rb() const noexcept { return Point { rb_x, rb_y }; }
+        /**
+ * @brief 获取右上角坐标点。
+ *
+ * @return Point 表示右上角坐标 (rt_x, rt_y)。
+ */
+auto rt() const noexcept { return Point { rt_x, rt_y }; }
         auto lb() const noexcept { return Point { lb_x, lb_y }; }
     } corners;
 

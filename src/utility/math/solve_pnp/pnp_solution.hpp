@@ -26,7 +26,12 @@ struct PnpSolution {
         CampColor color;
     } result;
 
-    PnpSolution() noexcept = default;
+    /**
+ * @brief 构造一个空的 PnpSolution 实例。
+ *
+ * input 和 result 成员保持其各自类型的默认构造状态，便于随后填充输入并调用 solve()。
+ */
+PnpSolution() noexcept = default;
 
     auto solve() -> bool;
 };

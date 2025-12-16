@@ -13,7 +13,7 @@ DOWNLOAD_DIR="${TEST_ASSETS_ROOT:-/tmp/auto_aim}"
 CURRENT_DOWNLOAD_PATH=""
 # -----------------
 
-# --- 信号处理函数 ---
+# cleanup 捕获中断信号，删除由 CURRENT_DOWNLOAD_PATH 指向的任何不完整下载文件并以状态 1 退出。
 cleanup() {
     echo "" 
     echo "[INTERRUPT] 捕获到 Ctrl+C。开始清理..." >&2
@@ -30,6 +30,7 @@ cleanup() {
 
 trap cleanup INT TERM
 
+# check_dependencies 验证系统中是否安装了 yq 和 curl；如果任一缺失则输出错误信息并以状态码 1 退出。
 check_dependencies() {
     if ! command -v yq &> /dev/null || ! command -v curl &> /dev/null; then
         echo "[FATAL] 错误: 缺少必要的依赖工具 (yq 或 curl)。" >&2
@@ -38,6 +39,7 @@ check_dependencies() {
     fi
 }
 
+# download_asset 将指定 asset_id 对应的 URL 下载到 $DOWNLOAD_DIR（若已存在则跳过），下载失败时移除部分文件并设置非零退出状态。
 download_asset() {
     local asset_id="$1"
     local url="$2"
@@ -66,6 +68,7 @@ download_asset() {
     fi
 }
 
+# main 负责读取配置文件中的资源映射并逐一调用 download_asset 下载每个资源，处理依赖检查、缺失配置、空资源集、下载失败计数以及中断时的清理和退出码。
 main() {
     local RESOURCE_MAPPING
     local FAILED_COUNT=0

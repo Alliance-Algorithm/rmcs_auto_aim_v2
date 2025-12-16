@@ -121,6 +121,13 @@ struct Joint {
     }
 
     template <StaticString query_name>
+    /**
+     * @brief 在编译期解析并返回与 query_name 匹配的节点类型的默认构造实例。
+     *
+     * 在未找到匹配节点时会触发编译期断言（static_assert），错误信息为 "没有找到你想要的变换节点"。
+     *
+     * @return Result 已解析的节点类型的默认构造对象（类型为 Find<query_name, Joint>::Result）。
+     */
     static constexpr auto find() noexcept {
         using Result = typename Find<query_name, Joint>::Result;
         static_assert(!std::same_as<Result, void>, "没有找到你想要的变换节点");

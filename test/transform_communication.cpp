@@ -11,6 +11,13 @@ using Transform = rmcs::util::Transform;
 
 namespace {
 
+/**
+ * @brief 构造一个用于测试的默认输入 Transform。
+ *
+ * 返回一个姿态为 (1.0, 2.0, 3.0) 且方向为四元数 (0.0, 0.0, 0.0, 1.0) 的 Transform。
+ *
+ * @return Transform 具有 postures = (1.0, 2.0, 3.0) 和 orientation = (x=0.0, y=0.0, z=0.0, w=1.0) 的 Transform 实例。
+ */
 constexpr auto create_input_transform() -> Transform {
     using rmcs::Direction3d;
     using rmcs::Orientation;
@@ -20,7 +27,11 @@ constexpr auto create_input_transform() -> Transform {
     };
 }
 
-// 非期望值，用于验证接收后被正确覆盖
+/**
+ * @brief 构造一个用于测试的“失败”Transform值，用于验证接收端在读取后能够覆盖原有数据。
+ *
+ * @return Transform 初始为非期望状态的 Transform（posture = {2,3,3}，orientation = 单位四元数），用于作为被覆盖的占位值。
+ */
 inline auto create_failed_input_transform() -> Transform {
     using rmcs::Direction3d;
     using rmcs::Orientation;
@@ -30,6 +41,15 @@ inline auto create_failed_input_transform() -> Transform {
     };
 }
 
+/**
+ * @brief 对比两个 Transform 的位姿与方向分量并在测试中断言它们相等。
+ *
+ * 对传入的两个 Transform，逐一比较 posture 的 x、y、z 和 orientation 的 x、y、z、w 七个分量，
+ * 在 Google Test 中对每个分量使用 EXPECT_DOUBLE_EQ 进行断言以验证数值相等。
+ *
+ * @param lhs 要比较的左侧 Transform。
+ * @param rhs 要比较的右侧 Transform。
+ */
 inline auto expect_transform_equal(const Transform& lhs, const Transform& rhs) -> void {
     EXPECT_DOUBLE_EQ(lhs.posture.x, rhs.posture.x);
     EXPECT_DOUBLE_EQ(lhs.posture.y, rhs.posture.y);
