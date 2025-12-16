@@ -12,7 +12,7 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   
-  <!-- 唯二添加的依赖，为了保证正常的依赖构建顺序 -->
+<!-- 添加的两个依赖，为了保证正常的依赖构建顺序 -->
   <depend>rmcs_executor</depend>
   <depend>hikcamera</depend>
 

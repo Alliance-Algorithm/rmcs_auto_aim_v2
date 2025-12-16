@@ -28,6 +28,6 @@ struct PnpSolution {
 
     PnpSolution() noexcept = default;
 
-    auto solve() noexcept -> bool;
+    auto solve() -> bool;
 };
 }

@@ -19,8 +19,8 @@ public:
 
     auto visualize(RclcppNode& visual_node) -> void;
 
-    auto solve_pnp(std::vector<Armor2D> const&) const noexcept
-        -> std::optional<std::vector<Armor3D>>;
+    auto solve_pnp(std::vector<Armor2D> const&) const -> std::optional<std::vector<Armor3D>>;
+
     auto update_imu_link(const Orientation&) noexcept -> void;
 };
 

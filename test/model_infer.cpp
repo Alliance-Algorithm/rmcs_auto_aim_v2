@@ -54,7 +54,7 @@ TEST(model, sync_infer) {
     auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
-        << error_head << "Failed to read image from " + std::string(image_location);
+        << error_head << std::format("Failed to read image from '{}'", image_location.string());
 
     const auto use_roi_segment = yaml["use_roi_segment"].as<bool>();
     const auto roi_cols        = yaml["roi_cols"].as<int>();

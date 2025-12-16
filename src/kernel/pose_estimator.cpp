@@ -56,8 +56,7 @@ struct PoseEstimator::Impl {
         return std::unexpected { e.what() };
     }
 
-    auto solve_pnp(std::vector<Armor2D> const& armors) noexcept
-        -> std::optional<std::vector<Armor3D>> {
+    auto solve_pnp(std::vector<Armor2D> const& armors) -> std::optional<std::vector<Armor3D>> {
         if (armors.empty()) return std::nullopt;
 
         auto armor_shape = [](ArmorShape shape) {
@@ -105,7 +104,7 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const noexcept
+auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const
     -> std::optional<std::vector<Armor3D>> {
     return pimpl->solve_pnp(armors);
 }
