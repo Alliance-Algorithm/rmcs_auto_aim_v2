@@ -1,10 +1,10 @@
-#include "control_system.hpp"
+#include "feishu.hpp"
 #include "utility/shared/client.hpp"
 
 using namespace rmcs::kernel;
 using namespace rmcs::util;
 
-struct ControlSystem::Impl {
+struct Feishu::Impl {
     AutoAimClient::Send shm_send {};
     AutoAimClient::Recv shm_recv {};
 
@@ -40,17 +40,15 @@ struct ControlSystem::Impl {
     }
 };
 
-auto ControlSystem::update_state(const AutoAimState& state) noexcept -> void {
+auto Feishu::update_state(const AutoAimState& state) noexcept -> void {
     pimpl->update_state(state);
 }
 
-auto ControlSystem::updated() const noexcept -> bool { return pimpl->updated(); }
+auto Feishu::updated() const noexcept -> bool { return pimpl->updated(); }
 
-auto ControlSystem::system_state() const noexcept -> const ControlState& {
-    return pimpl->system_state();
-}
+auto Feishu::system_state() const noexcept -> const ControlState& { return pimpl->system_state(); }
 
-ControlSystem::ControlSystem() noexcept
+Feishu::Feishu() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-ControlSystem::~ControlSystem() noexcept = default;
+Feishu::~Feishu() noexcept = default;

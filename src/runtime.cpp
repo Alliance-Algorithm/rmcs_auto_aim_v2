@@ -1,5 +1,5 @@
 #include "kernel/capturer.hpp"
-#include "kernel/control_system.hpp"
+#include "kernel/feishu.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/visualization.hpp"
@@ -43,7 +43,7 @@ auto main() -> int {
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
-    auto control_system = kernel::ControlSystem {};
+    auto feishu = kernel::Feishu {};
 
     /// Configure
     ///
@@ -85,12 +85,20 @@ auto main() -> int {
         if (!util::get_running()) [[unlikely]]
             break;
 
+        // Feishu
+        // - sync with rmcs
+
         if (auto image = capturer.fetch_image()) {
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
                 continue;
             }
+
+            // Filter
+            // - white list
+            // - sync match status
+            // - incincible state or other
 
             if (use_painted_image) {
                 for (const auto& armor_2d : *armors_2d)
@@ -101,22 +109,25 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            using namespace rmcs::util;
-
-            control_system.update_state({
-                .timestamp = Clock::now(),
-            });
-
             auto armors_3d = pose_estimator.solve_pnp(*armors_2d);
 
             if (!armors_3d.has_value()) continue;
 
+            // Predictor
+            // - build ekf instance for a robot
+            // - use 3d message to filter
+
+            // ControlSystem
+            // - sync rmcs status
+            // - select the best target
+
+            // Feishu
+            // - transmit command
+
             if (visualization.initialized()) {
                 visualization.visualize_armors(*armors_3d);
             }
-            // TODO: pose estimator
-            // TODO: predictor
-            // TODO: control
+
             rclcpp_node.spin_once();
         }
     }

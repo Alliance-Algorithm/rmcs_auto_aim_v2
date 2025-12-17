@@ -4,8 +4,8 @@
 
 namespace rmcs::kernel {
 
-class ControlSystem {
-    RMCS_PIMPL_DEFINITION(ControlSystem)
+class Feishu {
+    RMCS_PIMPL_DEFINITION(Feishu)
 
 public:
     using AutoAimState = util::AutoAimState;
