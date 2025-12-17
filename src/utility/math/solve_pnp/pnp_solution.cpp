@@ -1,12 +1,13 @@
-#include "pnp_solution.hpp"
-
-#include <eigen3/Eigen/Dense>
-#include <ranges>
 #define OPENCV_DISABLE_EIGEN_TENSOR_SUPPORT
-#include <opencv2/core/eigen.hpp>
 
+#include "pnp_solution.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/solve_pnp/solve_pnp.hpp"
+
+#include <eigen3/Eigen/Geometry>
+#include <opencv2/core/eigen.hpp>
+
+#include <ranges>
 
 using namespace rmcs::util;
 auto PnpSolution::solve() -> bool {

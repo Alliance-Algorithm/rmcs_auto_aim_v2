@@ -1,6 +1,6 @@
 #pragma once
 
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/mat.hpp>
 

@@ -15,7 +15,7 @@ CURRENT_DOWNLOAD_PATH=""
 
 # --- 信号处理函数 ---
 cleanup() {
-    echo "" 
+    echo ""
     echo "[INTERRUPT] 捕获到 Ctrl+C。开始清理..." >&2
 
     if [ -n "$CURRENT_DOWNLOAD_PATH" ]; then
@@ -31,7 +31,7 @@ cleanup() {
 trap cleanup INT TERM
 
 check_dependencies() {
-    if ! command -v yq &> /dev/null || ! command -v curl &> /dev/null; then
+    if ! command -v yq &>/dev/null || ! command -v curl &>/dev/null; then
         echo "[FATAL] 错误: 缺少必要的依赖工具 (yq 或 curl)。" >&2
         echo "请安装 yq (用于解析 YAML) 和 curl (用于下载)。" >&2
         exit 1
@@ -44,17 +44,17 @@ download_asset() {
     local filename
     filename=$(basename "$url")
     local local_path="$DOWNLOAD_DIR/$filename"
-    
+
     if [ -f "$local_path" ]; then
         echo "  [SKIP] $asset_id 已存在。"
         return 0
     fi
-    
+
     echo "  [INFO] 正在下载 $asset_id -> $filename..."
- 
+
     CURRENT_DOWNLOAD_PATH="$local_path"
 
-    if curl -fsSL -o "$local_path" "$url" &> /dev/null; then
+    if curl -fsSL -o "$local_path" "$url" &>/dev/null; then
         echo "  [SUCCESS] -> $local_path"
         CURRENT_DOWNLOAD_PATH=""
         return 0
@@ -69,17 +69,17 @@ download_asset() {
 main() {
     local RESOURCE_MAPPING
     local FAILED_COUNT=0
-    
+
     check_dependencies
-    
+
     echo "--- 资源下载脚本启动 ---"
-    
+
     if [ ! -f "$CONFIG_YML" ]; then
         echo "[FATAL] 配置文件未找到于 $CONFIG_YML" >&2
         trap - INT TERM
         exit 1
     fi
-    
+
     mkdir -p "$DOWNLOAD_DIR"
 
     RESOURCE_MAPPING=$(yq '.resources | to_entries | .[] | "\(.key)|\(.value)"' "$CONFIG_YML")
@@ -93,18 +93,18 @@ main() {
     echo "找到 $(echo "$RESOURCE_MAPPING" | wc -l | tr -d '[:space:]') 个资源需要处理。"
 
     while IFS='|' read -r asset_id url; do
-        asset_id=$(echo "$asset_id" | tr -d '"') 
+        asset_id=$(echo "$asset_id" | tr -d '"')
         url=$(echo "$url" | tr -d '"')
-        
+
         download_asset "$asset_id" "$url" || FAILED_COUNT=$((FAILED_COUNT + 1))
-        
-    done <<< "$RESOURCE_MAPPING"
+
+    done <<<"$RESOURCE_MAPPING"
 
     echo ""
     echo "--- 资源下载完成 ---"
-    
+
     trap - INT TERM
-    
+
     if [ "$FAILED_COUNT" -eq 0 ]; then
         echo "[INFO] 所有资源下载成功或已跳过。"
         exit 0
