@@ -9,7 +9,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 CONFIG_YML="$SCRIPT_DIR/asset.yml"
 # 资源存放目录，优先使用 TEST_ASSETS_ROOT，默认为 /tmp/auto_aim（与测试代码一致）
 DOWNLOAD_DIR="${TEST_ASSETS_ROOT:-/tmp/auto_aim}"
-# 初始化为空字符串，表示当前没有文件在下载**
+# 初始化为空字符串，表示当前没有文件在下载
 CURRENT_DOWNLOAD_PATH=""
 # -----------------
 
@@ -54,7 +54,7 @@ download_asset() {
 
     CURRENT_DOWNLOAD_PATH="$local_path"
 
-    if curl -fsSL -o "$local_path" "$url" &>/dev/null; then
+    if curl -fsSL -o "$local_path" "$url"; then
         echo "  [SUCCESS] -> $local_path"
         CURRENT_DOWNLOAD_PATH=""
         return 0
