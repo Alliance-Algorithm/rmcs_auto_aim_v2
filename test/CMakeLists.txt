@@ -68,7 +68,7 @@ target_link_libraries(
     test_model_infer
     yaml-cpp::yaml-cpp
     openvino::runtime
-    ${OpenCV_LIBS}
+    ${OpenCV_LIBRARIES}
 )
 
 # Device Id
@@ -81,11 +81,21 @@ ament_add_gtest(
 ament_add_gtest(
     test_solve_pnp
     ${TEST_DIR}/solve_pnp.cpp
-    ${RMCS_SRC_DIR}/utility/math/solve_pnp.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/module/identifier/model.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpp
+)
+ament_target_dependencies(
+    test_solve_pnp
+    rclcpp
+    visualization_msgs
+    geometry_msgs
 )
 target_link_libraries(
     test_solve_pnp
     ${OpenCV_LIBRARIES}
+    openvino::runtime
+    yaml-cpp::yaml-cpp
 )
 
 # Static TF
@@ -97,4 +107,10 @@ ament_add_gtest(
 target_link_libraries(
     test_static_tf
     yaml-cpp::yaml-cpp
+)
+
+# Transform Communication
+ament_add_gtest(
+    test_transform_communication
+    ${TEST_DIR}/transform_communication.cpp
 )

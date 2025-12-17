@@ -14,11 +14,13 @@ public:
         DeviceId device;
         CampColor camp;
 
-        std::string id;
+        int id;
+        std::string name;
         std::string tf;
     };
 
     explicit Armor(const Config&) noexcept;
+
     ~Armor() noexcept;
 
     Armor(const Armor&)            = delete;

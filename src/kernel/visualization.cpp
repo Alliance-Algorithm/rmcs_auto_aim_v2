@@ -1,13 +1,15 @@
 #include "visualization.hpp"
-#include "module/debug/visualization/stream_session.hpp"
 
+#include <fstream>
+
+#include "module/debug/visualization/armor_visualizer.hpp"
+#include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/serializable.hpp"
 
-#include <fstream>
-
 using namespace rmcs::kernel;
+using namespace rmcs::util;
 
 constexpr std::array kVideoTypes {
     "RTP_JEPG",
@@ -47,9 +49,14 @@ struct Visualization::Impl {
     bool is_initialized  = false;
     bool size_determined = false;
 
-    Impl() noexcept { session = std::make_unique<debug::StreamSession>(); }
+    std::unique_ptr<debug::ArmorVisualizer> armor_visualizer;
 
-    auto initialize(const YAML::Node& yaml) noexcept -> NormalResult {
+    Impl() noexcept {
+        session          = std::make_unique<debug::StreamSession>();
+        armor_visualizer = std::make_unique<debug::ArmorVisualizer>();
+    }
+
+    auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
         auto config = Config {};
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
@@ -67,6 +74,9 @@ struct Visualization::Impl {
         } else {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
+
+        armor_visualizer->initialize(visual_node);
+
         is_initialized = true;
         return {};
     }
@@ -114,17 +124,25 @@ struct Visualization::Impl {
 
         return session->push_frame(mat);
     }
+    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+        if (!is_initialized) return false;
+        return armor_visualizer->visualize(armors);
+    }
 };
 
-auto Visualization::initialize(const YAML::Node& yaml) noexcept
+auto Visualization::initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept
     -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
+    return pimpl->initialize(yaml, visual_node);
 }
 
 auto Visualization::initialized() const noexcept -> bool { return pimpl->initialized(); }
 
 auto Visualization::send_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
+}
+
+auto Visualization::visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+    return pimpl->visualize_armors(armors);
 }
 
 Visualization::Visualization() noexcept

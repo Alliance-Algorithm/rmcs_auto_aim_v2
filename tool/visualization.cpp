@@ -35,15 +35,15 @@ auto main() -> int {
             .rclcpp = visual,
             .device = DeviceId::SENTRY,
             .camp   = CampColor::BLUE,
-            .id     = "",
+            .id     = 0,
+            .name   = "visual_test_armor",
             .tf     = "camera_link",
         };
-        auto& name = config.id;
-        auto index = char { 'a' };
-        std::ranges::for_each(armors, [&](auto& armor) {
-            name  = std::string { "sentry/" } + index++;
-            armor = std::make_unique<visual::Armor>(config);
-        });
+
+        for (auto i = 0; i < (int)armors.size(); ++i) {
+            config.id = i;
+            armors[i] = std::make_unique<visual::Armor>(config);
+        }
     }
 
     auto posture = std::make_unique<Posture>( //

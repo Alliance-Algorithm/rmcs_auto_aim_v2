@@ -1,5 +1,7 @@
 #pragma once
+#include "utility/math/linear.hpp"
 #include "utility/math/point.hpp"
+#include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
 #include <generator>
 #include <opencv2/core/types.hpp>
@@ -11,6 +13,17 @@ constexpr auto get_enum_name(ArmorColor color) noexcept {
     constexpr std::array details { "DARK", "RED", "BLUE", "MIX" };
     return details[std::to_underlying(color)];
 }
+constexpr auto armor_color2camp_color(ArmorColor color) -> CampColor {
+    if (color == ArmorColor::BLUE) return CampColor::BLUE;
+    if (color == ArmorColor::RED) return CampColor::RED;
+    return CampColor::UNKNOWN;
+};
+
+constexpr auto camp_color2armor_color(CampColor color) -> ArmorColor {
+    if (color == CampColor::BLUE) return ArmorColor::BLUE;
+    if (color == CampColor::RED) return ArmorColor::RED;
+    return ArmorColor::MIX;
+};
 
 enum class ArmorShape : bool { LARGE, SMALL };
 constexpr auto get_enum_name(ArmorShape shape) noexcept {
@@ -43,22 +56,46 @@ struct Armor2D {
     }
 };
 
-struct Armor3D { };
+struct Armor3D {
+    ArmorGenre genre;
+    ArmorColor color;
+    int id;
+
+    Translation translation;
+    Orientation orientation;
+};
 
 struct Armor { };
 using Armors = std::vector<Armor>;
 
-constexpr std::array<Point3d, 4> kLargeArmorShape {
-    Point3d { 0.0, 0.115, 0.028 },   // Top-left
-    Point3d { 0.0, -0.115, 0.028 },  // Top-right
-    Point3d { 0.0, -0.115, -0.028 }, // Bottom-right
-    Point3d { 0.0, 0.115, -0.028 }   // Bottom-left
-};
-constexpr std::array<Point3d, 4> kSmallArmorShape {
-    Point3d { 0.0, 0.0675, 0.028 },   // Top-left
-    Point3d { 0.0, -0.0675, 0.028 },  // Top-right
-    Point3d { 0.0, -0.0675, -0.028 }, // Bottom-right
-    Point3d { 0.0, 0.0675, -0.028 }   // Bottom-left
+constexpr auto kLightBarHeight  = 0.056;
+constexpr auto kLargeArmorWidth = 0.23;
+constexpr auto kSmallArmorWidth = 0.135;
+
+constexpr std::array<Point3d, 4> kLargeArmorShapeOpenCV {
+    Point3d { -0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
+    Point3d { +0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-right
+    Point3d { +0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight, 0.0 }, // Bottom-right
+    Point3d { -0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight, 0.0 }  // Bottom-left
 };
 
+constexpr std::array<Point3d, 4> kSmallArmorShapeOpenCV {
+    Point3d { -0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-left
+    Point3d { +0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight, 0.0 }, // Top-right
+    Point3d { +0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight, 0.0 }, // Bottom-right
+    Point3d { -0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight, 0.0 }  // Bottom-left
+};
+
+constexpr std::array<Point3d, 4> kLargeArmorShapeRos {
+    Point3d { 0.0, +0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight }, // Top-left
+    Point3d { 0.0, -0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight }, // Bottom-right
+    Point3d { 0.0, -0.5 * kLargeArmorWidth, +0.5 * kLightBarHeight }, // Top-right
+    Point3d { 0.0, +0.5 * kLargeArmorWidth, -0.5 * kLightBarHeight }  // Bottom-left
+};
+constexpr std::array<Point3d, 4> kSmallArmorShapeRos {
+    Point3d { 0.0, +0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight }, // Top-left
+    Point3d { 0.0, -0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight }, // Bottom-right
+    Point3d { 0.0, -0.5 * kSmallArmorWidth, +0.5 * kLightBarHeight }, // Top-right
+    Point3d { 0.0, +0.5 * kSmallArmorWidth, -0.5 * kLightBarHeight }  // Bottom-left
+};
 }

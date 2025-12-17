@@ -1,3 +1,4 @@
+#include "assets_manager.hpp"
 #include "module/identifier/model.hpp"
 #include "utility/image/image.details.hpp"
 
@@ -29,6 +30,13 @@ constexpr auto config = R"(
     nms_threshold: 0.3
 )";
 
+// --- 资源路径 ---
+// 测试资源路径配置:
+// - 优先使用环境变量 TEST_ASSETS_ROOT
+// - 未设置时默认使用 /tmp/auto_aim
+// - 运行前需执行: cd test && ./download_assets.sh
+AssetsManager assets_manager;
+
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
@@ -41,13 +49,12 @@ TEST(model, sync_infer) {
     auto result = net.configure(yaml);
     ASSERT_TRUE(result.has_value()) << error_head << result.error();
 
-    auto image_location = std::getenv("IMAGE");
-    ASSERT_NE(image_location, nullptr) << error_head << "Set env 'IMAGE' to pass infer source";
+    const auto image_location = assets_manager.path("model_infer_example.jpg");
 
     auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
-        << error_head << std::format("Failed to read image from '{}'", image_location);
+        << error_head << std::format("Failed to read image from '{}'", image_location.string());
 
     const auto use_roi_segment = yaml["use_roi_segment"].as<bool>();
     const auto roi_cols        = yaml["roi_cols"].as<int>();

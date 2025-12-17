@@ -16,13 +16,18 @@ enum class ShootMode {
     BUFF_LARGE,
 };
 
+struct Transform {
+    Translation posture {};
+    Orientation orientation {};
+};
+
 struct AutoAimState {
     Stamp timestamp {};
 
     bool should_control = false;
     bool should_shoot   = false;
 
-    Direction3d target_posture {};
+    Translation target_posture {};
     Orientation angular_speed {};
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
@@ -33,6 +38,13 @@ struct ControlState {
 
     double bullet_speed {};
     Orientation imu_state {};
+
+    /*Note:
+     * 对应关系：
+     * odom<->fast_tf::OdomImu,
+     * camera<->fast_tf::CameraLink
+     * */
+    Transform camera_to_odom_transform {};
 
     DeviceIds targets { DeviceIds::Full() };
 };

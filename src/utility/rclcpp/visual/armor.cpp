@@ -1,37 +1,46 @@
 #include "armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/node.details.hpp"
-#include <rclcpp/publisher.hpp>
-#include <visualization_msgs/msg/marker.hpp>
+
+#include <visualization_msgs/msg/marker_array.hpp>
 
 using namespace rmcs::util::visual;
 
-using Marker = visualization_msgs::msg::Marker;
+using Marker      = visualization_msgs::msg::Marker;
+using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 struct Armor::Impl {
     static inline rclcpp::Clock rclcpp_clock { RCL_SYSTEM_TIME };
 
+    Config config;
+
     Marker marker;
-    std::shared_ptr<rclcpp::Publisher<Marker>> rclcpp_pub;
+    Marker arrow_marker;
+    std::shared_ptr<rclcpp::Publisher<MarkerArray>> rclcpp_pub;
 
-    explicit Impl(const Config& config) {
-        auto& rclcpp  = config.rclcpp;
-        auto& details = config.rclcpp.details;
+    explicit Impl(Config config)
+        : config(std::move(config)) {
+        initialize();
+    }
 
-        if (!prefix::check_naming(config.id) || !prefix::check_naming(config.tf)) {
-            util::panic(
-                std::format("Not a valid naming for armor id or tf: {}", prefix::naming_standard));
+    static auto create_rclcpp_publisher(Config const& config) noexcept
+        -> std::shared_ptr<rclcpp::Publisher<MarkerArray>> {
+        const auto topic_name { config.rclcpp.get_pub_topic_prefix() + config.name };
+        return config.rclcpp.details->make_pub<MarkerArray>(topic_name, qos::debug);
+    }
+
+    auto initialize() -> void {
+        if (!prefix::check_naming(config.name) || !prefix::check_naming(config.tf)) {
+            util::panic(std::format(
+                "Not a valid naming for armor name or tf: {}", prefix::naming_standard));
         }
 
-        const auto topic_name { rclcpp.get_pub_topic_prefix() + config.id };
-        rclcpp_pub = details->make_pub<Marker>(topic_name, qos::debug);
-
         marker.header.frame_id = config.tf;
-
-        marker.ns     = config.id;
-        marker.id     = 0;
-        marker.type   = Marker::CUBE;
-        marker.action = Marker::ADD;
+        marker.ns              = config.name;
+        marker.id              = config.id;
+        marker.type            = Marker::CUBE;
+        marker.action          = Marker::ADD;
+        marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
 
         // ref: "https://www.robomaster.com/zh-CN/products/components/detail/149"
         /*  */ if (DeviceIds::kSmallArmorDevices().contains(config.device)) {
@@ -47,13 +56,47 @@ struct Armor::Impl {
         } else if (config.camp == CampColor::BLUE) {
             marker.color.r = 0., marker.color.g = 0., marker.color.b = 1., marker.color.a = 1.;
         } else {
-            util::panic("Please specify a valid armor color");
+            marker.color.r = 1., marker.color.g = 0., marker.color.b = 1., marker.color.a = 1.;
+        }
+
+        arrow_marker.header.frame_id = config.tf;
+        arrow_marker.ns              = config.name + std::string("_arrow");
+        arrow_marker.id              = config.id;
+        arrow_marker.type            = Marker::ARROW;
+        arrow_marker.action          = Marker::ADD;
+        arrow_marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
+
+        arrow_marker.scale.x = 0.2;
+        arrow_marker.scale.y = 0.01;
+        arrow_marker.scale.z = 0.01;
+
+        /*  */ if (config.camp == CampColor::RED) {
+            arrow_marker.color.r = 1., arrow_marker.color.g = 0., arrow_marker.color.b = 0.,
+            arrow_marker.color.a = 1.;
+        } else if (config.camp == CampColor::BLUE) {
+            arrow_marker.color.r = 0., arrow_marker.color.g = 0., arrow_marker.color.b = 1.,
+            arrow_marker.color.a = 1.;
+        } else {
+            arrow_marker.color.r = 1., arrow_marker.color.g = 0., arrow_marker.color.b = 1.,
+            arrow_marker.color.a = 1.;
         }
     }
 
     auto update() noexcept -> void {
-        marker.header.stamp = rclcpp_clock.now();
-        rclcpp_pub->publish(marker);
+        if (!rclcpp_pub) {
+            rclcpp_pub = create_rclcpp_publisher(config);
+        }
+
+        MarkerArray visual_marker;
+        const auto current_stamp  = rclcpp_clock.now();
+        marker.header.stamp       = current_stamp;
+        arrow_marker.header.stamp = current_stamp;
+
+        arrow_marker.pose = marker.pose;
+        visual_marker.markers.emplace_back(marker);
+        visual_marker.markers.emplace_back(arrow_marker);
+
+        rclcpp_pub->publish(visual_marker);
     }
 
     auto move(const Translation& t, const Orientation& q) noexcept {

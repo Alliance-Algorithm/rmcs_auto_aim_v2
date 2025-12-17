@@ -32,6 +32,10 @@ TEST(static_tf, construct) {
     SentryTf::foreach_df_with_parent(
         []<class T>(auto parent) { std::println("{} -> {}", parent, T::name); });
 
+    using Result = SentryTf::Find<"0.0.0">::Result;
+
+    constexpr auto result = SentryTf::find<"0.0.0">();
+
     static_assert(SentryTf::name == "0");
     static_assert(SentryTf::child_amount > 0);
     static_assert(SentryTf::total_amount > 0);

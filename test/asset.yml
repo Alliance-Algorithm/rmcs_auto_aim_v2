@@ -1,3 +1,13 @@
-b4_front_2_armors: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/model_infer_example.jpg
-b1_orientation: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/orientation.mp4
-b1_translation: https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/translation.mp4
+resources:
+  #model_infer
+  model_infer_img: "https://auto-aim.heyeuuu19.com/auto_aim/model_infer/model_infer_example.jpg"
+
+  #solve_pnp
+  blue_0_5m_0deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-0.5m.jpg"
+  blue_0_5m_45deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-0.5m-45degree.jpg"
+  blue_1_0m_0deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-1.0m.jpg"
+  blue_1_0m_45deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-1.0m-45degree.jpg"
+  blue_2_0m_0deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-2.0m.jpg"
+  blue_2_0m_45deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-2.0m-45degree.jpg"
+  blue_3_0m_0deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-3.0m.jpg"
+  blue_3_0m_45deg: "https://auto-aim.heyeuuu19.com/auto_aim/pnp/blue-3.0m-45degree.jpg"

@@ -1,5 +1,7 @@
 #pragma once
 #include "utility/image/image.hpp"
+#include "utility/rclcpp/node.hpp"
+#include "utility/robot/armor.hpp"
 
 #include <expected>
 #include <yaml-cpp/yaml.h>
@@ -17,11 +19,14 @@ public:
     }
 
 public:
-    auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
+    auto initialize(const YAML::Node& yaml, util::RclcppNode& visual_node) noexcept
+        -> std::expected<void, std::string>;
 
     auto initialized() const noexcept -> bool;
 
     auto send_image(const Image&) noexcept -> bool;
+
+    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool;
 };
 
 }

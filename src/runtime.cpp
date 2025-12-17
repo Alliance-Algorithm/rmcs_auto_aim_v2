@@ -23,6 +23,7 @@ auto main() -> int {
     std::signal(SIGINT, [](int) { util::set_running(false); });
 
     auto rclcpp_node = util::RclcppNode { "AutoAim" };
+    rclcpp_node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -60,9 +61,9 @@ auto main() -> int {
     {
         auto config = configuration["identifier"];
 
-        const auto path = std::filesystem::path { util::Parameters::share_location() }
+        const auto model_location = std::filesystem::path { util::Parameters::share_location() }
             / std::filesystem::path { config["model_location"].as<std::string>() };
-        config["model_location"] = path.string();
+        config["model_location"] = model_location.string();
 
         auto result = identifier.initialize(config);
         handle_result("identifier", result);
@@ -76,7 +77,7 @@ auto main() -> int {
     // VISUALIZATION
     if (use_visualization) {
         auto config = configuration["visualization"];
-        auto result = visualization.initialize(config);
+        auto result = visualization.initialize(config, rclcpp_node);
         handle_result("visualization", result);
     }
 
@@ -95,26 +96,29 @@ auto main() -> int {
                 for (const auto& armor_2d : *armors_2d)
                     util::draw(*image, armor_2d);
             }
+
             if (visualization.initialized()) {
                 visualization.send_image(*image);
             }
 
-            auto armor_3d = std::ignore;
-
-            auto future_state = std::ignore;
-
             using namespace rmcs::util;
+
             control_system.update_state({
                 .timestamp = Clock::now(),
             });
 
-            if (framerate.tick()) {
-                rclcpp_node.info("Framerate: {}hz", framerate.fps());
+            auto armors_3d = pose_estimator.solve_pnp(*armors_2d);
+
+            if (!armors_3d.has_value()) continue;
+
+            if (visualization.initialized()) {
+                visualization.visualize_armors(*armors_3d);
             }
+            // TODO: pose estimator
+            // TODO: predictor
+            // TODO: control
+            rclcpp_node.spin_once();
         }
-
-        rclcpp_node.spin_once();
     }
-
     rclcpp_node.shutdown();
 }

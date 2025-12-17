@@ -5,14 +5,14 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "hikcamera"
+  source: "local_video"
   hikcamera:
     # int
     timeout_ms: 500
     # float
-    exposure_us: 3000.0
+    exposure_us: 2000.0
     # float
-    framerate: 120
+    framerate: 60
     # float
     gain: 16.9807
 
@@ -21,8 +21,14 @@ capturer:
     trigger_mode: false
     fixed_framerate: true
   local_video:
-    location: ""
+    # 替换为你具体的路径
+    location: "/workspaces/alliance/test_videos/solve_pnp_v2.mp4"
+    # double 帧率
+    frame_rate: 60
+    # bool 是否循环播放
     loop_play: true
+    # bool 是否允许跳帧以满足实时性
+    allow_skipping: false
 
 identifier:
   binarization_threshold: 0.5
@@ -41,8 +47,8 @@ identifier:
   nms_threshold: 0.3
 
 pose_estimator:
-  camera_matrix: [2414.9359264386621, 0, 717.26243105567414, 0, 2418.0489262208148, 582.68540529942845, 0, 0, 1]
-  distort_coeff: [-0.0209453389287673, 0.15028138841073832, -0.0006517722113234505, -0.0016861906197686788, 0]
+  camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
+  distort_coeff: [-0.064232403853946, -0.087667493884102, 0,0, 0.792381808294582]
 
   transforms:
     - parent: "imu_link"
