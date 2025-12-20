@@ -1,8 +1,7 @@
 #include "robot_state.hpp"
+
 #include "module/predictor/ekf_parameter.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
-#include "utility/robot/armor.hpp"
-#include "utility/robot/id.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::predictor;
@@ -12,14 +11,33 @@ struct RobotState::Impl {
     using Clock = std::chrono::steady_clock;
     using Stamp = Clock::time_point;
 
-    explicit Impl(Armor3D const& armor, DeviceId const& device, Stamp const& t)
-        : device(device)
-        , armor_num(EKFParameters::armor_num(device))
-        , time_stamp(t) {
+    explicit Impl(Armor3D const& armor, Stamp const& t)
+        : device(armor.genre)
+        , armor_num(EKFParameters::armor_num(armor.genre))
+        , time_stamp(t)
+        , initialized(true) {
         ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
     }
 
+    explicit Impl()
+        : initialized(false) { }
+
+    auto initialize(Armor3D const& armor, Stamp const& t) -> auto {
+        device    = armor.genre;
+        armor_num = EKFParameters::armor_num(armor.genre);
+        ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
+        time_stamp = t;
+
+        initialized = true;
+    }
+
     auto predict(Stamp const& t) -> void {
+        if (!initialized) {
+            time_stamp  = t;
+            initialized = true;
+            return;
+        }
+
         auto dt = util::delta_time(t, time_stamp);
         ekf.predict(
             EKFParameters::f(dt), [dt](EKF::XVec const&) { return EKFParameters::F(dt); },
@@ -28,6 +46,8 @@ struct RobotState::Impl {
     }
 
     auto update(Armor3D const& armor) -> void {
+        if (!initialized) return;
+
         int id = match_armors(ekf.x, armor);
 
         last_id = id;
@@ -54,8 +74,7 @@ struct RobotState::Impl {
         correct();
     }
 
-    // x vx y vy z vz a w r l h
-    constexpr auto is_convergened() -> bool {
+    constexpr auto is_convergened() const -> bool {
         auto const r = ekf.x[8];
         auto const l = ekf.x[8] + ekf.x[9];
 
@@ -75,11 +94,11 @@ struct RobotState::Impl {
     EKF ekf;
     Stamp time_stamp;
 
+    bool initialized;
     int last_id { 0 };
     int update_count { 0 };
 
     // 前哨站转速特判
-    // x vx y vy z vz a w r l h
     constexpr auto correct() -> void {
         if (device == DeviceId::OUTPOST) {
             constexpr auto max_outpost_w = double { 2.51 };
@@ -151,3 +170,20 @@ struct RobotState::Impl {
         return best_id;
     }
 };
+
+RobotState::RobotState() noexcept
+    : pimpl { std::make_unique<Impl>() } { }
+RobotState::~RobotState() noexcept = default;
+
+auto RobotState::initialize(
+    rmcs::Armor3D const& armor, std::chrono::steady_clock::time_point const& t) -> auto {
+    return pimpl->initialize(armor, t);
+}
+
+auto RobotState::predict(std::chrono::steady_clock::time_point const& t) -> void {
+    return pimpl->predict(t);
+}
+
+auto RobotState::update(rmcs::Armor3D const& armor) -> void { return pimpl->update(armor); }
+
+auto RobotState::is_convergened() const -> bool { return pimpl->is_convergened(); }
