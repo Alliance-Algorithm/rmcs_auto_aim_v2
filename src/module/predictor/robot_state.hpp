@@ -5,6 +5,7 @@
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/robot/armor.hpp"
 
 namespace rmcs::predictor {
 struct RobotState {
