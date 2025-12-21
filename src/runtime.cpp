@@ -2,6 +2,7 @@
 #include "kernel/feishu.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
+#include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
 #include "module/debug/framerate.hpp"
@@ -40,6 +41,7 @@ auto main() -> int {
     ///
     auto capturer       = kernel::Capturer {};
     auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
@@ -67,6 +69,12 @@ auto main() -> int {
 
         auto result = identifier.initialize(config);
         handle_result("identifier", result);
+    }
+    // TRACKER
+    {
+        auto config = configuration["tracker"];
+        auto result = tracker.initialize(config);
+        handle_result("tracker", result);
     }
     // POSE ESTIMATOR
     {
@@ -99,6 +107,12 @@ auto main() -> int {
             // - white list
             // - sync match status
             // - incincible state or other
+
+            // TODO:set invincible armors
+            auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
+            if (filtered_armors_2d.empty()) {
+                continue;
+            }
 
             if (use_painted_image) {
                 for (const auto& armor_2d : *armors_2d)

@@ -46,6 +46,10 @@ identifier:
   score_threshold: 0.7
   nms_threshold: 0.3
 
+tracker:
+  # blue or red
+  enemy_color: blue
+
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
   distort_coeff: [-0.064232403853946, -0.087667493884102, 0,0, 0.792381808294582]
