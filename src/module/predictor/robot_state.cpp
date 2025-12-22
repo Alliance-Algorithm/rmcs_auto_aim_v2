@@ -1,9 +1,5 @@
 #include "robot_state.hpp"
 
-#include "module/predictor/ekf_parameter.hpp"
-#include "utility/math/kalman_filter/ekf.hpp"
-#include "utility/time.hpp"
-
 using namespace rmcs::predictor;
 
 struct RobotState::Impl {
@@ -22,13 +18,25 @@ struct RobotState::Impl {
     explicit Impl()
         : initialized(false) { }
 
-    auto initialize(Armor3D const& armor, Stamp const& t) -> auto {
+    auto initialize(Armor3D const& armor, Stamp const& t) -> void {
         device    = armor.genre;
         armor_num = EKFParameters::armor_num(armor.genre);
         ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
         time_stamp = t;
 
         initialized = true;
+    }
+
+    auto reset() -> void {
+        initialized  = false;
+        update_count = 0;
+    }
+
+    auto get_snapshot() const -> Snapshot { return { ekf, device, armor_num, time_stamp }; }
+
+    auto distance() const -> double {
+        auto x = ekf.x[0], y = ekf.x[2];
+        return std::sqrt(x * x + y * y);
     }
 
     auto predict(Stamp const& t) -> void {
@@ -38,7 +46,7 @@ struct RobotState::Impl {
             return;
         }
 
-        auto dt = util::delta_time(t, time_stamp);
+        auto dt = util::delta_time(t, time_stamp).count();
         ekf.predict(
             EKFParameters::f(dt), [dt](EKF::XVec const&) { return EKFParameters::F(dt); },
             EKFParameters::Q(device, dt));
@@ -48,7 +56,8 @@ struct RobotState::Impl {
     auto update(Armor3D const& armor) -> void {
         if (!initialized) return;
 
-        int id = match_armors(ekf.x, armor);
+        auto [id, error, valid] = match(armor);
+        if (!valid) return;
 
         last_id = id;
         update_count++;
@@ -98,6 +107,7 @@ struct RobotState::Impl {
     int last_id { 0 };
     int update_count { 0 };
 
+    const double angle_error_threshold { 0.5 };
     // 前哨站转速特判
     constexpr auto correct() -> void {
         if (device == DeviceId::OUTPOST) {
@@ -122,8 +132,10 @@ struct RobotState::Impl {
         return armors;
     }
 
-    constexpr auto match_armors(EKF::XVec const& x, Armor3D const& armor) const -> int {
-        auto armors_xyza = calculate_armors(x);
+    constexpr auto match(Armor3D const& armor) const -> MatchResult {
+        if (!initialized) return { -1, 1e10, false };
+
+        auto armors_xyza = calculate_armors(ekf.x);
 
         auto const& [pos_x, pos_y, pos_z] = armor.translation;
         const auto xyz                    = Eigen::Vector3d { pos_x, pos_y, pos_z };
@@ -132,42 +144,26 @@ struct RobotState::Impl {
         const auto ypr_in_world = util::eulers(orientation);
         const auto ypd_in_world = util::xyz2ypd(xyz);
 
-        struct Candidate {
-            double distance;
-            int id;
-        };
+        auto it =
+            std::ranges::min_element(armors_xyza, [&](auto const& a_xyza, auto const& b_xyza) {
+                auto get_error = [&](auto const& pred) {
+                    auto ypd_pred = util::xyz2ypd(pred.template head<3>());
+                    return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
+                        + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
+                };
 
-        std::array<Candidate, 8> candidates;
-        const auto n = std::min(static_cast<int>(candidates.size()), armor_num);
+                return get_error(a_xyza) < get_error(b_xyza);
+            });
 
-        for (int i = 0; i < n; ++i) {
-            auto diff     = armors_xyza[i].head<3>() - Eigen::Vector3d::Zero();
-            candidates[i] = { diff.squaredNorm(), i };
-        }
+        int best_id = static_cast<int>(std::distance(armors_xyza.begin(), it));
 
-        const int search_num = std::min(3, n);
-        std::nth_element(candidates.begin(), candidates.begin() + search_num,
-            candidates.begin() + n,
-            [](auto const& a, auto const& b) { return a.distance < b.distance; });
+        auto min_error = [&](const auto& pred) {
+            auto ypd_pred = util::xyz2ypd(pred.template head<3>());
+            return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
+                + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
+        }(*it);
 
-        int best_id      = 0;
-        double min_error = std::numeric_limits<double>::max();
-
-        for (int i = 0; i < search_num; ++i) {
-            auto const& [distance, index] = candidates[i];
-            auto const& xyza              = armors_xyza[index];
-            auto const& ypd_in_car        = util::xyz2ypd(xyza.head<3>());
-
-            double yaw_error = std::abs(util::normalize_angle(ypr_in_world[0] - xyza[3]))
-                + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_in_car[0]));
-
-            if (yaw_error < min_error) {
-                min_error = yaw_error;
-                best_id   = index;
-            }
-        }
-
-        return best_id;
+        return { best_id, min_error, (min_error < angle_error_threshold) };
     }
 };
 
@@ -176,7 +172,7 @@ RobotState::RobotState() noexcept
 RobotState::~RobotState() noexcept = default;
 
 auto RobotState::initialize(
-    rmcs::Armor3D const& armor, std::chrono::steady_clock::time_point const& t) -> auto {
+    rmcs::Armor3D const& armor, std::chrono::steady_clock::time_point const& t) -> void {
     return pimpl->initialize(armor, t);
 }
 
@@ -184,6 +180,11 @@ auto RobotState::predict(std::chrono::steady_clock::time_point const& t) -> void
     return pimpl->predict(t);
 }
 
+auto RobotState::match(Armor3D const& armor) const -> MatchResult { return pimpl->match(armor); }
 auto RobotState::update(rmcs::Armor3D const& armor) -> void { return pimpl->update(armor); }
 
 auto RobotState::is_convergened() const -> bool { return pimpl->is_convergened(); }
+
+auto RobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
+
+auto RobotState::distance() const -> double { return pimpl->distance(); }

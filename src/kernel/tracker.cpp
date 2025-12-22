@@ -1,15 +1,19 @@
 #include "tracker.hpp"
 
 #include "module/tracker/armor_filter.hpp"
+#include "module/tracker/decider.hpp"
 #include "module/tracker/state.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
 using namespace rmcs::tracker;
+using Clock = std::chrono::steady_clock;
+using Stamp = Clock::time_point;
 
 struct Tracker::Impl {
     ArmorFilter filter;
     StateMachine state_machine;
+    Decider decider;
 
     struct Config : util::Serializable {
         std::string enemy_color;
@@ -47,6 +51,11 @@ struct Tracker::Impl {
         return result;
     }
 
+    auto decide(std::span<Armor3D> const& armors, Stamp t) -> Decider::Output {
+        auto decider_output = decider.update(armors, t);
+        return decider_output;
+    }
+
     // TODO:need to choose armor by priority
     // auto update_state() -> void { state_machine.update(found, ); }
 
@@ -70,4 +79,8 @@ auto Tracker::initialize(const YAML::Node& yaml) noexcept -> std::expected<void,
 
 auto Tracker::filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
     return pimpl->filter_armors(armors);
+}
+
+auto Tracker::decide(std::span<Armor3D> const& armors, Stamp t) -> Decider::Output {
+    return pimpl->decide(armors, t);
 }

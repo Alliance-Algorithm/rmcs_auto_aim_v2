@@ -14,6 +14,7 @@
 #include "utility/singleton/running.hpp"
 
 #include <csignal>
+#include <iostream>
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
@@ -128,6 +129,8 @@ auto main() -> int {
             auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d.has_value()) continue;
+
+            auto [state, target_device, snapshot] = tracker.decide(*armors_3d, Clock::now());
 
             // Predictor
             // - build ekf instance for a robot

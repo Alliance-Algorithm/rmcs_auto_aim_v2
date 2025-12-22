@@ -16,5 +16,7 @@ public:
     };
 
     auto update(bool found, DeviceId found_device) -> void;
+
+    static auto to_string(State state) -> std::string;
 };
 }
