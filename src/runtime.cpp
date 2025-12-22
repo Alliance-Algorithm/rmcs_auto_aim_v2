@@ -125,10 +125,6 @@ auto main() -> int {
 
             using namespace rmcs::util;
 
-            control_system.update_state({
-                .timestamp = Clock::now(),
-            });
-
             auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d.has_value()) continue;
