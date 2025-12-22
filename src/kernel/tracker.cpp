@@ -18,6 +18,9 @@ struct Tracker::Impl {
 
     Config config;
 
+    bool found { false };
+    DeviceIds device_candidates { DeviceIds::None() };
+
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
