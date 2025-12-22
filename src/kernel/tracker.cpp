@@ -1,12 +1,15 @@
 #include "tracker.hpp"
 
 #include "module/tracker/armor_filter.hpp"
+#include "module/tracker/state.hpp"
 #include "utility/serializable.hpp"
+
 using namespace rmcs::kernel;
 using namespace rmcs::tracker;
 
 struct Tracker::Impl {
     ArmorFilter filter;
+    StateMachine state_machine;
 
     struct Config : util::Serializable {
         std::string enemy_color;
@@ -17,6 +20,9 @@ struct Tracker::Impl {
     };
 
     Config config;
+
+    bool found { false };
+    DeviceIds device_candidates { DeviceIds::None() };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
@@ -35,8 +41,22 @@ struct Tracker::Impl {
         return {};
     }
 
-    auto filter_armors(std::span<Armor2D> const& armors) const -> auto {
-        return filter.filter(armors);
+    auto filter_armors(std::span<Armor2D> const& armors) -> std::vector<Armor2D> {
+        auto result = filter.filter(armors);
+        record(result);
+        return result;
+    }
+
+    // TODO:need to choose armor by priority
+    // auto update_state() -> void { state_machine.update(found, ); }
+
+    auto record(std::vector<Armor2D> const& armors) -> void {
+        found = (armors.size() != 0);
+
+        device_candidates = DeviceIds::None();
+        for (auto& armor : armors) {
+            device_candidates.append(armor.genre);
+        }
     }
 };
 

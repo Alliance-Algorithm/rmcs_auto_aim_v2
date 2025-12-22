@@ -115,7 +115,7 @@ auto main() -> int {
             }
 
             if (use_painted_image) {
-                for (const auto& armor_2d : *armors_2d)
+                for (const auto& armor_2d : filtered_armors_2d)
                     util::draw(*image, armor_2d);
             }
 
@@ -123,7 +123,13 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            auto armors_3d = pose_estimator.solve_pnp(*armors_2d);
+            using namespace rmcs::util;
+
+            control_system.update_state({
+                .timestamp = Clock::now(),
+            });
+
+            auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d.has_value()) continue;
 
