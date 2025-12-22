@@ -101,6 +101,22 @@ struct StateMachine::Impl {
         pre_state = state;
         state     = new_state;
     }
+
+    static constexpr auto to_string(State state) -> std::string {
+        switch (state) {
+        case State::Lost:
+            return "Lost";
+        case State::Detecting:
+            return "Detecting";
+        case State::Tracking:
+            return "Tracking";
+        case State::TemporaryLost:
+            return "TemporaryLost";
+        case State::Switching:
+            return "Switching";
+        }
+        return "Unknown";
+    }
 };
 
 StateMachine::StateMachine() noexcept
@@ -110,3 +126,5 @@ StateMachine::~StateMachine() noexcept = default;
 auto StateMachine::update(bool found, DeviceId found_device) -> void {
     pimpl->update(Clock::now(), found, found_device);
 }
+
+auto StateMachine::to_string(State state) -> std::string { return Impl::to_string(state); }
