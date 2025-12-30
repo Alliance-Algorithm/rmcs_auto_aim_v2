@@ -29,6 +29,8 @@ struct PoseEstimator::Impl {
     Config config;
     PnpSolution pnp_solution {};
 
+    Transform camera2world_transform {};
+
     Printer log { "PoseEstimator" };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
@@ -97,6 +99,37 @@ struct PoseEstimator::Impl {
 
         return armors_in_camera;
     }
+
+    auto set_camera2world_transform(Transform const& transform) -> void {
+        camera2world_transform = transform;
+    }
+
+    auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+        auto result = std::vector<Armor3D> {};
+        result.reserve(armors.size());
+
+        auto translation_camera2world = Eigen::Vector3d {};
+        camera2world_transform.posture.copy_to(translation_camera2world);
+
+        auto quat_camera2world = Eigen::Quaterniond {};
+        camera2world_transform.orientation.copy_to(quat_camera2world);
+
+        for (const auto& armor : armors) {
+            auto transformed = armor;
+
+            auto posture = Eigen::Vector3d {};
+            transformed.translation.copy_to(posture);
+            transformed.translation = quat_camera2world * posture + translation_camera2world;
+
+            auto quat = Eigen::Quaterniond {};
+            transformed.orientation.copy_to(quat);
+            transformed.orientation = quat_camera2world * quat;
+
+            result.emplace_back(transformed);
+        }
+
+        return result;
+    }
 };
 
 auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
@@ -109,9 +142,15 @@ auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const
     return pimpl->solve_pnp(armors);
 }
 
+auto PoseEstimator::set_camera2world_transform(Transform const& transform) -> void {
+    return pimpl->set_camera2world_transform(transform);
+}
+
+auto PoseEstimator::camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+    return pimpl->camera2world(armors);
+}
 PoseEstimator::PoseEstimator() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
 PoseEstimator::~PoseEstimator() noexcept = default;
-
 }

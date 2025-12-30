@@ -114,9 +114,6 @@ auto main() -> int {
             // - sync match status
             // - incincible state or other
 
-            // auto invincible_devices = control_system.invincible_devices;
-            // tracker.set_invincible_armors(invincible_devices);
-
             tracker.set_invincible_armors(control_state.invincible_devices);
             auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
             if (filtered_armors_2d.empty()) {
@@ -136,6 +133,9 @@ auto main() -> int {
             auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d.has_value()) continue;
+
+            pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
+            armors_3d = pose_estimator.camera2world(*armors_3d);
 
             auto [tracker_state, target_device, snapshot] =
                 tracker.decide(*armors_3d, Clock::now());
