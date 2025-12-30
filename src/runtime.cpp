@@ -18,7 +18,6 @@
 
 #include <chrono>
 #include <csignal>
-#include <iostream>
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
