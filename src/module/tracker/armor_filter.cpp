@@ -1,18 +1,13 @@
 #include "armor_filter.hpp"
 #include "utility/robot/armor.hpp"
-#include <unordered_set>
 
 using namespace rmcs::tracker;
 
 struct ArmorFilter::Impl {
     auto set_enemy_color(CampColor const& color) -> void { enemy_color = color; }
 
-    auto set_invincible_armors(std::span<DeviceId> devices) -> void {
-        invincible_armors.clear();
-        for (const auto device : devices) {
-            invincible_armors.emplace(device);
-        }
-    }
+    auto set_invincible_armors(DeviceIds devices) -> void { invincible_armors = devices; }
+
     auto filter(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto filtered = armors | std::views::filter([&](Armor2D const& armor) {
             return (armor.genre != DeviceId::INFANTRY_5)
@@ -24,18 +19,16 @@ struct ArmorFilter::Impl {
     }
 
     CampColor enemy_color;
-    std::unordered_set<DeviceId> invincible_armors;
+    DeviceIds invincible_armors;
 };
 
 ArmorFilter::ArmorFilter() noexcept
     : pimpl(std::make_unique<Impl>()) { }
 ArmorFilter::~ArmorFilter() noexcept = default;
 
-auto ArmorFilter::set_enemy_color(CampColor const& color) -> void {
-    return pimpl->set_enemy_color(color);
-}
+auto ArmorFilter::set_enemy_color(CampColor color) -> void { return pimpl->set_enemy_color(color); }
 
-auto ArmorFilter::set_invincible_armors(std::span<DeviceId> const& devices) -> void {
+auto ArmorFilter::set_invincible_armors(DeviceIds devices) -> void {
     return pimpl->set_invincible_armors(devices);
 }
 

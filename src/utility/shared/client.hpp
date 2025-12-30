@@ -4,17 +4,32 @@
 
 namespace rmcs::util {
 
-constexpr auto shared_autoaim_state_name { "/rmcs_autoaim_state" };
-constexpr auto shared_control_state_name { "/rmcs_control_state" };
+struct AutoAimSide { };
+struct ControlSide { };
 
-struct AutoAimClient {
-    using Send = shm::Client<AutoAimState>::Send;
-    using Recv = shm::Client<ControlState>::Recv;
+template <typename T>
+concept IPCSide = std::same_as<T, AutoAimSide> || std::same_as<T, ControlSide>;
+
+template <IPCSide Side, typename Data>
+struct ShmRoleSelector {
+    static constexpr bool is_sender =
+        (std::same_as<Side, AutoAimSide> && std::same_as<Data, AutoAimState>)
+        || (std::same_as<Side, ControlSide> && std::same_as<Data, ControlState>);
+
+    using ClientType = std::conditional_t<is_sender, typename shm::Client<Data>::Send,
+        typename shm::Client<Data>::Recv>;
 };
 
-struct ControlClient {
-    using Send = shm::Client<ControlState>::Send;
-    using Recv = shm::Client<AutoAimState>::Recv;
-};
+template <IPCSide Side, typename DataType>
+using ShmClient = typename ShmRoleSelector<Side, DataType>::ClientType;
+
+template <typename T>
+constexpr const char* shm_name = nullptr;
+
+template <>
+constexpr auto shm_name<AutoAimState> = "/shm_autoaim_state";
+
+template <>
+constexpr auto shm_name<ControlState> = "/shm_control_state";
 
 }

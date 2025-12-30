@@ -28,7 +28,7 @@ struct AutoAimState {
     bool should_shoot   = false;
 
     Translation target_posture {};
-    Orientation angular_speed {};
+    DeviceId target { DeviceId::UNKNOWN };
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
@@ -37,16 +37,14 @@ struct ControlState {
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double bullet_speed {};
-    Orientation imu_state {};
 
+    DeviceIds invincible_devices { DeviceIds::None() };
     /*Note:
      * 对应关系：
      * odom<->fast_tf::OdomImu,
      * camera<->fast_tf::CameraLink
      * */
     Transform camera_to_odom_transform {};
-
-    DeviceIds targets { DeviceIds::Full() };
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
 

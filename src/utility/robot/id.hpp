@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rmcs {
 
@@ -115,6 +116,15 @@ struct DeviceIds {
 
     constexpr auto append(DeviceId id) noexcept -> void { data |= std::to_underlying(id); }
     constexpr auto remove(DeviceId id) noexcept -> void { data &= ~std::to_underlying(id); }
+
+    constexpr auto elements() const -> std::vector<DeviceId> {
+        auto result = std::vector<DeviceId> {};
+        for (std::size_t i = 1; i <= 11; ++i) {
+            auto id = from_index(i);
+            if (contains(id)) result.emplace_back(id);
+        }
+        return result;
+    }
 
     constexpr static auto kLargeArmorDevices() {
         return DeviceIds {

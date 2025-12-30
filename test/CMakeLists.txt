@@ -114,3 +114,9 @@ ament_add_gtest(
     test_transform_communication
     ${TEST_DIR}/transform_communication.cpp
 )
+
+# Feishu IPC
+ament_add_gtest(
+    test_feishu
+    ${TEST_DIR}/feishu_test.cpp
+)

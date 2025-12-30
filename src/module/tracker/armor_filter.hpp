@@ -7,9 +7,9 @@ class ArmorFilter {
 
     RMCS_PIMPL_DEFINITION(ArmorFilter)
 public:
-    auto set_enemy_color(CampColor const& color) -> void;
+    auto set_enemy_color(CampColor color) -> void;
 
-    auto set_invincible_armors(std::span<DeviceId> const&) -> void;
+    auto set_invincible_armors(DeviceIds devices) -> void;
 
     auto filter(std::span<Armor2D> const&) const -> std::vector<Armor2D>;
 };

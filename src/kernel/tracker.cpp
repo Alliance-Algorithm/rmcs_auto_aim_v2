@@ -45,6 +45,10 @@ struct Tracker::Impl {
         return {};
     }
 
+    auto set_invincible_armors(DeviceIds devices) -> void {
+        return filter.set_invincible_armors(devices);
+    }
+
     auto filter_armors(std::span<Armor2D> const& armors) -> std::vector<Armor2D> {
         auto result = filter.filter(armors);
         record(result);
@@ -75,6 +79,10 @@ Tracker::~Tracker() noexcept = default;
 
 auto Tracker::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
     return pimpl->initialize(yaml);
+}
+
+auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
+    return pimpl->set_invincible_armors(devices);
 }
 
 auto Tracker::filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {

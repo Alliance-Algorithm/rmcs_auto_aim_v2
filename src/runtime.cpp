@@ -14,10 +14,12 @@
 #include "utility/singleton/running.hpp"
 
 #include <csignal>
-#include <iostream>
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
+using namespace rmcs::util;
+using TrackerState = rmcs::tracker::StateMachine::StateMachine::State;
+using Clock        = std::chrono::steady_clock;
 
 auto main() -> int {
     using namespace std::chrono_literals;
@@ -40,13 +42,12 @@ auto main() -> int {
 
     /// Runtime
     ///
+    auto feishu         = kernel::Feishu<AutoAimSide> {};
     auto capturer       = kernel::Capturer {};
     auto identifier     = kernel::Identifier {};
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
-
-    auto feishu = kernel::Feishu {};
 
     /// Configure
     ///
@@ -99,6 +100,10 @@ auto main() -> int {
 
         if (auto image = capturer.fetch_image()) {
 
+            auto control_state_opt = feishu.fetch<ControlState>();
+            if (!control_state_opt) continue;
+            auto& control_state = *control_state_opt;
+
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
                 continue;
@@ -109,7 +114,10 @@ auto main() -> int {
             // - sync match status
             // - incincible state or other
 
-            // TODO:set invincible armors
+            // auto invincible_devices = control_system.invincible_devices;
+            // tracker.set_invincible_armors(invincible_devices);
+
+            tracker.set_invincible_armors(control_state.invincible_devices);
             auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
             if (filtered_armors_2d.empty()) {
                 continue;
@@ -125,12 +133,14 @@ auto main() -> int {
             }
 
             using namespace rmcs::util;
-
             auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d.has_value()) continue;
 
-            auto [state, target_device, snapshot] = tracker.decide(*armors_3d, Clock::now());
+            auto [tracker_state, target_device, snapshot] =
+                tracker.decide(*armors_3d, Clock::now());
+
+            if (tracker_state != TrackerState::Tracking) continue;
 
             // Predictor
             // - build ekf instance for a robot
