@@ -3,6 +3,7 @@
 #include "utility/shared/context.hpp"
 #include "utility/shared/interprocess.hpp"
 
+#include "utility/shared/client.hpp"
 namespace rmcs::kernel {
 
 template <typename T>
