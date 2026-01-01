@@ -8,6 +8,7 @@
 #include "module/debug/framerate.hpp"
 #include "module/debug/log_limiter.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -173,7 +174,7 @@ auto main() -> int {
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
-            if (tracker_state != TrackerState::Tracking) continue;
+            // if (tracker_state != TrackerState::Tracking) continue;
 
             if (!snapshot_opt) continue;
 
