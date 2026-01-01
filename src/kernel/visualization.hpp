@@ -26,7 +26,7 @@ public:
 
     auto send_image(const Image&) noexcept -> bool;
 
-    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool;
+    auto visualize_armors(std::span<Armor3D const> armors) const -> bool;
 };
 
 }

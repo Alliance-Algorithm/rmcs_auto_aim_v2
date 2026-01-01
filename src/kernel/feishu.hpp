@@ -16,8 +16,10 @@ public:
         auto& client = this->template get_client<StateType>();
 
         if constexpr (requires { client.with_write([](StateType&) { }); }) {
-            if (!ensure_open(client, util::shm_name<StateType>)) [[unlikely]]
+            if (!ensure_open(client, util::shm_name<StateType>)) [[unlikely]] {
                 return false;
+            }
+
             client.with_write([&](StateType& data) { data = state; });
             return true;
         } else {
@@ -31,8 +33,9 @@ public:
 
         if constexpr (requires { client.is_updated(); }) {
             // Note:如果数据没有updated则返回上次收到的数据
-            if (!ensure_open(client, util::shm_name<StateType>)) return std::nullopt;
-
+            if (!ensure_open(client, util::shm_name<StateType>)) {
+                return std::nullopt;
+            }
             StateType out {};
             client.with_read([&](const StateType& data) { out = data; });
             return out;

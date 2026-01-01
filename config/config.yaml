@@ -5,7 +5,7 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "local_video"
+  source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500
@@ -70,6 +70,6 @@ pose_estimator:
 
 visualization:
   framerate: 60
-  monitor_host: "127.0.0.1"
+  monitor_host: "192.168.2.154"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

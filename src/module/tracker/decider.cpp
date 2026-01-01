@@ -11,7 +11,7 @@ using Stamp = Clock::time_point;
 struct Decider::Impl {
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
-    auto update(std::span<Armor3D> const& armors, Stamp t) -> Output {
+    auto update(std::span<Armor3D const> armors, Stamp t) -> Output {
         // --- 1. 物理外推 (Predict) ---
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
@@ -137,6 +137,6 @@ auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
 
-auto Decider::update(std::span<Armor3D> const& armors, Stamp t) -> Output {
+auto Decider::update(std::span<Armor3D const> armors, Stamp t) -> Output {
     return pimpl->update(armors, t);
 }

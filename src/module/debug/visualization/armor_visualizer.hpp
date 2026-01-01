@@ -13,6 +13,6 @@ class ArmorVisualizer {
 public:
     auto initialize(util::RclcppNode&) noexcept -> void;
 
-    auto visualize(std::span<Armor3D> const&) -> bool;
+    auto visualize(std::span<Armor3D const>) -> bool;
 };
 }

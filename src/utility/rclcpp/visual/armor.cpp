@@ -10,7 +10,7 @@ using Marker      = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 struct Armor::Impl {
-    static inline rclcpp::Clock rclcpp_clock { RCL_SYSTEM_TIME };
+    static inline rclcpp::Clock rclcpp_clock { RCL_STEADY_TIME };
 
     Config config;
 

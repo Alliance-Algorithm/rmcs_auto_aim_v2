@@ -20,7 +20,7 @@ struct ArmorVisualizer::Impl final {
         node = std::ref(visual_node);
     }
 
-    auto visualize(std::span<Armor3D> const& _armors) -> bool {
+    auto visualize(std::span<Armor3D const> _armors) -> bool {
         if (!node.has_value()) {
             return false;
         }
@@ -81,7 +81,7 @@ auto ArmorVisualizer::initialize(util::RclcppNode& visual_node) noexcept -> void
     return pimpl->initialize(visual_node);
 }
 
-auto ArmorVisualizer::visualize(std::span<Armor3D> const& armors) -> bool {
+auto ArmorVisualizer::visualize(std::span<Armor3D const> armors) -> bool {
     return pimpl->visualize(armors);
 }
 

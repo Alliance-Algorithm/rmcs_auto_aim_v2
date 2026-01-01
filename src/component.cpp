@@ -1,5 +1,6 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/framerate.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
 
@@ -17,11 +18,10 @@ public:
     explicit AutoAimComponent() noexcept
         : rclcpp { get_component_name() } {
 
+        register_input("/tf", rmcs_tf);
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
     }
-
-    auto before_updating() -> void override { }
 
     auto update() -> void override {
         using namespace rmcs_description;
@@ -40,7 +40,8 @@ public:
 
                 // TODO:弹速需要进一步确认
                 control_state.bullet_speed = 25;
-                feishu.commit(control_state);
+                auto success               = feishu.commit(control_state);
+                if (!success) log.error("commit failed");
             }
             {
                 if (auto state = feishu.fetch<AutoAimState>()) auto_aim_state = *state;
@@ -57,6 +58,7 @@ private:
     ControlState control_state;
     AutoAimState auto_aim_state;
 
+    Printer log { "CONTROL_COMPONENT" };
     FramerateCounter framerate;
 
 private:

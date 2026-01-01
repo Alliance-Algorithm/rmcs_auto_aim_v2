@@ -20,7 +20,6 @@ public:
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
 
-    auto update(std::span<Armor3D> const& armors, std::chrono::steady_clock::time_point t)
-        -> Output;
+    auto update(std::span<Armor3D const> armors, std::chrono::steady_clock::time_point t) -> Output;
 };
 }

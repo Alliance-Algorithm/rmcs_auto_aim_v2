@@ -55,7 +55,7 @@ struct Tracker::Impl {
         return result;
     }
 
-    auto decide(std::span<Armor3D> const& armors, Stamp t) -> Decider::Output {
+    auto decide(std::span<Armor3D const> armors, Stamp t) -> Decider::Output {
         auto decider_output = decider.update(armors, t);
         return decider_output;
     }
@@ -89,6 +89,6 @@ auto Tracker::filter_armors(std::span<Armor2D> const& armors) const -> std::vect
     return pimpl->filter_armors(armors);
 }
 
-auto Tracker::decide(std::span<Armor3D> const& armors, Stamp t) -> Decider::Output {
+auto Tracker::decide(std::span<Armor3D const> armors, Stamp t) -> Decider::Output {
     return pimpl->decide(armors, t);
 }

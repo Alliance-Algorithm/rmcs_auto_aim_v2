@@ -1,5 +1,6 @@
 #include "visualization.hpp"
 
+#include <cassert>
 #include <fstream>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
@@ -124,7 +125,7 @@ struct Visualization::Impl {
 
         return session->push_frame(mat);
     }
-    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+    auto visualize_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
         return armor_visualizer->visualize(armors);
     }
@@ -141,7 +142,7 @@ auto Visualization::send_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
 }
 
-auto Visualization::visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+auto Visualization::visualize_armors(std::span<Armor3D const> armors) const -> bool {
     return pimpl->visualize_armors(armors);
 }
 

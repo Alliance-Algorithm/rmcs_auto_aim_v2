@@ -7,6 +7,7 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -48,7 +49,7 @@ auto main() -> int {
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
-
+    auto log            = Printer { "runtime" };
     /// Configure
     ///
     auto configuration     = util::configuration();
@@ -99,7 +100,6 @@ auto main() -> int {
         // - sync with rmcs
 
         if (auto image = capturer.fetch_image()) {
-
             auto control_state_opt = feishu.fetch<ControlState>();
             if (!control_state_opt) continue;
             auto& control_state = *control_state_opt;
@@ -129,18 +129,16 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            using namespace rmcs::util;
-            auto armors_3d = pose_estimator.solve_pnp(filtered_armors_2d);
+            auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
 
-            if (!armors_3d.has_value()) continue;
+            if (!armors_3d_opt.has_value()) continue;
 
             pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
-            armors_3d = pose_estimator.camera2world(*armors_3d);
+            auto armors_3d = pose_estimator.camera2world(*armors_3d_opt);
 
-            auto [tracker_state, target_device, snapshot] =
-                tracker.decide(*armors_3d, Clock::now());
+            auto [tracker_state, target_device, snapshot] = tracker.decide(armors_3d, Clock::now());
 
-            if (tracker_state != TrackerState::Tracking) continue;
+            // if (tracker_state != TrackerState::Tracking) continue;
 
             // Predictor
             // - build ekf instance for a robot
@@ -154,7 +152,7 @@ auto main() -> int {
             // - transmit command
 
             if (visualization.initialized()) {
-                visualization.visualize_armors(*armors_3d);
+                visualization.visualize_armors(*armors_3d_opt);
             }
 
             rclcpp_node.spin_once();
