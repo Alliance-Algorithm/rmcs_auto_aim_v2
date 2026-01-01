@@ -2,6 +2,7 @@
 #include "module/debug/framerate.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/rclcpp/node.hpp"
+#include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
 #include <eigen3/Eigen/Geometry>
@@ -19,8 +20,17 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
+
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
+
+        visual::Transform::Config config {
+            .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
+            .topic        = "camera_to_odom_transform", // 发布的 topic 名
+            .parent_frame = "odom_imu_link",            // 父坐标系
+            .child_frame  = "camera_link",              // 子坐标系
+        };
+        visual_camera2odom = std::make_unique<visual::Transform>(config);
     }
 
     auto update() -> void override {
@@ -31,9 +41,14 @@ public:
 
                 auto camera2odom = fast_tf::lookup_transform<rmcs_description::CameraLink,
                     rmcs_description::OdomImu>(*rmcs_tf);
+
                 control_state.camera_to_odom_transform.posture = camera2odom.translation();
                 control_state.camera_to_odom_transform.orientation =
                     Eigen::Quaterniond(camera2odom.rotation());
+
+                visual_camera2odom->move(control_state.camera_to_odom_transform.posture,
+                    control_state.camera_to_odom_transform.orientation);
+                visual_camera2odom->update();
 
                 // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
                 control_state.invincible_devices = DeviceIds::None();
@@ -41,7 +56,6 @@ public:
                 // TODO:弹速需要进一步确认
                 control_state.bullet_speed = 25;
                 auto success               = feishu.commit(control_state);
-                if (!success) log.error("commit failed");
             }
             {
                 if (auto state = feishu.fetch<AutoAimState>()) auto_aim_state = *state;
@@ -53,6 +67,7 @@ private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
     RclcppNode rclcpp;
+    std::unique_ptr<visual::Transform> visual_camera2odom;
 
     Feishu<ControlSide> feishu;
     ControlState control_state;
