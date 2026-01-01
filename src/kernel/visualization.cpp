@@ -1,5 +1,6 @@
 #include "visualization.hpp"
 
+#include <cassert>
 #include <fstream>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
