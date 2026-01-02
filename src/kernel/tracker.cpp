@@ -61,7 +61,6 @@ struct Tracker::Impl {
     }
 
     // TODO:need to choose armor by priority
-    // auto update_state() -> void { state_machine.update(found, ); }
 
     auto record(std::vector<Armor2D> const& armors) -> void {
         found = (armors.size() != 0);

@@ -1,4 +1,5 @@
 #pragma once
+#include <opencv2/core/cvdef.h>
 
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
@@ -6,7 +7,6 @@
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 #include "utility/robot/robot.hpp"
-#include <opencv2/core/cvdef.h>
 
 namespace rmcs::predictor {
 
@@ -138,7 +138,8 @@ struct EKFParameters {
     }
 
     // 计算出装甲板中心的坐标（考虑长短轴）
-    static constexpr auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num) -> auto {
+    static constexpr auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num)
+        -> Eigen::Vector3d {
         // x vx y vy z vz a w r l h
         // x, y, z：装甲板旋转中心在世界坐标系下的位置
         // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
@@ -148,7 +149,7 @@ struct EKFParameters {
         // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
         // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
         auto angle = x[6];
-        angle      = util::normalize_angle(angle + id * CV_PI / armor_num);
+        angle      = util::normalize_angle(angle + id * 2 * CV_PI / armor_num);
 
         const auto use_l_h = (armor_num == 4) && (id == 1 || id == 3);
         const auto r_min = x[8], l = x[9];

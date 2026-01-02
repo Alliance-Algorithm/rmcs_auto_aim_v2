@@ -9,6 +9,7 @@ struct RobotState::Impl {
 
     explicit Impl(Armor3D const& armor, Stamp const& t)
         : device(armor.genre)
+        , color(armor_color2camp_color(armor.color))
         , armor_num(EKFParameters::armor_num(armor.genre))
         , time_stamp(t)
         , initialized(true) {
@@ -20,6 +21,7 @@ struct RobotState::Impl {
 
     auto initialize(Armor3D const& armor, Stamp const& t) -> void {
         device    = armor.genre;
+        color     = armor_color2camp_color(armor.color);
         armor_num = EKFParameters::armor_num(armor.genre);
         ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
         time_stamp = t;
@@ -32,7 +34,7 @@ struct RobotState::Impl {
         update_count = 0;
     }
 
-    auto get_snapshot() const -> Snapshot { return { ekf, device, armor_num, time_stamp }; }
+    auto get_snapshot() const -> Snapshot { return { ekf, device, color, armor_num, time_stamp }; }
 
     auto distance() const -> double {
         auto x = ekf.x[0], y = ekf.x[2];
@@ -98,6 +100,7 @@ struct RobotState::Impl {
     }
 
     DeviceId device;
+    CampColor color;
     int armor_num;
 
     EKF ekf;

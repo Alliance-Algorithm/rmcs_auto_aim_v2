@@ -48,7 +48,7 @@ identifier:
 
 tracker:
   # blue or red
-  enemy_color: blue
+  enemy_color: red
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]

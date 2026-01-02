@@ -13,6 +13,7 @@ constexpr auto get_enum_name(ArmorColor color) noexcept {
     constexpr std::array details { "DARK", "RED", "BLUE", "MIX" };
     return details[std::to_underlying(color)];
 }
+
 constexpr auto armor_color2camp_color(ArmorColor color) -> CampColor {
     if (color == ArmorColor::BLUE) return CampColor::BLUE;
     if (color == ArmorColor::RED) return CampColor::RED;

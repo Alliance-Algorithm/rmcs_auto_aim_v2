@@ -8,6 +8,7 @@ namespace rmcs::predictor {
 struct Snapshot {
     util::EKF<11, 4> ekf;
     DeviceId device;
+    CampColor color;
     int armor_num;
     std::chrono::steady_clock::time_point stamp;
 

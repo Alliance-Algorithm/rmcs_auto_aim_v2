@@ -9,4 +9,15 @@ enum class CampColor : uint8_t {
     BLUE,
 };
 
+inline auto to_string(CampColor color) noexcept -> const char* {
+    switch (color) {
+    case CampColor::UNKNOWN:
+        return "UNKNOWN";
+    case CampColor::RED:
+        return "RED";
+    case CampColor::BLUE:
+        return "BLUE";
+    }
+    return "UNKNOWN";
+}
 }

@@ -136,9 +136,13 @@ auto main() -> int {
             pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
             auto armors_3d = pose_estimator.camera2world(*armors_3d_opt);
 
-            auto [tracker_state, target_device, snapshot] = tracker.decide(armors_3d, Clock::now());
+            auto [tracker_state, target_device, snapshot_opt] =
+                tracker.decide(armors_3d, Clock::now());
 
             // if (tracker_state != TrackerState::Tracking) continue;
+            if (!snapshot_opt) continue;
+
+            auto const& snapshot = *snapshot_opt;
 
             // Predictor
             // - build ekf instance for a robot
@@ -153,6 +157,7 @@ auto main() -> int {
 
             if (visualization.initialized()) {
                 visualization.visualize_armors(*armors_3d_opt);
+                visualization.predicted_armors(snapshot, Clock::now());
             }
 
             rclcpp_node.spin_once();

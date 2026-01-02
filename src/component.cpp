@@ -56,6 +56,7 @@ public:
                 // TODO:弹速需要进一步确认
                 control_state.bullet_speed = 25;
                 auto success               = feishu.commit(control_state);
+                if (!success) log.info("commit control state failed!");
             }
             {
                 if (auto state = feishu.fetch<AutoAimState>()) auto_aim_state = *state;
