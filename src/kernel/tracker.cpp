@@ -12,7 +12,7 @@ using Stamp = Clock::time_point;
 
 struct Tracker::Impl {
     ArmorFilter filter;
-    StateMachine state_machine;
+    State tracker_state;
     Decider decider;
 
     struct Config : util::Serializable {
@@ -24,9 +24,6 @@ struct Tracker::Impl {
     };
 
     Config config;
-
-    bool found { false };
-    DeviceIds device_candidates { DeviceIds::None() };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
@@ -49,9 +46,8 @@ struct Tracker::Impl {
         return filter.set_invincible_armors(devices);
     }
 
-    auto filter_armors(std::span<Armor2D> const& armors) -> std::vector<Armor2D> {
+    auto filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto result = filter.filter(armors);
-        record(result);
         return result;
     }
 
@@ -61,15 +57,6 @@ struct Tracker::Impl {
     }
 
     // TODO:need to choose armor by priority
-
-    auto record(std::vector<Armor2D> const& armors) -> void {
-        found = (armors.size() != 0);
-
-        device_candidates = DeviceIds::None();
-        for (auto& armor : armors) {
-            device_candidates.append(armor.genre);
-        }
-    }
 };
 
 Tracker::Tracker() noexcept
@@ -84,7 +71,7 @@ auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
     return pimpl->set_invincible_armors(devices);
 }
 
-auto Tracker::filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
+auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D> {
     return pimpl->filter_armors(armors);
 }
 

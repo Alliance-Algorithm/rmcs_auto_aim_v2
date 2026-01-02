@@ -13,7 +13,7 @@ struct Decider {
 
 public:
     struct Output {
-        StateMachine::State state;
+        State state;
         DeviceId target_id;
         std::optional<predictor::Snapshot> snapshot;
     };

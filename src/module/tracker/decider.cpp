@@ -37,7 +37,10 @@ struct Decider::Impl {
         // --- 3. 清理过期目标 (Cleanup) ---
         std::erase_if(trackers, [&](const auto& item) {
             bool expired = util::delta_time(t, last_seen_time[item.first]) > cleanup_interval;
-            if (expired && item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
+            if (expired) {
+                if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
+                last_seen_time.erase(item.first);
+            }
 
             return expired;
         });
@@ -49,15 +52,12 @@ struct Decider::Impl {
         // --- 5. 组装输出 ---
         if (primary_target_id != DeviceId::UNKNOWN) {
             auto& target_tracker = trackers[primary_target_id];
-            return { .state = target_tracker->is_convergened() ? StateMachine::State::Tracking
-                                                               : StateMachine::State::Detecting,
+            return { .state = target_tracker->is_converged() ? State::Tracking : State::Detecting,
                 .target_id  = primary_target_id,
                 .snapshot   = target_tracker->get_snapshot() };
         }
 
-        return { .state = StateMachine::State::Lost,
-            .target_id  = DeviceId::UNKNOWN,
-            .snapshot   = std::nullopt };
+        return { .state = State::Lost, .target_id = DeviceId::UNKNOWN, .snapshot = std::nullopt };
     }
 
     auto arbitrate(Stamp now) -> DeviceId {
@@ -106,7 +106,7 @@ struct Decider::Impl {
 
     const PriorityMode mode1 = {
         { DeviceId::HERO, RobotPriority::SECOND },
-        { DeviceId::ENGINEER, RobotPriority::FORTH },
+        { DeviceId::ENGINEER, RobotPriority::FOURTH },
         { DeviceId::INFANTRY_3, RobotPriority::FIRST },
         { DeviceId::INFANTRY_4, RobotPriority::FIRST },
         { DeviceId::INFANTRY_5, RobotPriority::THIRD },

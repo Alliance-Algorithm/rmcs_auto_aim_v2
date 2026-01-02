@@ -22,7 +22,7 @@ public:
     auto match(Armor3D const& armor) const -> MatchResult;
     auto update(Armor3D const& armor) -> void;
 
-    auto is_convergened() const -> bool;
+    auto is_converged() const -> bool;
 
     auto get_snapshot() const -> Snapshot;
 

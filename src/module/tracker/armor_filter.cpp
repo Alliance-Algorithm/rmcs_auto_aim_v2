@@ -18,8 +18,8 @@ struct ArmorFilter::Impl {
         return { filtered.begin(), filtered.end() };
     }
 
-    CampColor enemy_color;
-    DeviceIds invincible_armors;
+    CampColor enemy_color { CampColor::UNKNOWN };
+    DeviceIds invincible_armors { DeviceIds::None() };
 };
 
 ArmorFilter::ArmorFilter() noexcept

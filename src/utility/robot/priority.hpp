@@ -9,7 +9,7 @@ enum class RobotPriority {
     FIRST  = 1, 
     SECOND = 2,
     THIRD  = 3,
-    FORTH  = 4,
+    FOURTH  = 4,
     FIFTH  = 5
     // clang-format on
 };

@@ -109,7 +109,7 @@ struct PoseEstimator::Impl {
         result.reserve(armors.size());
 
         auto translation_camera2world = Eigen::Vector3d {};
-        camera2world_transform.posture.copy_to(translation_camera2world);
+        camera2world_transform.position.copy_to(translation_camera2world);
 
         auto quat_camera2world = Eigen::Quaterniond {};
         camera2world_transform.orientation.copy_to(quat_camera2world);
@@ -117,9 +117,9 @@ struct PoseEstimator::Impl {
         for (const auto& armor : armors) {
             auto transformed = armor;
 
-            auto posture = Eigen::Vector3d {};
-            transformed.translation.copy_to(posture);
-            transformed.translation = quat_camera2world * posture + translation_camera2world;
+            auto position = Eigen::Vector3d {};
+            transformed.translation.copy_to(position);
+            transformed.translation = quat_camera2world * position + translation_camera2world;
 
             auto quat = Eigen::Quaterniond {};
             transformed.orientation.copy_to(quat);

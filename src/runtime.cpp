@@ -19,7 +19,7 @@
 
 using namespace rmcs;
 using namespace rmcs::util;
-using TrackerState = rmcs::tracker::StateMachine::StateMachine::State;
+using TrackerState = rmcs::tracker::State;
 using Clock        = std::chrono::steady_clock;
 
 auto main() -> int {

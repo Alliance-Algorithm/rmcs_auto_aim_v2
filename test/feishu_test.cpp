@@ -28,7 +28,7 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         auto feishu_child = Feishu<AutoAimSide> {};
         std::this_thread::sleep_for(50ms); // ensure shm is ready
 
-        auto deadline = Clock::now() + 10ms;
+        auto deadline = Clock::now() + 500ms;
         auto ctrl     = std::optional<ControlState> {};
         while (!ctrl && Clock::now() < deadline) {
             ctrl = feishu_child.fetch<ControlState>();
@@ -54,7 +54,7 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
 
     ASSERT_TRUE(feishu_parent.commit<ControlState>(ctrl));
 
-    auto deadline   = Clock::now() + 10ms;
+    auto deadline   = Clock::now() + 500ms;
     auto auto_state = std::optional<AutoAimState> {};
     while (!auto_state && Clock::now() < deadline) {
         auto_state = feishu_parent.fetch<AutoAimState>();

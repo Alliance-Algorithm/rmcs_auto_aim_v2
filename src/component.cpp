@@ -42,11 +42,11 @@ public:
                 auto camera2odom = fast_tf::lookup_transform<rmcs_description::CameraLink,
                     rmcs_description::OdomImu>(*rmcs_tf);
 
-                control_state.camera_to_odom_transform.posture = camera2odom.translation();
+                control_state.camera_to_odom_transform.position = camera2odom.translation();
                 control_state.camera_to_odom_transform.orientation =
                     Eigen::Quaterniond(camera2odom.rotation());
 
-                visual_camera2odom->move(control_state.camera_to_odom_transform.posture,
+                visual_camera2odom->move(control_state.camera_to_odom_transform.position,
                     control_state.camera_to_odom_transform.orientation);
                 visual_camera2odom->update();
 

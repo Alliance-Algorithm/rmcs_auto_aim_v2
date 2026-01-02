@@ -17,7 +17,7 @@ enum class ShootMode {
 };
 
 struct Transform {
-    Translation posture {};
+    Translation position {};
     Orientation orientation {};
 };
 

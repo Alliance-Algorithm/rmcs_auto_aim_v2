@@ -80,16 +80,15 @@ struct RobotState::Impl {
         correct();
     }
 
-    constexpr auto is_convergened() const -> bool {
+    constexpr auto is_converged() const -> bool {
         auto const r = ekf.x[8];
         auto const l = ekf.x[8] + ekf.x[9];
 
         auto const r_ok = (r > 0.05) && (r < 0.5);
         auto const l_ok = (l > 0.05) && (l < 0.5);
 
-        if (r_ok && l_ok && update_count > 3) return true;
-
-        if (r_ok && l_ok && device == DeviceId::OUTPOST && update_count > 10) return true;
+        int min_updates = (device == DeviceId::OUTPOST) ? 10 : 3;
+        if (r_ok && l_ok && update_count > min_updates) return true;
 
         return false;
     }
@@ -181,7 +180,7 @@ auto RobotState::predict(std::chrono::steady_clock::time_point const& t) -> void
 auto RobotState::match(Armor3D const& armor) const -> MatchResult { return pimpl->match(armor); }
 auto RobotState::update(rmcs::Armor3D const& armor) -> void { return pimpl->update(armor); }
 
-auto RobotState::is_convergened() const -> bool { return pimpl->is_convergened(); }
+auto RobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
 auto RobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
 
