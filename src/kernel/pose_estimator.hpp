@@ -1,13 +1,13 @@
 #pragma once
 
+#include <expected>
+#include <yaml-cpp/yaml.h>
+
 #include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/shared/context.hpp"
-
-#include <expected>
-#include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
 

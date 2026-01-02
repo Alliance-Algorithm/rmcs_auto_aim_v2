@@ -29,11 +29,6 @@ struct RobotState::Impl {
         initialized = true;
     }
 
-    auto reset() -> void {
-        initialized  = false;
-        update_count = 0;
-    }
-
     auto get_snapshot() const -> Snapshot { return { ekf, device, color, armor_num, time_stamp }; }
 
     auto distance() const -> double {
