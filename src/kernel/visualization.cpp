@@ -2,15 +2,19 @@
 
 #include <cassert>
 #include <fstream>
+#include <opencv2/core.hpp>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/math/conversion.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
 using namespace rmcs::util;
+using Clock = std::chrono::steady_clock;
+using Stamp = Clock::time_point;
 
 constexpr std::array kVideoTypes {
     "RTP_JEPG",
