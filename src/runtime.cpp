@@ -96,9 +96,6 @@ auto main() -> int {
         if (!util::get_running()) [[unlikely]]
             break;
 
-        // Feishu
-        // - sync with rmcs
-
         if (auto image = capturer.fetch_image()) {
             auto control_state_opt = feishu.fetch<ControlState>();
             if (!control_state_opt) continue;
@@ -108,11 +105,6 @@ auto main() -> int {
             if (!armors_2d.has_value()) {
                 continue;
             }
-
-            // Filter
-            // - white list
-            // - sync match status
-            // - incincible state or other
 
             tracker.set_invincible_armors(control_state.invincible_devices);
             auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
@@ -139,21 +131,10 @@ auto main() -> int {
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
-            // if (tracker_state != TrackerState::Tracking) continue;
+            if (tracker_state != TrackerState::Tracking) continue;
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
-
-            // Predictor
-            // - build ekf instance for a robot
-            // - use 3d message to filter
-
-            // ControlSystem
-            // - sync rmcs status
-            // - select the best target
-
-            // Feishu
-            // - transmit command
 
             if (visualization.initialized()) {
                 visualization.visualize_armors(*armors_3d_opt);
