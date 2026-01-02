@@ -10,6 +10,7 @@ struct ArmorShadow {
     decltype(rmcs::Armor3D::genre) genre;
     decltype(rmcs::Armor3D::color) color;
     decltype(rmcs::Armor3D::id) id;
+    std::string ns;
 
     bool operator==(ArmorShadow const& other) const = default;
     bool operator!=(ArmorShadow const& other) const { return !(*this == other); }
@@ -37,7 +38,7 @@ struct ArmorVisualizer::Impl final {
             auto& armor_ptr   = visual_armors[i];
             auto& shadow      = current_armors[i];
 
-            bool changed = !armor_ptr || needs_rebuild(shadow, input);
+            bool changed = !armor_ptr || needs_rebuild(shadow, input, name);
 
             if (changed) {
                 auto const config = VisualArmor::Config {
@@ -54,6 +55,7 @@ struct ArmorVisualizer::Impl final {
                 shadow.genre = input.genre;
                 shadow.color = input.color;
                 shadow.id    = input.id;
+                shadow.ns    = std::string(name);
             }
 
             armor_ptr->move(input.translation, input.orientation);
@@ -63,8 +65,10 @@ struct ArmorVisualizer::Impl final {
         return true;
     }
 
-    static bool needs_rebuild(ArmorShadow shadow, Armor3D const& input) {
-        return shadow.genre != input.genre || shadow.color != input.color || shadow.id != input.id;
+    static bool needs_rebuild(
+        ArmorShadow const& shadow, Armor3D const& input, std::string_view name) {
+        return shadow.genre != input.genre || shadow.color != input.color || shadow.id != input.id
+            || shadow.ns != name;
     }
 
     std::optional<std::reference_wrapper<util::RclcppNode>> node;

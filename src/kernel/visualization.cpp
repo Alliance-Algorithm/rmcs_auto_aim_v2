@@ -156,7 +156,6 @@ struct Visualization::Impl {
             armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * CV_PI, 0);
             armors.emplace_back(armor);
         }
-
         armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
         return true;
     }

@@ -51,7 +51,7 @@ struct EKFParameters {
         case DeviceId::BASE:
             return kBaseRadius;
         default:
-            return kOutpostRadius;
+            return kOtherRadius;
         }
     }
 
