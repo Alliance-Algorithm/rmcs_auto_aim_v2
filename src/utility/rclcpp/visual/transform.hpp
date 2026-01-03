@@ -14,13 +14,13 @@ struct Transform : Movable {
         std::string child_frame;
     };
 
-    explicit Transform(const Config&) noexcept;
+    explicit Transform(const Config&);
     ~Transform() noexcept;
 
     Transform(const Transform&)            = delete;
     Transform& operator=(const Transform&) = delete;
 
-    auto update() noexcept -> void;
+    auto update() -> void;
 
     auto impl_move(const Translation&, const Orientation&) -> void;
 

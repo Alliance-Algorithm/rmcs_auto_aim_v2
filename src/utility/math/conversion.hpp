@@ -29,7 +29,7 @@ inline constexpr auto ros2opencv_rotation(const Eigen::Matrix3d& rotation_matrix
     return kCoordTransformMatrix.transpose() * rotation_matrix * kCoordTransformMatrix;
 }
 
-inline constexpr auto xyz2ypd(Eigen::Vector3d const& xyz) -> Eigen::Vector3d {
+inline auto xyz2ypd(Eigen::Vector3d const& xyz) -> Eigen::Vector3d {
     const auto x = xyz[0];
     const auto y = xyz[1];
     const auto z = xyz[2];
