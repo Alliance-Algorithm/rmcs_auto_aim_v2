@@ -7,17 +7,13 @@ struct RobotState::Impl {
     using Clock = std::chrono::steady_clock;
     using Stamp = Clock::time_point;
 
-    explicit Impl(Armor3D const& armor, Stamp const& t)
-        : device(armor.genre)
-        , color(armor_color2camp_color(armor.color))
-        , armor_num(EKFParameters::armor_num(armor.genre))
-        , time_stamp(t)
-        , initialized(true) {
-        ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
-    }
-
     explicit Impl()
-        : initialized(false) { }
+        : device { DeviceId::UNKNOWN }
+        , color { CampColor::UNKNOWN }
+        , armor_num { 0 }
+        , ekf { EKF {} }
+        , time_stamp { Clock::now() }
+        , initialized { false } { }
 
     auto initialize(Armor3D const& armor, Stamp const& t) -> void {
         device    = armor.genre;
@@ -37,21 +33,29 @@ struct RobotState::Impl {
     }
 
     auto predict(Stamp const& t) -> void {
-        if (!initialized) {
-            time_stamp  = t;
-            initialized = true;
-            return;
+        if (initialized) {
+            auto dt = util::delta_time(t, time_stamp);
+            if (dt > reset_interval) {
+                initialized  = false;
+                update_count = 0;
+                time_stamp   = t;
+                return;
+            }
+
+            auto dt_s = dt.count();
+            ekf.predict(
+                EKFParameters::f(dt_s), [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
+                EKFParameters::Q(device, dt_s));
         }
 
-        auto dt = util::delta_time(t, time_stamp).count();
-        ekf.predict(
-            EKFParameters::f(dt), [dt](EKF::XVec const&) { return EKFParameters::F(dt); },
-            EKFParameters::Q(device, dt));
         time_stamp = t;
     }
 
     auto update(Armor3D const& armor) -> void {
-        if (!initialized) return;
+        if (!initialized) {
+            initialize(armor, time_stamp);
+            return;
+        }
 
         auto [id, error, valid] = match(armor);
         if (!valid) return;
@@ -103,6 +107,7 @@ struct RobotState::Impl {
     bool initialized;
     int last_id { 0 };
     int update_count { 0 };
+    const std::chrono::duration<double> reset_interval { 1.0 };
 
     const double angle_error_threshold { 0.5 };
     // 前哨站转速特判
