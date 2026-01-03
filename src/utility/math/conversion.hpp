@@ -41,24 +41,36 @@ inline constexpr auto xyz2ypd(Eigen::Vector3d const& xyz) -> Eigen::Vector3d {
     return result;
 }
 
-constexpr auto xyz2ypd_jacobian(Eigen::Vector3d const& xyz) -> auto {
+inline auto xyz2ypd_jacobian(Eigen::Vector3d const& xyz) -> Eigen::Matrix3d {
     const auto x = xyz[0];
     const auto y = xyz[1];
     const auto z = xyz[2];
 
-    const auto dyaw_dx = -y / (x * x + y * y);
-    const auto dyaw_dy = x / (x * x + y * y);
+    constexpr double eps = 1e-9;
+    const auto xy_norm2  = x * x + y * y;
+    const auto norm2     = xy_norm2 + z * z;
+
+    // 防止除零：如果坐标过近零点，返回零雅可比。
+    if (xy_norm2 < eps || norm2 < eps) {
+        return Eigen::Matrix<double, 3, 3>::Zero();
+    }
+
+    const auto dyaw_dx = -y / xy_norm2;
+    const auto dyaw_dy = x / xy_norm2;
     const auto dyaw_dz = 0.;
 
-    const auto dpitch_dx =
-        -(x * z) / ((z * z / (x * x + y * y) + 1) * std::pow((x * x + y * y), 1.5));
-    const auto dpitch_dy =
-        -(y * z) / ((z * z / (x * x + y * y) + 1) * std::pow((x * x + y * y), 1.5));
-    const auto dpitch_dz = 1 / ((z * z / (x * x + y * y) + 1) * std::pow((x * x + y * y), 0.5));
+    const auto xy_norm      = std::pow(xy_norm2, 0.5);
+    const auto denom_pitch1 = (z * z / xy_norm2 + 1);
+    const auto denom_pitch2 = std::pow(xy_norm, 3);
 
-    const auto ddistance_dx = x / std::pow((x * x + y * y + z * z), 0.5);
-    const auto ddistance_dy = y / std::pow((x * x + y * y + z * z), 0.5);
-    const auto ddistance_dz = z / std::pow((x * x + y * y + z * z), 0.5);
+    const auto dpitch_dx = -(x * z) / (denom_pitch1 * denom_pitch2);
+    const auto dpitch_dy = -(y * z) / (denom_pitch1 * denom_pitch2);
+    const auto dpitch_dz = 1 / (denom_pitch1 * xy_norm);
+
+    const auto norm         = std::pow(norm2, 0.5);
+    const auto ddistance_dx = x / norm;
+    const auto ddistance_dy = y / norm;
+    const auto ddistance_dz = z / norm;
 
     auto J = Eigen::Matrix<double, 3, 3> {};
     // clang-format off
@@ -132,7 +144,7 @@ constexpr auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1,
     return eulers;
 };
 
-constexpr auto ypd2xyz(const Eigen::Vector3d& ypd) -> Eigen::Vector3d {
+inline constexpr auto ypd2xyz(const Eigen::Vector3d& ypd) -> Eigen::Vector3d {
     const auto yaw = ypd[0], pitch = ypd[1], distance = ypd[2];
     const auto x = distance * std::cos(pitch) * std::cos(yaw);
     const auto y = distance * std::cos(pitch) * std::sin(yaw);

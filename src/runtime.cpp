@@ -124,20 +124,22 @@ auto main() -> int {
             auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d_opt.has_value()) continue;
+            if (visualization.initialized()) {
+                auto success = visualization.visualize_armors(*armors_3d_opt);
+                if (!success) log.info("可视化装甲板失败");
+            }
 
             pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
             auto armors_3d = pose_estimator.camera2world(*armors_3d_opt);
 
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
-
             if (tracker_state != TrackerState::Tracking) continue;
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
 
             if (visualization.initialized()) {
-                visualization.visualize_armors(*armors_3d_opt);
                 visualization.predicted_armors(snapshot, Clock::now());
             }
 

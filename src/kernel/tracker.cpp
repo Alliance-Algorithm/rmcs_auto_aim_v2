@@ -2,7 +2,6 @@
 
 #include "module/tracker/armor_filter.hpp"
 #include "module/tracker/decider.hpp"
-#include "module/tracker/state.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
@@ -12,7 +11,6 @@ using Stamp = Clock::time_point;
 
 struct Tracker::Impl {
     ArmorFilter filter;
-    State tracker_state;
     Decider decider;
 
     struct Config : util::Serializable {

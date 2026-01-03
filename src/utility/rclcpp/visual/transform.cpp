@@ -29,7 +29,7 @@ struct Transform::Impl {
         msg.child_frame_id  = config.child_frame;
     }
 
-    auto move(const Translation& t, const Orientation& q) noexcept {
+    auto move(const Translation& t, const Orientation& q) {
         t.copy_to(msg.transform.translation);
         q.copy_to(msg.transform.rotation);
     }

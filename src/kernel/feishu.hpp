@@ -28,20 +28,18 @@ public:
     }
 
     template <typename StateType>
-    auto fetch() noexcept -> std::optional<StateType> {
+    auto fetch() noexcept -> std::optional<StateType>
+        requires(!util::ShmRoleSelector<Side, StateType>::is_sender)
+    {
         auto& client = get_client<StateType>();
 
-        if constexpr (requires { client.is_updated(); }) {
-            // Note:如果数据没有updated则返回上次收到的数据
-            if (!ensure_open(client, util::shm_name<StateType>)) {
-                return std::nullopt;
-            }
-            StateType out {};
-            client.with_read([&](const StateType& data) { out = data; });
-            return out;
-        } else {
-            static_assert(sizeof(StateType) == 0, "Error: This side can only WRITE this state.");
+        // Note:如果数据没有updated则返回上次收到的数据
+        if (!ensure_open(client, util::shm_name<StateType>)) {
+            return std::nullopt;
         }
+        auto out = StateType {};
+        client.with_read([&](const StateType& data) { out = data; });
+        return out;
     }
 
 private:
