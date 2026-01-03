@@ -40,7 +40,10 @@ public:
 
     XVec x;
 
-    EKF() = default;
+    explicit EKF()
+        : x { XVec::Zero() }
+        , P_ { PMat::Zero() } { }
+
     explicit EKF(XVec const& initial_x, PMat const& initial_P)
         : x(initial_x)
         , P_(initial_P) { }
