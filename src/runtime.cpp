@@ -97,6 +97,7 @@ auto main() -> int {
             break;
 
         if (auto image = capturer.fetch_image()) {
+            if (!feishu.updated<ControlState>()) continue;
             auto control_state_opt = feishu.fetch<ControlState>();
             if (!control_state_opt) continue;
             auto& control_state = *control_state_opt;

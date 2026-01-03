@@ -42,9 +42,7 @@ struct Transform::Impl {
 
 auto Transform::update() noexcept -> void { pimpl->update(); }
 
-auto Transform::impl_move(const Translation& t, const Orientation& q) noexcept -> void {
-    pimpl->move(t, q);
-}
+auto Transform::impl_move(const Translation& t, const Orientation& q) -> void { pimpl->move(t, q); }
 
 Transform::Transform(const Config& config) noexcept
     : pimpl { std::make_unique<Impl>(config) } { }

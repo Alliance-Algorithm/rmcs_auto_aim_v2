@@ -22,7 +22,7 @@ struct Transform : Movable {
 
     auto update() noexcept -> void;
 
-    auto impl_move(const Translation&, const Orientation&) noexcept -> void;
+    auto impl_move(const Translation&, const Orientation&) -> void;
 
 private:
     struct Impl;

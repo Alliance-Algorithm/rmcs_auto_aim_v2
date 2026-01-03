@@ -82,7 +82,7 @@ inline auto xyz2ypd_jacobian(Eigen::Vector3d const& xyz) -> Eigen::Matrix3d {
     return J;
 }
 
-constexpr auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, int axis2 = 0,
+inline auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, int axis2 = 0,
     bool extrinsic = false) -> Eigen::Vector3d {
     if (!extrinsic) std::swap(axis0, axis2);
 
@@ -144,7 +144,7 @@ constexpr auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1,
     return eulers;
 };
 
-inline constexpr auto ypd2xyz(const Eigen::Vector3d& ypd) -> Eigen::Vector3d {
+inline auto ypd2xyz(const Eigen::Vector3d& ypd) -> Eigen::Vector3d {
     const auto yaw = ypd[0], pitch = ypd[1], distance = ypd[2];
     const auto x = distance * std::cos(pitch) * std::cos(yaw);
     const auto y = distance * std::cos(pitch) * std::sin(yaw);

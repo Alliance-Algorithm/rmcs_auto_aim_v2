@@ -33,13 +33,21 @@ public:
     {
         auto& client = get_client<StateType>();
 
-        // Note:如果数据没有updated则返回上次收到的数据
+        // Note:直接读取当前共享内存中的数据；如需检测是否有新数据，请先调用 updated()
         if (!ensure_open(client, util::shm_name<StateType>)) {
             return std::nullopt;
         }
         auto out = StateType {};
         client.with_read([&](const StateType& data) { out = data; });
         return out;
+    }
+
+    template <typename StateType>
+    auto updated() noexcept -> bool
+        requires(!util::ShmRoleSelector<Side, StateType>::is_sender)
+    {
+        auto& client = get_client<StateType>();
+        return ensure_open(client, util::shm_name<StateType>) && client.is_updated();
     }
 
 private:
