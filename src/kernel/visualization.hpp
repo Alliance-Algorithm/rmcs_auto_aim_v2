@@ -1,5 +1,4 @@
 #pragma once
-#include "module/predictor/snapshot.hpp"
 #include "utility/image/image.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
