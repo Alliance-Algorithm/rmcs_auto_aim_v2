@@ -8,7 +8,6 @@
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
-#include "utility/math/conversion.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
