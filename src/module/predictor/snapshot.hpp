@@ -1,44 +1,35 @@
 #pragma once
-#include <chrono>
 
-#include "ekf_parameter.hpp"
-#include "utility/time.hpp"
+#include <chrono>
+#include <memory>
+
+#include "utility/math/kalman_filter/ekf.hpp"
+#include "utility/robot/armor.hpp"
+#include "utility/robot/color.hpp"
+#include "utility/robot/id.hpp"
 
 namespace rmcs::predictor {
-struct Snapshot {
-    util::EKF<11, 4> ekf;
-    DeviceId device;
-    CampColor color;
-    int armor_num;
-    std::chrono::steady_clock::time_point stamp;
 
-    auto predict_at(std::chrono::steady_clock::time_point t) const -> util::EKF<11, 4>::XVec {
-        double dt = util::delta_time(t, stamp).count();
-        // 使用 EKFParameters 里的 f(dt) 进行无副作用的外推
-        return rmcs::predictor::EKFParameters::f(dt)(ekf.x);
-    }
+class Snapshot {
+public:
+    using EKF       = util::EKF<11, 4>;
+    using TimePoint = std::chrono::steady_clock::time_point;
 
-    auto predicted_armors(std::chrono::steady_clock::time_point t) const -> std::vector<Armor3D> {
-        auto const& ekf_x = predict_at(t);
-        auto _angle       = ekf_x[6];
+    Snapshot(
+        EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp) noexcept;
+    Snapshot(Snapshot const&);
+    Snapshot(Snapshot&&) noexcept;
+    Snapshot& operator=(Snapshot const&);
+    Snapshot& operator=(Snapshot&&) noexcept;
+    ~Snapshot() noexcept;
 
-        auto armors = std::vector<Armor3D> {};
-        armors.reserve(armor_num);
+    auto ekf_x() const -> EKF::XVec;
 
-        for (int id = 0; id < armor_num; ++id) {
-            auto angle    = util::normalize_angle(_angle + id * 2 * CV_PI / armor_num);
-            auto position = predictor::EKFParameters::h_armor_xyz(ekf_x, id, armor_num);
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
 
-            auto armor        = Armor3D {};
-            armor.genre       = device;
-            armor.color       = camp_color2armor_color(color);
-            armor.id          = id;
-            armor.translation = position;
-            armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * CV_PI, 0);
-            armors.emplace_back(armor);
-        }
-
-        return armors;
-    }
+private:
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
 };
-}
+
+} // namespace rmcs::predictor

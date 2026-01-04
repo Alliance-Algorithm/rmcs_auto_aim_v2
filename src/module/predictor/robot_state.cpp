@@ -1,5 +1,8 @@
 #include "robot_state.hpp"
 
+#include "module/predictor/ekf_parameter.hpp"
+#include "utility/time.hpp"
+
 using namespace rmcs::predictor;
 
 struct RobotState::Impl {
@@ -25,7 +28,9 @@ struct RobotState::Impl {
         initialized = true;
     }
 
-    auto get_snapshot() const -> Snapshot { return { ekf, device, color, armor_num, time_stamp }; }
+    auto get_snapshot() const -> Snapshot {
+        return { ekf.x, device, color, armor_num, time_stamp };
+    }
 
     auto distance() const -> double {
         auto x = ekf.x[0], y = ekf.x[2];

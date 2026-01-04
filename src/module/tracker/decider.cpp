@@ -1,6 +1,7 @@
 #include "decider.hpp"
 
 #include "../predictor/robot_state.hpp"
+#include "utility/time.hpp"
 
 using namespace rmcs::tracker;
 using namespace rmcs::predictor;
