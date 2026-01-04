@@ -1,5 +1,6 @@
 #include "kernel/capturer.hpp"
 #include "kernel/feishu.hpp"
+#include "kernel/fire_control.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
@@ -48,6 +49,7 @@ auto main() -> int {
     auto identifier     = kernel::Identifier {};
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
     auto visualization  = kernel::Visualization {};
 
     auto log_limiter = util::LogLimiter { 3 };
@@ -86,6 +88,12 @@ auto main() -> int {
         auto config = configuration["pose_estimator"];
         auto result = pose_estimator.initialize(config);
         handle_result("pose_estimator", result);
+    }
+    // FIRE CONTROL
+    {
+        auto config = configuration["fire_control"];
+        auto result = fire_control.initialize(config);
+        handle_result("fire_control", result);
     }
     // VISUALIZATION
     if (use_visualization) {
@@ -179,6 +187,10 @@ auto main() -> int {
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
+
+            auto predicted_armors = snapshot.predicted_armors(Clock::now());
+
+            auto target_armor = fire_control.choose_armor(predicted_armors, snapshot.ekf.x);
 
             if (visualization.initialized()) {
                 visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
