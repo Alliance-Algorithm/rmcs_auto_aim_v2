@@ -1,5 +1,6 @@
 #include "kernel/capturer.hpp"
 #include "kernel/feishu.hpp"
+#include "kernel/fire_control.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
@@ -48,6 +49,7 @@ auto main() -> int {
     auto identifier     = kernel::Identifier {};
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
     auto visualization  = kernel::Visualization {};
     auto log            = Printer { "runtime" };
     /// Configure
@@ -84,6 +86,12 @@ auto main() -> int {
         auto config = configuration["pose_estimator"];
         auto result = pose_estimator.initialize(config);
         handle_result("pose_estimator", result);
+    }
+    // FIRE CONTROL
+    {
+        auto config = configuration["fire_control"];
+        auto result = fire_control.initialize(config);
+        handle_result("fire_control", result);
     }
     // VISUALIZATION
     if (use_visualization) {
@@ -126,8 +134,8 @@ auto main() -> int {
 
             if (!armors_3d_opt.has_value()) continue;
             if (visualization.initialized()) {
-                auto success = visualization.visualize_armors(*armors_3d_opt);
-                if (!success) log.info("可视化装甲板失败");
+                auto success = visualization.solved_pnp_armors(*armors_3d_opt);
+                if (!success) log.info("可视化PNP结算后的装甲板失败");
             }
 
             pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
@@ -140,8 +148,12 @@ auto main() -> int {
 
             auto const& snapshot = *snapshot_opt;
 
+            auto predicted_armors = snapshot.predicted_armors(Clock::now());
+
+            auto target_armor = fire_control.choose_armor(predicted_armors, snapshot.ekf.x);
+
             if (visualization.initialized()) {
-                visualization.predicted_armors(snapshot, Clock::now());
+                visualization.predicted_armors(predicted_armors);
             }
 
             rclcpp_node.spin_once();

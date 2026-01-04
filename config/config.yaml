@@ -5,7 +5,7 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "hikcamera"
+  source: "local_video"
   hikcamera:
     # int
     timeout_ms: 500
@@ -67,6 +67,12 @@ pose_estimator:
       child: "camera_link"
       t: [0., 0., 0.]
       q: [1., 0., 0., 0.]
+
+fire_control:
+  aim_point_chooser:
+    coming_angle: 60.0      # degree
+    leaving_angle: 20.0     # degree
+    angular_velocity_threshold: 120 #degree/s
 
 visualization:
   framerate: 60

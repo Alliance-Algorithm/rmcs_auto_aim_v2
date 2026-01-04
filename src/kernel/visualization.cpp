@@ -8,7 +8,6 @@
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
-#include "utility/math/conversion.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
@@ -130,32 +129,13 @@ struct Visualization::Impl {
         return session->push_frame(mat);
     }
 
-    auto visualize_armors(std::span<Armor3D const> armors) const -> bool {
+    auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
         return armor_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
     }
 
-    auto predicted_armors(predictor::Snapshot const& snapshot, Stamp t) const -> bool {
+    auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-
-        auto const& ekf_x = snapshot.predict_at(t);
-        auto _angle       = ekf_x[6];
-
-        auto armors = std::vector<Armor3D> {};
-        armors.reserve(snapshot.armor_num);
-
-        for (int id = 0; id < snapshot.armor_num; ++id) {
-            auto angle   = util::normalize_angle(_angle + id * 2 * CV_PI / snapshot.armor_num);
-            auto posture = predictor::EKFParameters::h_armor_xyz(ekf_x, id, snapshot.armor_num);
-
-            auto armor        = Armor3D {};
-            armor.genre       = snapshot.device;
-            armor.color       = camp_color2armor_color(snapshot.color);
-            armor.id          = id;
-            armor.translation = posture;
-            armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * CV_PI, 0);
-            armors.emplace_back(armor);
-        }
         armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
         return true;
     }
@@ -172,11 +152,11 @@ auto Visualization::send_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
 }
 
-auto Visualization::visualize_armors(std::span<Armor3D const> armors) const -> bool {
-    return pimpl->visualize_armors(armors);
+auto Visualization::solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
+    return pimpl->solved_pnp_armors(armors);
 }
-auto Visualization::predicted_armors(predictor::Snapshot const& snapshot, Stamp t) const -> bool {
-    return pimpl->predicted_armors(snapshot, t);
+auto Visualization::predicted_armors(std::span<Armor3D const> armors) const -> bool {
+    return pimpl->predicted_armors(armors);
 }
 Visualization::Visualization() noexcept
     : pimpl { std::make_unique<Impl>() } { }

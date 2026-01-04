@@ -1,5 +1,4 @@
 #pragma once
-#include "module/predictor/snapshot.hpp"
 #include "utility/image/image.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
@@ -25,12 +24,10 @@ public:
 
     auto initialized() const noexcept -> bool;
 
-    auto send_image(const Image&) noexcept -> bool;
+    auto send_image(const Image& image) noexcept -> bool;
 
-    auto visualize_armors(std::span<Armor3D const> armors) const -> bool;
-
-    auto predicted_armors(
-        predictor::Snapshot const& snapshot, std::chrono::steady_clock::time_point t) const -> bool;
+    auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool;
+    auto predicted_armors(std::span<Armor3D const> armors) const -> bool;
 };
 
 }
