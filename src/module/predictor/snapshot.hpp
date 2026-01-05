@@ -25,6 +25,8 @@ public:
 
     auto ekf_x() const -> EKF::XVec;
 
+    auto time_stamp() const -> TimePoint;
+
     auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
 
 private:

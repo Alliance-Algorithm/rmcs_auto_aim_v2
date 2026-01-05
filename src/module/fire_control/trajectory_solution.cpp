@@ -1,4 +1,4 @@
-#include "trajetory_solver.hpp"
+#include "trajectory_solution.hpp"
 
 #include <cmath>
 
