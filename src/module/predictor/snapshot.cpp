@@ -9,6 +9,7 @@ using namespace rmcs::predictor;
 using TimePoint = std::chrono::steady_clock::time_point;
 
 struct Snapshot::Impl {
+
     EKF::XVec ekf_x_;
     DeviceId device;
     CampColor color;
