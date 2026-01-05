@@ -1,47 +1,29 @@
 #include "aim_point_chooser.hpp"
 
 #include "utility/math/conversion.hpp"
-#include "utility/serializable.hpp"
 
 using namespace rmcs::fire_control;
 
 struct AimPointChooser::Impl {
-    struct Config : util::Serializable {
-        double coming_angle;
-        double leaving_angle;
-        double angular_velocity_threshold;
 
-        constexpr static std::tuple metas {
-            &Config::coming_angle,
-            "coming_angle",
-            &Config::leaving_angle,
-            "leaving_angle",
-            &Config::angular_velocity_threshold,
-            "angular_velocity_threshold",
-        };
-    };
+    double coming_angle { 60 / 57.3 };  // rad
+    double leaving_angle { 20 / 57.3 }; // rad
 
-    double coming_angle { 60 / 57.3 };       // rad
-    double leaving_angle { 20 / 57.3 };      // rad
+    double outpost_coming_angle { 70 / 57.3 };  // rad
+    double outpost_leaving_angle { 30 / 57.3 }; // rad
+
     double angular_velocity_threshold { 2 }; // rad/s
-
-    const double outpost_coming_angle { 70 / 57.3 };  // rad
-    const double outpost_leaving_angle { 30 / 57.3 }; // rad
-
-    Config config;
 
     int last_chosen_id { -1 };
 
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-        coming_angle               = util::deg2rad(config.coming_angle);
-        leaving_angle              = util::deg2rad(config.leaving_angle);
-        angular_velocity_threshold = util::deg2rad(config.angular_velocity_threshold);
+    auto initialize(Config const& config) noexcept -> void {
+        coming_angle  = config.coming_angle;
+        leaving_angle = config.leaving_angle;
 
-        return {};
+        outpost_coming_angle  = config.outpost_coming_angle;
+        outpost_leaving_angle = config.outpost_leaving_angle;
+
+        angular_velocity_threshold = config.angular_velocity_threshold;
     }
 
     auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector<double, 11> const& ekf_x)
@@ -143,9 +125,8 @@ AimPointChooser::AimPointChooser() noexcept
 
 AimPointChooser::~AimPointChooser() noexcept = default;
 
-auto AimPointChooser::initialize(const YAML::Node& yaml) noexcept
-    -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
+auto AimPointChooser::initialize(Config const& config) noexcept -> void {
+    return pimpl->initialize(config);
 }
 
 auto AimPointChooser::choose_armor(std::span<Armor3D const> armors,

@@ -71,10 +71,14 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 fire_control:
-  aim_point_chooser:
+    v_initial: 25 # m/s
+    shoot_delay: 100 #ms
+
     coming_angle: 60.0      # degree
     leaving_angle: 20.0     # degree
-    angular_velocity_threshold: 120 #degree/s
+    outpost_coming_angle: 70.0      # degree
+    outpost_leaving_angle: 30.0     # degree
+    angular_velocity_threshold: 120 # degree/s
 
 visualization:
   framerate: 60
