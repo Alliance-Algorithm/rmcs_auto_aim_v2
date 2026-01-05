@@ -147,11 +147,19 @@ auto main() -> int {
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
+            auto result_opt      = fire_control.solve(snapshot);
+            if (!result_opt) continue;
 
-            auto predicted_armors = snapshot.predicted_armors(Clock::now());
+            feishu.commit(AutoAimState {
+                .timestamp      = Clock::now(),
+                .should_control = false,
+                .should_shoot   = false,
+                .yaw            = result_opt->yaw,
+                .pitch          = result_opt->pitch,
+            });
 
             if (visualization.initialized()) {
-                visualization.predicted_armors(predicted_armors);
+                visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
             }
 
             rclcpp_node.spin_once();

@@ -24,10 +24,12 @@ struct Transform {
 struct AutoAimState {
     Stamp timestamp {};
 
-    bool should_control = false;
-    bool should_shoot   = false;
+    bool should_control { false };
+    bool should_shoot = { false };
 
-    Translation target_posture {};
+    double yaw { 0 };
+    double pitch { 0 };
+
     DeviceId target { DeviceId::UNKNOWN };
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
@@ -47,5 +49,4 @@ struct ControlState {
     Transform camera_to_odom_transform {};
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
-
 }

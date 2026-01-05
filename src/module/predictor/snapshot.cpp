@@ -9,7 +9,6 @@ using namespace rmcs::predictor;
 using TimePoint = std::chrono::steady_clock::time_point;
 
 struct Snapshot::Impl {
-
     EKF::XVec ekf_x_;
     DeviceId device;
     CampColor color;
@@ -74,6 +73,8 @@ Snapshot::~Snapshot() noexcept                     = default;
 auto Snapshot::ekf_x() const -> EKF::XVec { return pimpl->ekf_x(); }
 
 auto Snapshot::time_stamp() const -> TimePoint { return pimpl->time_stamp(); }
+
+auto Snapshot::predict_at(TimePoint t) const -> EKF::XVec { return pimpl->predict_at(t); }
 
 auto Snapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3D> {
     return pimpl->predicted_armors(t);
