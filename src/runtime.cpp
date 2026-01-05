@@ -190,10 +190,6 @@ auto main() -> int {
 
             auto predicted_armors = snapshot.predicted_armors(Clock::now());
 
-            auto target_armor_opt = fire_control.choose_armor(predicted_armors, snapshot.ekf_x());
-            if (target_armor_opt) continue;
-            auto const& target_armor = *target_armor_opt;
-
             if (visualization.initialized()) {
                 visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
             }
