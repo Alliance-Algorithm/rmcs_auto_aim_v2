@@ -1,12 +1,13 @@
 #pragma once
-#include <chrono>
+
+#include "utility/clock.hpp"
 #include <deque>
 
 namespace rmcs {
 
 class FramerateCounter {
 public:
-    using Clock     = std::chrono::steady_clock;
+    using Clock     = util::Clock;
     using TimePoint = Clock::time_point;
 
     std::deque<TimePoint> frame_times;

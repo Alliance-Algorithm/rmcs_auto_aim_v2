@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"

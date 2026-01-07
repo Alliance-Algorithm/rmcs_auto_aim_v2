@@ -69,23 +69,6 @@ pose_estimator:
       t: [0., 0., 0.]
       q: [1., 0., 0., 0.]
 
-fire_control:
-  v_initial: 25 # m/s
-  shoot_delay: 100 # ms
-  shoot_offset_x: 0.0 # m
-  shoot_offset_y: 0.0 # m
-  shoot_offset_z: 0.0 # m
-
-  k: 0.019
-  g: 9.81
-  bias_scale: 1.0
-
-  coming_angle: 60.0      # degree
-  leaving_angle: 20.0     # degree
-  outpost_coming_angle: 70.0      # degree
-  outpost_leaving_angle: 30.0     # degree
-  angular_velocity_threshold: 120 # degree/s
-
 visualization:
   framerate: 60
   monitor_host: "127.0.0.1"

@@ -1,12 +1,10 @@
 #pragma once
+
+#include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
-#include <chrono>
 
 namespace rmcs::util {
-
-using Clock = std::chrono::steady_clock;
-using Stamp = Clock::time_point;
 
 enum class ShootMode {
     STOPPING,
@@ -22,7 +20,7 @@ struct Transform {
 };
 
 struct AutoAimState {
-    Stamp timestamp {};
+    Clock::time_point timestamp {};
 
     bool should_control { false };
     bool should_shoot = { false };
@@ -35,7 +33,7 @@ struct AutoAimState {
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
 struct ControlState {
-    Stamp timestamp {};
+    Clock::time_point timestamp {};
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double bullet_speed {};

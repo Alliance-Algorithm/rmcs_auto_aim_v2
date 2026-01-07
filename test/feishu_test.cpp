@@ -39,7 +39,7 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         auto_state.yaw            = 1.23;
 
         ASSERT_TRUE(feishu_child.commit(auto_state));
-        std::_Exit(0);
+        exit(0);
     }
 
     auto feishu_parent = Feishu<RuntimeRole::Control> {};
