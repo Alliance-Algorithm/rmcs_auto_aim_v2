@@ -6,8 +6,6 @@
 
 using namespace rmcs::kernel;
 using namespace rmcs::tracker;
-using Clock = std::chrono::steady_clock;
-using Stamp = Clock::time_point;
 
 struct Tracker::Impl {
     ArmorFilter filter;
