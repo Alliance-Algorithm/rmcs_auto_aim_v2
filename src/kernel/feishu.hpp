@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utility/shared/client.hpp"
+
 namespace rmcs::kernel {
 
 template <util::IPCSide Side>

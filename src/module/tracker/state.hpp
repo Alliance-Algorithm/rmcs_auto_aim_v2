@@ -4,14 +4,14 @@
 
 namespace rmcs::tracker {
 enum class State {
-    Lost,          //
-    Detecting,     //
-    Tracking,      //
-    TemporaryLost, //
-    Switching      //
+    Lost,
+    Detecting,
+    Tracking,
+    TemporaryLost,
+    Switching,
 };
 
-constexpr inline auto to_string(State state) -> std::string {
+constexpr auto to_string(State state) -> std::string {
     switch (state) {
     case State::Lost:
         return "Lost";

@@ -8,7 +8,6 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
-#include "utility/logging/printer.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -51,7 +50,6 @@ auto main() -> int {
     auto pose_estimator = kernel::PoseEstimator {};
     auto fire_control   = kernel::FireControl {};
     auto visualization  = kernel::Visualization {};
-    auto log            = Printer { "runtime" };
     /// Configure
     ///
     auto configuration     = util::configuration();
@@ -135,7 +133,7 @@ auto main() -> int {
             if (!armors_3d_opt.has_value()) continue;
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
-                if (!success) log.info("可视化PNP结算后的装甲板失败");
+                if (!success) rclcpp_node.info("可视化PNP结算后的装甲板失败");
             }
 
             pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
