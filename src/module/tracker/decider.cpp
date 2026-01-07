@@ -106,27 +106,27 @@ struct Decider::Impl {
     std::chrono::duration<double> active_interval { 100ms };
 
     const PriorityMode mode1 = {
-        { DeviceId::HERO, RobotPriority::SECOND },
-        { DeviceId::ENGINEER, RobotPriority::FOURTH },
-        { DeviceId::INFANTRY_3, RobotPriority::FIRST },
-        { DeviceId::INFANTRY_4, RobotPriority::FIRST },
-        { DeviceId::INFANTRY_5, RobotPriority::THIRD },
-        { DeviceId::SENTRY, RobotPriority::THIRD },
-        { DeviceId::OUTPOST, RobotPriority::FIFTH },
-        { DeviceId::BASE, RobotPriority::FIFTH },
-        { DeviceId::UNKNOWN, RobotPriority::FIFTH },
+        { DeviceId::HERO, 2 },
+        { DeviceId::ENGINEER, 4 },
+        { DeviceId::INFANTRY_3, 1 },
+        { DeviceId::INFANTRY_4, 1 },
+        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::SENTRY, 3 },
+        { DeviceId::OUTPOST, 5 },
+        { DeviceId::BASE, 5 },
+        { DeviceId::UNKNOWN, 5 },
     };
 
     const PriorityMode mode2 = {
-        { DeviceId::HERO, RobotPriority::FIRST },
-        { DeviceId::ENGINEER, RobotPriority::SECOND },
-        { DeviceId::INFANTRY_3, RobotPriority::FIRST },
-        { DeviceId::INFANTRY_4, RobotPriority::SECOND },
-        { DeviceId::INFANTRY_5, RobotPriority::THIRD },
-        { DeviceId::SENTRY, RobotPriority::THIRD },
-        { DeviceId::OUTPOST, RobotPriority::FIFTH },
-        { DeviceId::BASE, RobotPriority::FIFTH },
-        { DeviceId::UNKNOWN, RobotPriority::FIFTH },
+        { DeviceId::HERO, 1 },
+        { DeviceId::ENGINEER, 2 },
+        { DeviceId::INFANTRY_3, 1 },
+        { DeviceId::INFANTRY_4, 2 },
+        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::SENTRY, 3 },
+        { DeviceId::OUTPOST, 5 },
+        { DeviceId::BASE, 5 },
+        { DeviceId::UNKNOWN, 5 },
     };
 };
 

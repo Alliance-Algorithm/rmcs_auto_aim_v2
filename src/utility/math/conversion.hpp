@@ -1,7 +1,6 @@
 #pragma once
 #include "utility/math/angle.hpp"
 #include <eigen3/Eigen/Geometry>
-#include <opencv2/core/cvdef.h>
 
 namespace rmcs::util {
 
@@ -112,7 +111,7 @@ inline auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, in
 
     const auto eps   = 1e-7;
     const auto safe1 = std::abs(eulers[1]) >= eps;
-    const auto safe2 = std::abs(eulers[1] - CV_PI) >= eps;
+    const auto safe2 = std::abs(eulers[1] - std::numbers::pi) >= eps;
     const auto safe  = safe1 && safe2;
     if (safe) {
         eulers[0] = half_sum + half_diff;
@@ -134,7 +133,7 @@ inline auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, in
 
     if (!is_proper) {
         eulers[2] *= sign;
-        eulers[1] -= CV_PI / 2;
+        eulers[1] -= std::numbers::pi / 2;
     }
 
     if (!extrinsic) std::swap(eulers[0], eulers[2]);

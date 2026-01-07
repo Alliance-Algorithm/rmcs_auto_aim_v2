@@ -38,7 +38,7 @@ struct Snapshot::Impl {
         armors.reserve(armor_num);
 
         for (int id = 0; id < armor_num; ++id) {
-            auto angle    = util::normalize_angle(_angle + id * 2 * CV_PI / armor_num);
+            auto angle    = util::normalize_angle(_angle + id * 2 * std::numbers::pi / armor_num);
             auto position = EKFParameters::h_armor_xyz(ekf_x, id, armor_num);
 
             auto armor        = Armor3D {};
@@ -46,7 +46,7 @@ struct Snapshot::Impl {
             armor.color       = camp_color2armor_color(color);
             armor.id          = id;
             armor.translation = position;
-            armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * CV_PI, 0);
+            armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * std::numbers::pi, 0);
             armors.emplace_back(armor);
         }
         return armors;

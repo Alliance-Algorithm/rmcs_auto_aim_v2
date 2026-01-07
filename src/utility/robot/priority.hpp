@@ -4,15 +4,5 @@
 
 #include "utility/robot/id.hpp"
 namespace rmcs {
-enum class RobotPriority {
-    // clang-format off
-    FIRST  = 1, 
-    SECOND = 2,
-    THIRD  = 3,
-    FOURTH  = 4,
-    FIFTH  = 5
-    // clang-format on
-};
-
-using PriorityMode = std::unordered_map<DeviceId, RobotPriority>;
+using PriorityMode = std::unordered_map<DeviceId, int>;
 }

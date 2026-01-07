@@ -1,12 +1,11 @@
 #pragma once
-#include <opencv2/core/cvdef.h>
 
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"
+#include "utility/robot/constant.hpp"
 #include "utility/robot/id.hpp"
-#include "utility/robot/robot.hpp"
 
 namespace rmcs::predictor {
 
@@ -56,14 +55,11 @@ struct EKFParameters {
     }
 
     static constexpr auto armor_num(DeviceId const& device) -> int {
-        auto is_balance = [](DeviceId device) {
-            return (device == DeviceId::INFANTRY_3 || device == DeviceId::INFANTRY_4
-                || device == DeviceId::INFANTRY_5);
-        };
+        auto is_balance = DeviceIds::kInfantry().contains(device);
 
         auto num = int {};
         if (device == DeviceId::OUTPOST || device == DeviceId::BASE) num = 3;
-        else if (is_balance(device)) num = 2;
+        else if (is_balance) num = 2;
         else num = 4;
         return num;
     }
@@ -149,7 +145,7 @@ struct EKFParameters {
         // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
         // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
         auto angle = x[6];
-        angle      = util::normalize_angle(angle + id * 2 * CV_PI / armor_num);
+        angle      = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
 
         const auto use_l_h = (armor_num == 4) && (id == 1 || id == 3);
         const auto r_min = x[8], l = x[9];
@@ -168,7 +164,7 @@ struct EKFParameters {
         const auto xyz = h_armor_xyz(x, id, armor_num);
         const auto ypd = util::xyz2ypd(xyz);
         auto angle     = x(6);
-        const auto yaw = util::normalize_angle(angle + id * 2 * CV_PI / armor_num);
+        const auto yaw = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
 
         const auto result = EKF::ZVec { ypd[0], ypd[1], ypd[2], yaw };
         return result;
@@ -215,7 +211,7 @@ struct EKFParameters {
         // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
         // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
         auto angle           = x[6];
-        angle                = util::normalize_angle(angle + id * 2 * CV_PI / armor_num);
+        angle                = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
         const auto cos_angle = std::cos(angle);
         const auto sin_angle = std::sin(angle);
 

@@ -130,7 +130,7 @@ struct RobotState::Impl {
         auto armors = std::vector<Eigen::Vector4d> {};
         for (int i = 0; i < armor_num; i++) {
             auto angle = x[6];
-            angle      = util::normalize_angle(angle + i * 2 * CV_PI / armor_num);
+            angle      = util::normalize_angle(angle + i * 2 * std::numbers::pi / armor_num);
 
             auto xyz  = EKFParameters::h_armor_xyz(x, i, armor_num);
             auto xyza = Eigen::Vector4d { xyz[0], xyz[1], xyz[2], angle };
