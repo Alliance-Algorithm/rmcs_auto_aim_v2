@@ -1,7 +1,6 @@
 #pragma once
 #include "utility/math/angle.hpp"
 #include <eigen3/Eigen/Geometry>
-#include <opencv2/core/cvdef.h>
 
 namespace rmcs::util {
 
