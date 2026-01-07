@@ -28,30 +28,37 @@ public:
     using RecvClient = typename rmcs::shm::Client<RecvData>::Recv;
 
     Feishu() {
-        send_client.open(shm_name<SendData>);
-        recv_client.open(shm_name<RecvData>);
+        ensure_open(send_client, shm_name<SendData>);
+        ensure_open(recv_client, shm_name<RecvData>);
     }
 
     auto commit(SendData const& data) noexcept -> bool {
-        if (!send_client.opened()) [[unlikely]]
-            return false;
+        if (!ensure_open(send_client, shm_name<SendData>)) [[unlikely]] return false;
         send_client.with_write([&](SendData& shared) { shared = data; });
         return true;
     }
 
     auto fetch() noexcept -> const RecvData& {
         // Note:直接读取当前共享内存中的数据；如需检测是否有新数据，请先调用 updated()
+        if (!ensure_open(recv_client, shm_name<RecvData>)) return recv_buffer;
         recv_client.with_read([&](RecvData const& shared) { recv_buffer = shared; });
         return recv_buffer;
     }
 
-    auto updated() noexcept -> bool { return recv_client.opened() && recv_client.is_updated(); }
+    auto updated() noexcept -> bool {
+        return ensure_open(recv_client, shm_name<RecvData>) && recv_client.is_updated();
+    }
 
 private:
     SendClient send_client {};
     RecvClient recv_client {};
 
     RecvData recv_buffer {};
+
+    template <typename Client>
+    auto ensure_open(Client& client, const char* name) noexcept -> bool {
+        return client.opened() || (name && client.open(name));
+    }
 };
 
 }

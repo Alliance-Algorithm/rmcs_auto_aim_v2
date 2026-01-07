@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
-#include <optional>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
