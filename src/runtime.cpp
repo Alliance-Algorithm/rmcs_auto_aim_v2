@@ -19,6 +19,7 @@
 
 using namespace rmcs;
 using namespace rmcs::util;
+using namespace rmcs::kernel;
 using TrackerState = rmcs::tracker::State;
 using Clock        = std::chrono::steady_clock;
 
@@ -42,8 +43,7 @@ auto main() -> int {
     framerate.set_interval(5s);
 
     /// Runtime
-    ///
-    auto feishu         = kernel::Feishu<AutoAimSide> {};
+    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
     auto capturer       = kernel::Capturer {};
     auto identifier     = kernel::Identifier {};
     auto tracker        = kernel::Tracker {};
@@ -103,10 +103,8 @@ auto main() -> int {
             break;
 
         if (auto image = capturer.fetch_image()) {
-            if (!feishu.updated<ControlState>()) continue;
-            auto control_state_opt = feishu.fetch<ControlState>();
-            if (!control_state_opt) continue;
-            auto& control_state = *control_state_opt;
+            if (!feishu.updated()) continue;
+            auto control_state = feishu.fetch();
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {

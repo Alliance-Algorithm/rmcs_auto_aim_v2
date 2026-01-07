@@ -1,73 +1,57 @@
 #pragma once
 
-#include "utility/shared/client.hpp"
+#include "utility/shared/context.hpp"
+#include "utility/shared/interprocess.hpp"
 
 namespace rmcs::kernel {
+template <typename T>
+constexpr const char* shm_name = nullptr;
 
-template <util::IPCSide Side>
+template <>
+constexpr auto shm_name<util::AutoAimState> = "/shm_autoaim_state";
+
+template <>
+constexpr auto shm_name<util::ControlState> = "/shm_control_state";
+
+enum class RuntimeRole { AutoAim, Control };
+
+template <RuntimeRole Role>
 class Feishu {
 public:
     using AutoAimState = util::AutoAimState;
     using ControlState = util::ControlState;
 
-    template <typename StateType>
-    auto commit(StateType const& state) noexcept -> bool
-        requires(util::ShmRoleSelector<Side, StateType>::is_sender)
-    {
-        auto& client = this->template get_client<StateType>();
+    using SendData = std::conditional_t<Role == RuntimeRole::AutoAim, AutoAimState, ControlState>;
+    using RecvData = std::conditional_t<Role == RuntimeRole::AutoAim, ControlState, AutoAimState>;
 
-        if constexpr (requires { client.with_write([](StateType&) { }); }) {
-            if (!ensure_open(client, util::shm_name<StateType>)) [[unlikely]] {
-                return false;
-            }
+    using SendClient = typename rmcs::shm::Client<SendData>::Send;
+    using RecvClient = typename rmcs::shm::Client<RecvData>::Recv;
 
-            client.with_write([&](StateType& data) { data = state; });
-            return true;
-        } else {
-            static_assert(sizeof(StateType) == 0, "Error: This side can only READ this state.");
-        }
+    Feishu() {
+        send_client.open(shm_name<SendData>);
+        recv_client.open(shm_name<RecvData>);
     }
 
-    template <typename StateType>
-    auto fetch() noexcept -> std::optional<StateType>
-        requires(!util::ShmRoleSelector<Side, StateType>::is_sender)
-    {
-        auto& client = get_client<StateType>();
+    auto commit(SendData const& data) noexcept -> bool {
+        if (!send_client.opened()) [[unlikely]]
+            return false;
+        send_client.with_write([&](SendData& shared) { shared = data; });
+        return true;
+    }
 
+    auto fetch() noexcept -> const RecvData& {
         // Note:直接读取当前共享内存中的数据；如需检测是否有新数据，请先调用 updated()
-        if (!ensure_open(client, util::shm_name<StateType>)) {
-            return std::nullopt;
-        }
-        auto out = StateType {};
-        client.with_read([&](const StateType& data) { out = data; });
-        return out;
+        recv_client.with_read([&](RecvData const& shared) { recv_buffer = shared; });
+        return recv_buffer;
     }
 
-    template <typename StateType>
-    auto updated() noexcept -> bool
-        requires(!util::ShmRoleSelector<Side, StateType>::is_sender)
-    {
-        auto& client = get_client<StateType>();
-        return ensure_open(client, util::shm_name<StateType>) && client.is_updated();
-    }
+    auto updated() noexcept -> bool { return recv_client.opened() && recv_client.is_updated(); }
 
 private:
-    util::ShmClient<Side, AutoAimState> auto_aim_client {};
-    util::ShmClient<Side, ControlState> control_client {};
+    SendClient send_client {};
+    RecvClient recv_client {};
 
-    template <typename DataType>
-    auto get_client() noexcept -> auto& {
-        if constexpr (std::same_as<DataType, AutoAimState>) {
-            return auto_aim_client;
-        } else {
-            return control_client;
-        }
-    }
-
-    template <typename Client>
-    auto ensure_open(Client& client, const char* name) noexcept -> bool {
-        return client.opened() || (name && client.open(name));
-    }
+    RecvData recv_buffer {};
 };
 
 }

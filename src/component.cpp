@@ -58,7 +58,9 @@ public:
                 if (!success) rclcpp.info("commit control state failed!");
             }
             {
-                if (auto state = feishu.fetch<AutoAimState>()) auto_aim_state = *state;
+                if (feishu.updated()) {
+                    auto_aim_state = feishu.fetch();
+                }
             }
         }
     }
@@ -69,7 +71,7 @@ private:
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_camera2odom;
 
-    Feishu<ControlSide> feishu;
+    Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
 
