@@ -5,7 +5,7 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "local_video"
+  source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500

@@ -2,6 +2,7 @@
 
 #include "module/predictor/snapshot.hpp"
 #include "state.hpp"
+#include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/id.hpp"
 #include "utility/robot/priority.hpp"
@@ -9,6 +10,8 @@
 namespace rmcs::tracker {
 
 struct Decider {
+    using Clock = util::Clock;
+
     RMCS_PIMPL_DEFINITION(Decider)
 
 public:
@@ -20,6 +23,6 @@ public:
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
 
-    auto update(std::span<Armor3D const> armors, std::chrono::steady_clock::time_point t) -> Output;
+    auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output;
 };
 }

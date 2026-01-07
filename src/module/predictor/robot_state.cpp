@@ -6,9 +6,7 @@
 using namespace rmcs::predictor;
 
 struct RobotState::Impl {
-    using EKF   = util::EKF<11, 4>;
-    using Clock = std::chrono::steady_clock;
-    using Stamp = Clock::time_point;
+    using EKF = util::EKF<11, 4>;
 
     explicit Impl()
         : device { DeviceId::UNKNOWN }
@@ -18,7 +16,7 @@ struct RobotState::Impl {
         , time_stamp { Clock::now() }
         , initialized { false } { }
 
-    auto initialize(Armor3D const& armor, Stamp const& t) -> void {
+    auto initialize(Armor3D const& armor, Clock::time_point t) -> void {
         device    = armor.genre;
         color     = armor_color2camp_color(armor.color);
         armor_num = EKFParameters::armor_num(armor.genre);
@@ -37,7 +35,7 @@ struct RobotState::Impl {
         return std::sqrt(x * x + y * y);
     }
 
-    auto predict(Stamp const& t) -> void {
+    auto predict(Clock::time_point t) -> void {
         if (initialized) {
             auto dt = util::delta_time(t, time_stamp);
             if (dt > reset_interval) {
@@ -107,7 +105,7 @@ struct RobotState::Impl {
     int armor_num;
 
     EKF ekf;
-    Stamp time_stamp;
+    Clock::time_point time_stamp;
 
     bool initialized;
     int last_id { 0 };
@@ -178,14 +176,11 @@ RobotState::RobotState() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 RobotState::~RobotState() noexcept = default;
 
-auto RobotState::initialize(
-    rmcs::Armor3D const& armor, std::chrono::steady_clock::time_point const& t) -> void {
+auto RobotState::initialize(rmcs::Armor3D const& armor, Clock::time_point t) -> void {
     return pimpl->initialize(armor, t);
 }
 
-auto RobotState::predict(std::chrono::steady_clock::time_point const& t) -> void {
-    return pimpl->predict(t);
-}
+auto RobotState::predict(Clock::time_point t) -> void { return pimpl->predict(t); }
 
 auto RobotState::match(Armor3D const& armor) const -> MatchResult { return pimpl->match(armor); }
 auto RobotState::update(rmcs::Armor3D const& armor) -> void { return pimpl->update(armor); }

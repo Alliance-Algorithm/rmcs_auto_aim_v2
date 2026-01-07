@@ -1,18 +1,16 @@
 #include "decider.hpp"
 
-#include "../predictor/robot_state.hpp"
+#include "module/predictor/robot_state.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::tracker;
 using namespace rmcs::predictor;
 using namespace std::chrono_literals;
-using Clock = std::chrono::steady_clock;
-using Stamp = Clock::time_point;
 
 struct Decider::Impl {
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
-    auto update(std::span<Armor3D const> armors, Stamp t) -> Output {
+    auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
         // --- 1. 物理外推 (Predict) ---
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
@@ -61,7 +59,7 @@ struct Decider::Impl {
         return { .state = State::Lost, .target_id = DeviceId::UNKNOWN, .snapshot = std::nullopt };
     }
 
-    auto arbitrate(Stamp now) -> DeviceId {
+    auto arbitrate(Clock::time_point now) -> DeviceId {
         auto candidates = trackers | std::views::filter([&](const auto& pair) {
             return util::delta_time(now, last_seen_time[pair.first]) < active_interval;
         });
@@ -98,7 +96,7 @@ struct Decider::Impl {
 
     DeviceId primary_target_id { DeviceId::UNKNOWN };
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
-    std::unordered_map<DeviceId, Stamp> last_seen_time;
+    std::unordered_map<DeviceId, Clock::time_point> last_seen_time;
 
     PriorityMode priority_mode;
 
@@ -138,6 +136,6 @@ auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
 
-auto Decider::update(std::span<Armor3D const> armors, Stamp t) -> Output {
+auto Decider::update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
     return pimpl->update(armors, t);
 }

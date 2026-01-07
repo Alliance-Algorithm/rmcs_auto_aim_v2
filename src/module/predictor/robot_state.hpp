@@ -3,10 +3,13 @@
 #include <chrono>
 
 #include "module/predictor/snapshot.hpp"
+#include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::predictor {
 struct RobotState {
+    using Clock = util::Clock;
+
     RMCS_PIMPL_DEFINITION(RobotState)
 public:
     struct MatchResult {
@@ -15,9 +18,9 @@ public:
         bool is_valid;
     };
 
-    auto initialize(Armor3D const&, std::chrono::steady_clock::time_point const&) -> void;
+    auto initialize(Armor3D const&, Clock::time_point) -> void;
 
-    auto predict(std::chrono::steady_clock::time_point const& t) -> void;
+    auto predict(Clock::time_point t) -> void;
 
     auto match(Armor3D const& armor) const -> MatchResult;
     auto update(Armor3D const& armor) -> void;

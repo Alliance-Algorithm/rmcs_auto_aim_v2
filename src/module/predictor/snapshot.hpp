@@ -1,8 +1,8 @@
 #pragma once
 
-#include <chrono>
 #include <memory>
 
+#include "utility/clock.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/color.hpp"
@@ -12,11 +12,11 @@ namespace rmcs::predictor {
 
 class Snapshot {
 public:
-    using EKF       = util::EKF<11, 4>;
-    using TimePoint = std::chrono::steady_clock::time_point;
+    using EKF   = util::EKF<11, 4>;
+    using Clock = util::Clock;
 
-    Snapshot(
-        EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp) noexcept;
+    Snapshot(EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
+        Clock::time_point stamp) noexcept;
     Snapshot(Snapshot const&);
     Snapshot(Snapshot&&) noexcept;
     Snapshot& operator=(Snapshot const&);
@@ -25,10 +25,10 @@ public:
 
     auto ekf_x() const -> EKF::XVec;
 
-    auto time_stamp() const -> TimePoint;
+    auto time_stamp() const -> Clock::time_point;
 
-    auto predict_at(TimePoint t) const -> EKF::XVec;
-    auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
+    auto predict_at(Clock::time_point t) const -> EKF::XVec;
+    auto predicted_armors(Clock::time_point t) const -> std::vector<Armor3D>;
 
 private:
     struct Impl;
