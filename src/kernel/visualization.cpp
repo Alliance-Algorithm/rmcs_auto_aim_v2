@@ -133,8 +133,7 @@ struct Visualization::Impl {
 
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
-        return true;
+        return armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
     }
 };
 
