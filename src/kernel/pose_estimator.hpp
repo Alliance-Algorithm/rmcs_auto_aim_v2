@@ -26,6 +26,7 @@ public:
     auto set_camera2world_transform(util::Transform const& transform) -> void;
 
     auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D>;
+    auto camera2world(Armor3D const& armor) const -> Armor3D;
 
     auto update_imu_link(const Orientation&) noexcept -> void;
 };

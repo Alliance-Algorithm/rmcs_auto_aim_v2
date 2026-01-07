@@ -1,5 +1,7 @@
 #pragma once
+
 #include <cstdint>
+#include <string_view>
 
 namespace rmcs {
 
@@ -9,7 +11,7 @@ enum class CampColor : uint8_t {
     BLUE,
 };
 
-inline auto to_string(CampColor color) noexcept -> const char* {
+constexpr auto to_string(CampColor color) noexcept -> std::string_view {
     switch (color) {
     case CampColor::UNKNOWN:
         return "UNKNOWN";

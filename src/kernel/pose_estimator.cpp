@@ -29,7 +29,8 @@ struct PoseEstimator::Impl {
     Config config;
     PnpSolution pnp_solution {};
 
-    Transform camera2world_transform {};
+    Eigen::Vector3d camera2world_translation { Eigen::Vector3d::Zero() };
+    Eigen::Quaterniond camera2world_orientation { Eigen::Quaterniond::Identity() };
 
     Printer log { "PoseEstimator" };
 
@@ -101,29 +102,39 @@ struct PoseEstimator::Impl {
     }
 
     auto set_camera2world_transform(Transform const& transform) -> void {
-        camera2world_transform = transform;
+        transform.position.copy_to(camera2world_translation);
+        transform.orientation.copy_to(camera2world_orientation);
+    }
+
+    auto camera2world(Armor3D const& armor) const -> Armor3D {
+        auto transformed = armor;
+
+        auto position = Eigen::Vector3d {};
+        transformed.translation.copy_to(position);
+        transformed.translation = camera2world_orientation * position + camera2world_translation;
+
+        auto quat = Eigen::Quaterniond {};
+        transformed.orientation.copy_to(quat);
+        transformed.orientation = camera2world_orientation * quat;
+
+        return transformed;
     }
 
     auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
         auto result = std::vector<Armor3D> {};
         result.reserve(armors.size());
 
-        auto translation_camera2world = Eigen::Vector3d {};
-        camera2world_transform.position.copy_to(translation_camera2world);
-
-        auto quat_camera2world = Eigen::Quaterniond {};
-        camera2world_transform.orientation.copy_to(quat_camera2world);
-
         for (const auto& armor : armors) {
             auto transformed = armor;
 
             auto position = Eigen::Vector3d {};
             transformed.translation.copy_to(position);
-            transformed.translation = quat_camera2world * position + translation_camera2world;
+            transformed.translation =
+                camera2world_orientation * position + camera2world_translation;
 
             auto quat = Eigen::Quaterniond {};
             transformed.orientation.copy_to(quat);
-            transformed.orientation = quat_camera2world * quat;
+            transformed.orientation = camera2world_orientation * quat;
 
             result.emplace_back(transformed);
         }
@@ -149,6 +160,10 @@ auto PoseEstimator::set_camera2world_transform(Transform const& transform) -> vo
 auto PoseEstimator::camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
     return pimpl->camera2world(armors);
 }
+auto PoseEstimator::camera2world(Armor3D const& armor) const -> Armor3D {
+    return pimpl->camera2world(armor);
+}
+
 PoseEstimator::PoseEstimator() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
