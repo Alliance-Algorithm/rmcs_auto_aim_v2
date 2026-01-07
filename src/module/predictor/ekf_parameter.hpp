@@ -194,7 +194,7 @@ struct EKFParameters {
 
         auto R_dig = EKF::RDig { 4 };
         // clang-format off
-        R_dig << 4e-3, 4e-3,std::log(std::abs(delta_yaw) + 1) + 1, log(std::abs(distance) + 1) / 200 + 9e-2;
+        R_dig << 4e-3, 4e-3,std::log(std::abs(delta_yaw) + 1) + 1, std::log(std::abs(distance) + 1) / 200 + 9e-2;
         // clang-format on
 
         auto R = EKF::RMat {};
