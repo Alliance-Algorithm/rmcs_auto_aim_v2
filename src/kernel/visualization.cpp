@@ -1,6 +1,5 @@
 #include "visualization.hpp"
 
-#include <cassert>
 #include <fstream>
 #include <opencv2/core.hpp>
 
