@@ -6,6 +6,11 @@
 #include "utility/shared/client.hpp"
 
 namespace rmcs::kernel {
+template <typename T>
+constexpr const char* shm_name = nullptr;
+
+template <>
+constexpr auto shm_name<util::AutoAimState> = "/shm_autoaim_state";
 
 template <typename T>
 constexpr const char* shm_name = nullptr;
