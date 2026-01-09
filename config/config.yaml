@@ -1,5 +1,6 @@
 use_visualization: true
 use_painted_image: true
+is_local_runtime: true
 
 capturer:
   show_loss_framerate: false

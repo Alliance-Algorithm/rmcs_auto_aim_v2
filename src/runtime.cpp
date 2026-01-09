@@ -55,6 +55,7 @@ auto main() -> int {
     auto configuration     = util::configuration();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
+    auto is_local_runtime  = configuration["is_local_runtime"].as<bool>();
 
     // CAPTURER
     {
@@ -99,14 +100,25 @@ auto main() -> int {
         rclcpp_node.spin_once();
 
         if (auto image = capturer.fetch_image()) {
+            auto control_state = ControlState {};
 
-            // FIXME:
-            // 目前运行时和 RMCS 那边强绑定，没有离线运行的选项
-            // 应该提供一个调试模式，将 Control State 设置为单位状态
-            // 方便在开发电脑上测试
-            if (!feishu.updated()) continue;
+            if (is_local_runtime) {
+                control_state.set_identity();
+            } else {
+                if (!feishu.updated()) {
+                    if (error_limit.tick()) {
+                        rclcpp_node.warn("Control state尚未更新，使用上一次缓存值.");
+                    } else if (error_limit.enabled()) {
+                        error_limit.disable();
+                        rclcpp_node.warn("{} times, stop printing warnings", error_limit.count);
+                    }
+                } else {
+                    error_limit.reset();
+                    error_limit.enable();
+                }
 
-            auto control_state = feishu.fetch();
+                control_state = feishu.fetch();
+            }
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {

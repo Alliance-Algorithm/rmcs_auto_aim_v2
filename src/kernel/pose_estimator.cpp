@@ -111,7 +111,8 @@ struct PoseEstimator::Impl {
 
         auto position = Eigen::Vector3d {};
         transformed.translation.copy_to(position);
-        transformed.translation = odom_to_camera_orientation * position + odom_to_camera_translation;
+        transformed.translation =
+            odom_to_camera_orientation * position + odom_to_camera_translation;
 
         auto quat = Eigen::Quaterniond {};
         transformed.orientation.copy_to(quat);

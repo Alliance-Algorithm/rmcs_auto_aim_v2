@@ -41,6 +41,14 @@ struct ControlState {
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform {};
+
+    auto set_identity() noexcept -> void {
+        timestamp                = Clock::now();
+        shoot_mode               = ShootMode::STOPPING;
+        bullet_speed             = 0.0;
+        invincible_devices       = DeviceIds::None();
+        odom_to_camera_transform = {};
+    }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
 }
