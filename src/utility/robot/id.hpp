@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rmcs {
 
@@ -116,14 +117,23 @@ struct DeviceIds {
     constexpr auto append(DeviceId id) noexcept -> void { data |= std::to_underlying(id); }
     constexpr auto remove(DeviceId id) noexcept -> void { data &= ~std::to_underlying(id); }
 
-    constexpr static auto kLargeArmorDevices() {
+    constexpr auto elements() const -> std::vector<DeviceId> {
+        auto result = std::vector<DeviceId> {};
+        for (std::size_t i = 1; i <= id::details::id_underlyings.size(); ++i) {
+            auto id = from_index(i);
+            if (contains(id)) result.emplace_back(id);
+        }
+        return result;
+    }
+
+    constexpr static auto kLargeArmor() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::ENGINEER,
             DeviceId::BASE,
         };
     }
-    constexpr static auto kSmallArmorDevices() {
+    constexpr static auto kSmallArmor() {
         return DeviceIds {
             DeviceId::INFANTRY_3,
             DeviceId::INFANTRY_4,
@@ -132,7 +142,7 @@ struct DeviceIds {
             DeviceId::OUTPOST,
         };
     }
-    constexpr static auto kGroundDevices() {
+    constexpr static auto kGround() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::ENGINEER,
@@ -142,7 +152,7 @@ struct DeviceIds {
             DeviceId::SENTRY,
         };
     }
-    constexpr static auto kOffensiveDevices() {
+    constexpr static auto kOffensive() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::INFANTRY_3,
@@ -151,10 +161,17 @@ struct DeviceIds {
             DeviceId::SENTRY,
         };
     }
-    constexpr static auto kBuildingDevices() {
+    constexpr static auto kBuilding() {
         return DeviceIds {
             DeviceId::OUTPOST,
             DeviceId::BASE,
+        };
+    }
+    constexpr static auto kInfantry() {
+        return DeviceIds {
+            DeviceId::INFANTRY_3,
+            DeviceId::INFANTRY_4,
+            DeviceId::INFANTRY_5,
         };
     }
 };

@@ -10,7 +10,7 @@ using Marker      = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 struct Armor::Impl {
-    static inline rclcpp::Clock rclcpp_clock { RCL_SYSTEM_TIME };
+    static inline rclcpp::Clock rclcpp_clock { RCL_STEADY_TIME };
 
     Config config;
 
@@ -43,9 +43,9 @@ struct Armor::Impl {
         marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
 
         // ref: "https://www.robomaster.com/zh-CN/products/components/detail/149"
-        /*  */ if (DeviceIds::kSmallArmorDevices().contains(config.device)) {
+        /*  */ if (DeviceIds::kSmallArmor().contains(config.device)) {
             marker.scale.x = 0.003, marker.scale.y = 0.140, marker.scale.z = 0.125;
-        } else if (DeviceIds::kLargeArmorDevices().contains(config.device)) {
+        } else if (DeviceIds::kLargeArmor().contains(config.device)) {
             marker.scale.x = 0.003, marker.scale.y = 0.235, marker.scale.z = 0.127;
         } else {
             util::panic("Wrong device id for a visualized armor");

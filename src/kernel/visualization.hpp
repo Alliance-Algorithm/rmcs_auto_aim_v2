@@ -24,9 +24,10 @@ public:
 
     auto initialized() const noexcept -> bool;
 
-    auto send_image(const Image&) noexcept -> bool;
+    auto send_image(const Image& image) noexcept -> bool;
 
-    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool;
+    auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool;
+    auto predicted_armors(std::span<Armor3D const> armors) const -> bool;
 };
 
 }

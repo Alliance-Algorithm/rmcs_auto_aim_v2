@@ -29,6 +29,9 @@ struct PoseEstimator::Impl {
     Config config;
     PnpSolution pnp_solution {};
 
+    Eigen::Vector3d camera2world_translation { Eigen::Vector3d::Zero() };
+    Eigen::Quaterniond camera2world_orientation { Eigen::Quaterniond::Identity() };
+
     Printer log { "PoseEstimator" };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
@@ -97,6 +100,47 @@ struct PoseEstimator::Impl {
 
         return armors_in_camera;
     }
+
+    auto set_camera2world_transform(Transform const& transform) -> void {
+        transform.position.copy_to(camera2world_translation);
+        transform.orientation.copy_to(camera2world_orientation);
+    }
+
+    auto camera2world(Armor3D const& armor) const -> Armor3D {
+        auto transformed = armor;
+
+        auto position = Eigen::Vector3d {};
+        transformed.translation.copy_to(position);
+        transformed.translation = camera2world_orientation * position + camera2world_translation;
+
+        auto quat = Eigen::Quaterniond {};
+        transformed.orientation.copy_to(quat);
+        transformed.orientation = camera2world_orientation * quat;
+
+        return transformed;
+    }
+
+    auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+        auto result = std::vector<Armor3D> {};
+        result.reserve(armors.size());
+
+        for (const auto& armor : armors) {
+            auto transformed = armor;
+
+            auto position = Eigen::Vector3d {};
+            transformed.translation.copy_to(position);
+            transformed.translation =
+                camera2world_orientation * position + camera2world_translation;
+
+            auto quat = Eigen::Quaterniond {};
+            transformed.orientation.copy_to(quat);
+            transformed.orientation = camera2world_orientation * quat;
+
+            result.emplace_back(transformed);
+        }
+
+        return result;
+    }
 };
 
 auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
@@ -109,9 +153,19 @@ auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const
     return pimpl->solve_pnp(armors);
 }
 
+auto PoseEstimator::set_camera2world_transform(Transform const& transform) -> void {
+    return pimpl->set_camera2world_transform(transform);
+}
+
+auto PoseEstimator::camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+    return pimpl->camera2world(armors);
+}
+auto PoseEstimator::camera2world(Armor3D const& armor) const -> Armor3D {
+    return pimpl->camera2world(armor);
+}
+
 PoseEstimator::PoseEstimator() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
 PoseEstimator::~PoseEstimator() noexcept = default;
-
 }

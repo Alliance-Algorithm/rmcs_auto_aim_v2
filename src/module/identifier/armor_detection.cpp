@@ -30,7 +30,7 @@ struct ArmorDetection::Impl {
 
             armor.confidence = raw_armor.confidence;
 
-            constexpr auto devices = DeviceIds::kLargeArmorDevices();
+            constexpr auto devices = DeviceIds::kLargeArmor();
             armor.shape = devices.contains(armor.genre) ? ArmorShape::LARGE : ArmorShape::SMALL;
 
             result_armors.push_back(armor);

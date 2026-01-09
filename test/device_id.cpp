@@ -51,13 +51,13 @@ TEST(device_id, bitwise_operators) {
 }
 
 TEST(device_id, predefined_groups) {
-    auto large = DeviceIds::kLargeArmorDevices();
+    auto large = DeviceIds::kLargeArmor();
     EXPECT_TRUE(large.contains(DeviceId::HERO));
     EXPECT_TRUE(large.contains(DeviceId::ENGINEER));
     EXPECT_TRUE(large.contains(DeviceId::BASE));
     EXPECT_FALSE(large.contains(DeviceId::INFANTRY_3));
 
-    auto small = DeviceIds::kSmallArmorDevices();
+    auto small = DeviceIds::kSmallArmor();
     EXPECT_TRUE(small.contains(DeviceId::INFANTRY_3));
     EXPECT_TRUE(small.contains(DeviceId::OUTPOST));
     EXPECT_FALSE(small.contains(DeviceId::BASE));

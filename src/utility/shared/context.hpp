@@ -1,12 +1,10 @@
 #pragma once
+
+#include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
-#include <chrono>
 
 namespace rmcs::util {
-
-using Clock = std::chrono::steady_clock;
-using Stamp = Clock::time_point;
 
 enum class ShootMode {
     STOPPING,
@@ -17,37 +15,36 @@ enum class ShootMode {
 };
 
 struct Transform {
-    Translation posture {};
+    Translation position {};
     Orientation orientation {};
 };
 
 struct AutoAimState {
-    Stamp timestamp {};
+    Clock::time_point timestamp {};
 
-    bool should_control = false;
-    bool should_shoot   = false;
+    bool should_control { false };
+    bool should_shoot = { false };
 
-    Translation target_posture {};
-    Orientation angular_speed {};
+    double yaw { 0 };
+    double pitch { 0 };
+
+    DeviceId target { DeviceId::UNKNOWN };
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
 struct ControlState {
-    Stamp timestamp {};
+    Clock::time_point timestamp {};
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double bullet_speed {};
-    Orientation imu_state {};
 
+    DeviceIds invincible_devices { DeviceIds::None() };
     /*Note:
      * 对应关系：
      * odom<->fast_tf::OdomImu,
      * camera<->fast_tf::CameraLink
      * */
     Transform camera_to_odom_transform {};
-
-    DeviceIds targets { DeviceIds::Full() };
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
-
 }

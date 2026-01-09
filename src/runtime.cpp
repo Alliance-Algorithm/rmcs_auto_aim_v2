@@ -1,7 +1,8 @@
 #include "kernel/capturer.hpp"
-#include "kernel/control_system.hpp"
+#include "kernel/feishu.hpp"
 #include "kernel/identifier.hpp"
 #include "kernel/pose_estimator.hpp"
+#include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
 #include "module/debug/framerate.hpp"
@@ -16,6 +17,9 @@
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
+using namespace rmcs::util;
+using namespace rmcs::kernel;
+using TrackerState = rmcs::tracker::State;
 
 auto main() -> int {
     using namespace std::chrono_literals;
@@ -37,16 +41,14 @@ auto main() -> int {
     framerate.set_interval(5s);
 
     /// Runtime
-    ///
+    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
     auto capturer       = kernel::Capturer {};
     auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
-    auto control_system = kernel::ControlSystem {};
-
     /// Configure
-    ///
     auto configuration     = util::configuration();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
@@ -68,6 +70,12 @@ auto main() -> int {
         auto result = identifier.initialize(config);
         handle_result("identifier", result);
     }
+    // TRACKER
+    {
+        auto config = configuration["tracker"];
+        auto result = tracker.initialize(config);
+        handle_result("tracker", result);
+    }
     // POSE ESTIMATOR
     {
         auto config = configuration["pose_estimator"];
@@ -85,15 +93,31 @@ auto main() -> int {
         if (!util::get_running()) [[unlikely]]
             break;
 
+        rclcpp_node.spin_once();
+
         if (auto image = capturer.fetch_image()) {
+
+            // FIXME:
+            // 目前运行时和 RMCS 那边强绑定，没有离线运行的选项
+            // 应该提供一个调试模式，将 Control State 设置为单位状态
+            // 方便在开发电脑上测试
+            if (!feishu.updated()) continue;
+
+            auto control_state = feishu.fetch();
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
                 continue;
             }
 
+            tracker.set_invincible_armors(control_state.invincible_devices);
+            auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
+            if (filtered_armors_2d.empty()) {
+                continue;
+            }
+
             if (use_painted_image) {
-                for (const auto& armor_2d : *armors_2d)
+                for (const auto& armor_2d : filtered_armors_2d)
                     util::draw(*image, armor_2d);
             }
 
@@ -101,24 +125,38 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            using namespace rmcs::util;
+            auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
 
-            control_system.update_state({
-                .timestamp = Clock::now(),
-            });
-
-            auto armors_3d = pose_estimator.solve_pnp(*armors_2d);
-
-            if (!armors_3d.has_value()) continue;
+            if (!armors_3d_opt.has_value()) continue;
 
             if (visualization.initialized()) {
-                visualization.visualize_armors(*armors_3d);
+                auto success = visualization.solved_pnp_armors(*armors_3d_opt);
+
+                // FIXME:
+                // 存在无时间间隔输出日志的风险
+                // 需要进一步确认
+                if (!success) rclcpp_node.info("可视化PNP结算后的装甲板失败");
             }
-            // TODO: pose estimator
-            // TODO: predictor
-            // TODO: control
-            rclcpp_node.spin_once();
-        }
-    }
+
+            pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
+            auto armors_3d = pose_estimator.camera2world(*armors_3d_opt);
+
+            auto [tracker_state, target_device, snapshot_opt] =
+                tracker.decide(armors_3d, Clock::now());
+
+            if (tracker_state != TrackerState::Tracking) continue;
+
+            if (!snapshot_opt) continue;
+
+            auto const& snapshot = *snapshot_opt;
+
+            if (visualization.initialized()) {
+                visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
+            }
+
+        } // image receive scope
+
+    } // runtime loop scope
+
     rclcpp_node.shutdown();
 }

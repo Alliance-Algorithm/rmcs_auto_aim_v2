@@ -5,7 +5,8 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  source: "local_video"
+  # hikcamera or local_video
+  source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500
@@ -45,6 +46,10 @@ identifier:
   min_confidence: 0.5
   score_threshold: 0.7
   nms_threshold: 0.3
+
+tracker:
+  # blue or red
+  enemy_color: red
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]

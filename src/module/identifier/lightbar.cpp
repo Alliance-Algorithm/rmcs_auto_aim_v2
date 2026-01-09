@@ -42,7 +42,9 @@ auto LightbarFinder::process(const Image& image) const noexcept -> std::vector<L
             continue;
         }
 
-        auto lightbar_center = min_bounding_rect.center;
+        [[maybe_unused]] auto lightbar_center = min_bounding_rect.center;
+        // TODO:
+        // to be implemented
     }
 
     return lightbars;

@@ -124,9 +124,15 @@ struct Visualization::Impl {
 
         return session->push_frame(mat);
     }
-    auto visualize_armors(std::span<Armor3D> const& armors) const -> bool {
+
+    auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return armor_visualizer->visualize(armors);
+        return armor_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
+    }
+
+    auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
+        if (!is_initialized) return false;
+        return armor_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
     }
 };
 
@@ -141,10 +147,12 @@ auto Visualization::send_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
 }
 
-auto Visualization::visualize_armors(std::span<Armor3D> const& armors) const -> bool {
-    return pimpl->visualize_armors(armors);
+auto Visualization::solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
+    return pimpl->solved_pnp_armors(armors);
 }
-
+auto Visualization::predicted_armors(std::span<Armor3D const> armors) const -> bool {
+    return pimpl->predicted_armors(armors);
+}
 Visualization::Visualization() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 

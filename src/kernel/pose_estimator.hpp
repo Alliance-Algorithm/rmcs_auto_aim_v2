@@ -1,11 +1,13 @@
 #pragma once
 
+#include <expected>
+#include <yaml-cpp/yaml.h>
+
 #include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
-#include <expected>
-#include <yaml-cpp/yaml.h>
+#include "utility/shared/context.hpp"
 
 namespace rmcs::kernel {
 
@@ -21,7 +23,11 @@ public:
 
     auto solve_pnp(std::vector<Armor2D> const&) const -> std::optional<std::vector<Armor3D>>;
 
+    auto set_camera2world_transform(util::Transform const& transform) -> void;
+
+    auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D>;
+    auto camera2world(Armor3D const& armor) const -> Armor3D;
+
     auto update_imu_link(const Orientation&) noexcept -> void;
 };
-
 }

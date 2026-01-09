@@ -9,7 +9,7 @@ using namespace rmcs::util::visual;
 using PoseStamped = geometry_msgs::msg::PoseStamped;
 
 struct Posture::Impl {
-    static inline rclcpp::Clock rclcpp_clock { RCL_SYSTEM_TIME };
+    static inline rclcpp::Clock rclcpp_clock { RCL_STEADY_TIME };
 
     PoseStamped pose_stamped;
     rclcpp::Publisher<PoseStamped>::SharedPtr rclcpp_pub;

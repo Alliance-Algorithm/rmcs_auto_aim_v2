@@ -10,6 +10,7 @@ struct ArmorShadow {
     decltype(rmcs::Armor3D::genre) genre;
     decltype(rmcs::Armor3D::color) color;
     decltype(rmcs::Armor3D::id) id;
+    std::string ns;
 
     bool operator==(ArmorShadow const& other) const = default;
     bool operator!=(ArmorShadow const& other) const { return !(*this == other); }
@@ -20,7 +21,8 @@ struct ArmorVisualizer::Impl final {
         node = std::ref(visual_node);
     }
 
-    auto visualize(std::span<Armor3D> const& _armors) -> bool {
+    auto visualize(std::span<Armor3D const> _armors, std::string const& name,
+        std::string const& link_name) -> bool {
         if (!node.has_value()) {
             return false;
         }
@@ -36,7 +38,7 @@ struct ArmorVisualizer::Impl final {
             auto& armor_ptr   = visual_armors[i];
             auto& shadow      = current_armors[i];
 
-            bool changed = !armor_ptr || needs_rebuild(shadow, input);
+            bool changed = !armor_ptr || needs_rebuild(shadow, input, name);
 
             if (changed) {
                 auto const config = VisualArmor::Config {
@@ -44,8 +46,8 @@ struct ArmorVisualizer::Impl final {
                     .device = input.genre,
                     .camp   = armor_color2camp_color(input.color),
                     .id     = input.id,
-                    .name   = "solved_pnp_armor",
-                    .tf     = "camera_link",
+                    .name   = name,
+                    .tf     = link_name,
                 };
 
                 armor_ptr = std::make_unique<VisualArmor>(config);
@@ -53,6 +55,7 @@ struct ArmorVisualizer::Impl final {
                 shadow.genre = input.genre;
                 shadow.color = input.color;
                 shadow.id    = input.id;
+                shadow.ns    = name;
             }
 
             armor_ptr->move(input.translation, input.orientation);
@@ -62,14 +65,10 @@ struct ArmorVisualizer::Impl final {
         return true;
     }
 
-    // static auto camp(ArmorColor const& color) -> CampColor {
-    //     if (color == ArmorColor::BLUE) return CampColor::BLUE;
-    //     if (color == ArmorColor::RED) return CampColor::RED;
-    //     return CampColor::UNKNOWN;
-    // };
-
-    static bool needs_rebuild(ArmorShadow shadow, Armor3D const& input) {
-        return shadow.genre != input.genre || shadow.color != input.color || shadow.id != input.id;
+    static auto needs_rebuild(
+        ArmorShadow const& shadow, Armor3D const& input, std::string_view name) -> bool {
+        return shadow.genre != input.genre || shadow.color != input.color || shadow.id != input.id
+            || shadow.ns != name;
     }
 
     std::optional<std::reference_wrapper<util::RclcppNode>> node;
@@ -81,8 +80,9 @@ auto ArmorVisualizer::initialize(util::RclcppNode& visual_node) noexcept -> void
     return pimpl->initialize(visual_node);
 }
 
-auto ArmorVisualizer::visualize(std::span<Armor3D> const& armors) -> bool {
-    return pimpl->visualize(armors);
+auto ArmorVisualizer::visualize(std::span<Armor3D const> armors, std::string const& name,
+    std::string const& link_name) -> bool {
+    return pimpl->visualize(armors, name, link_name);
 }
 
 ArmorVisualizer::ArmorVisualizer() noexcept
