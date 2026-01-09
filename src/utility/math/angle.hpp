@@ -5,7 +5,7 @@
 
 namespace rmcs::util {
 
-constexpr auto normalize_angle(double angle) -> double {
+inline auto normalize_angle(double angle) -> double {
     return std::atan2(std::sin(angle), std::cos(angle));
 }
 

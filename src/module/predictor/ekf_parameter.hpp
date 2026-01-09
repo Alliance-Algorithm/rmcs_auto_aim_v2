@@ -14,7 +14,7 @@ namespace rmcs::predictor {
 struct EKFParameters {
     using EKF = util::EKF<11, 4>;
 
-    static constexpr auto x(Armor3D const& armor) -> EKF::XVec {
+    static auto x(Armor3D const& armor) -> EKF::XVec {
         const auto r = radius(armor.genre);
 
         const auto [trans_x, trans_y, trans_z]      = armor.translation;
@@ -31,7 +31,7 @@ struct EKFParameters {
         return x;
     }
 
-    static constexpr auto P_initial_dig(DeviceId const& device) -> EKF::PDig {
+    static auto P_initial_dig(DeviceId const& device) -> EKF::PDig {
         auto P_dig = EKF::PDig {};
         if (device == DeviceId::OUTPOST) {
             P_dig << 1, 64, 1, 64, 1, 81, 0.4, 100, 1e-4, 0, 0;
@@ -44,7 +44,7 @@ struct EKFParameters {
         return P_dig;
     }
 
-    static constexpr auto radius(DeviceId const& device) -> double {
+    static auto radius(DeviceId const& device) -> double {
 
         switch (device) {
         case DeviceId::OUTPOST:
@@ -56,7 +56,7 @@ struct EKFParameters {
         }
     }
 
-    static constexpr auto armor_num(DeviceId const& device) -> int {
+    static auto armor_num(DeviceId const& device) -> int {
         auto is_balance = DeviceIds::kInfantry().contains(device);
 
         auto num = int {};
@@ -66,13 +66,13 @@ struct EKFParameters {
         return num;
     }
 
-    static constexpr auto x_add(EKF::XVec const& a, EKF::XVec const& b) -> EKF::XVec {
+    static auto x_add(EKF::XVec const& a, EKF::XVec const& b) -> EKF::XVec {
         auto result = EKF::XVec { a + b };
         result(6)   = util::normalize_angle(result(6));
         return result;
     }
 
-    static constexpr auto z_subtract(EKF::ZVec const& a, EKF::ZVec const& b) -> EKF::ZVec {
+    static auto z_subtract(EKF::ZVec const& a, EKF::ZVec const& b) -> EKF::ZVec {
         EKF::ZVec result = (a - b);
         result(0)        = util::normalize_angle(result(0));
         result(1)        = util::normalize_angle(result(1));
@@ -80,7 +80,7 @@ struct EKFParameters {
         return result;
     }
 
-    static constexpr auto F(double dt) -> EKF::AMat {
+    static auto F(double dt) -> EKF::AMat {
         auto F = EKF::AMat {};
         // clang-format off
         F <<
@@ -101,7 +101,7 @@ struct EKFParameters {
 
     // Piecewise White Noise Model
     // https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/07-Kalman-Filter-Math.ipynb
-    static constexpr auto Q(DeviceId const& device, double dt) -> EKF::QMat {
+    static auto Q(DeviceId const& device, double dt) -> EKF::QMat {
         double acc_var, angular_acc_var;
         if (device == DeviceId::OUTPOST) {
             acc_var         = 10;
@@ -136,8 +136,7 @@ struct EKFParameters {
     }
 
     // 计算出装甲板中心的坐标（考虑长短轴）
-    static constexpr auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num)
-        -> Eigen::Vector3d {
+    static auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num) -> Eigen::Vector3d {
         // x vx y vy z vz a w r l h
         // x, y, z：装甲板旋转中心在世界坐标系下的位置
         // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
@@ -162,7 +161,7 @@ struct EKFParameters {
         return result;
     }
 
-    static constexpr auto h(EKF::XVec const& x, int id, int armor_num) -> EKF::ZVec {
+    static auto h(EKF::XVec const& x, int id, int armor_num) -> EKF::ZVec {
         const auto xyz = h_armor_xyz(x, id, armor_num);
         const auto ypd = util::xyz2ypd(xyz);
         auto angle     = x(6);
@@ -181,7 +180,7 @@ struct EKFParameters {
         };
     }
 
-    static constexpr auto R(Eigen::Vector3d const& xyz, Eigen::Vector3d const& ypr,
+    static auto R(Eigen::Vector3d const& xyz, Eigen::Vector3d const& ypr,
         Eigen::Vector3d const& ypd) -> EKF::RMat {
 
         const auto x = xyz[0], y = xyz[1];
@@ -203,7 +202,7 @@ struct EKFParameters {
         return R;
     }
 
-    static constexpr auto H(EKF::XVec const& x, int id, int armor_num) -> EKF::HMat {
+    static auto H(EKF::XVec const& x, int id, int armor_num) -> EKF::HMat {
         // x vx y vy z vz a w r l h
         // x, y, z：装甲板旋转中心在世界坐标系下的位置
         // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
