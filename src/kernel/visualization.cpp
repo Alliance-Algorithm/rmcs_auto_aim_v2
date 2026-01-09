@@ -1,7 +1,6 @@
 #include "visualization.hpp"
 
 #include <fstream>
-#include <opencv2/core.hpp>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"

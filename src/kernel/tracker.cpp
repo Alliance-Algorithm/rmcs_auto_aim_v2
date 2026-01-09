@@ -13,10 +13,7 @@ struct Tracker::Impl {
 
     struct Config : util::Serializable {
         std::string enemy_color;
-        constexpr static std::tuple metas {
-            &Config::enemy_color,
-            "enemy_color",
-        };
+        constexpr static std::tuple metas { &Config::enemy_color, "enemy_color" };
     };
 
     Config config;
@@ -32,7 +29,7 @@ struct Tracker::Impl {
         } else if (config.enemy_color == "blue") {
             filter.set_enemy_color(CampColor::BLUE);
         } else {
-            return std::unexpected { "enemy_color应该是[blue] or [red]." };
+            return std::unexpected { "enemy_color 应该是 [blue] or [red]." };
         }
 
         return {};

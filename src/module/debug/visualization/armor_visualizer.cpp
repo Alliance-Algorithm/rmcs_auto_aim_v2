@@ -46,8 +46,8 @@ struct ArmorVisualizer::Impl final {
                     .device = input.genre,
                     .camp   = armor_color2camp_color(input.color),
                     .id     = input.id,
-                    .name   = std::string(name),
-                    .tf     = std::string(link_name),
+                    .name   = name,
+                    .tf     = link_name,
                 };
 
                 armor_ptr = std::make_unique<VisualArmor>(config);
@@ -55,7 +55,7 @@ struct ArmorVisualizer::Impl final {
                 shadow.genre = input.genre;
                 shadow.color = input.color;
                 shadow.id    = input.id;
-                shadow.ns    = std::string(name);
+                shadow.ns    = name;
             }
 
             armor_ptr->move(input.translation, input.orientation);

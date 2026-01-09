@@ -149,8 +149,8 @@ inline auto ypd2xyz(const Eigen::Vector3d& ypd) -> Eigen::Vector3d {
     return { x, y, z };
 }
 
-inline Eigen::Quaterniond euler_to_quaternion(
-    const double& yaw_rad, const double& pitch_rad, const double& roll_rad) {
+inline auto euler_to_quaternion(
+    const double& yaw_rad, const double& pitch_rad, const double& roll_rad) -> Eigen::Quaterniond {
     Eigen::AngleAxisd rollAngle(roll_rad, Eigen::Vector3d::UnitX());
     Eigen::AngleAxisd pitchAngle(pitch_rad, Eigen::Vector3d::UnitY());
     Eigen::AngleAxisd yawAngle(yaw_rad, Eigen::Vector3d::UnitZ());
@@ -158,4 +158,5 @@ inline Eigen::Quaterniond euler_to_quaternion(
     Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
     return q;
 }
+
 }

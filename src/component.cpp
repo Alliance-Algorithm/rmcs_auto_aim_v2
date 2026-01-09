@@ -4,7 +4,6 @@
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
-#include <eigen3/Eigen/Geometry>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
@@ -34,34 +33,38 @@ public:
 
     auto update() -> void override {
         using namespace rmcs_description;
-        if (rmcs_tf.ready()) [[likely]] {
-            {
-                control_state.timestamp = Clock::now();
 
-                auto camera2odom = fast_tf::lookup_transform<rmcs_description::CameraLink,
-                    rmcs_description::OdomImu>(*rmcs_tf);
+        if (!rmcs_tf.ready()) [[unlikely]]
+            return;
 
-                control_state.camera_to_odom_transform.position = camera2odom.translation();
-                control_state.camera_to_odom_transform.orientation =
-                    Eigen::Quaterniond(camera2odom.rotation());
+        {
+            control_state.timestamp = Clock::now();
 
-                visual_camera2odom->move(control_state.camera_to_odom_transform.position,
-                    control_state.camera_to_odom_transform.orientation);
-                visual_camera2odom->update();
+            auto camera2odom =
+                fast_tf::lookup_transform<rmcs_description::CameraLink, rmcs_description::OdomImu>(
+                    *rmcs_tf);
 
-                // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
-                control_state.invincible_devices = DeviceIds::None();
+            control_state.camera_to_odom_transform.position = camera2odom.translation();
+            control_state.camera_to_odom_transform.orientation =
+                Eigen::Quaterniond(camera2odom.rotation());
 
-                // TODO:弹速需要进一步确认
-                control_state.bullet_speed = 25;
-                auto success               = feishu.commit(control_state);
-                if (!success) rclcpp.info("commit control state failed!");
-            }
-            {
-                if (feishu.updated()) {
-                    auto_aim_state = feishu.fetch();
-                }
-            }
+            visual_camera2odom->move(control_state.camera_to_odom_transform.position,
+                control_state.camera_to_odom_transform.orientation);
+            visual_camera2odom->update();
+
+            // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
+            control_state.invincible_devices = DeviceIds::None();
+
+            // TODO:弹速需要进一步确认
+            control_state.bullet_speed = 25;
+            auto success               = feishu.commit(control_state);
+
+            // TODO:添加错误输出的时间间隔和次数限制
+            if (!success) rclcpp.info("commit control state failed!");
+        }
+
+        if (feishu.updated()) {
+            auto_aim_state = feishu.fetch();
         }
     }
 

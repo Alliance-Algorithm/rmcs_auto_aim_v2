@@ -47,8 +47,8 @@ auto main() -> int {
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
+
     /// Configure
-    ///
     auto configuration     = util::configuration();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
@@ -93,8 +93,16 @@ auto main() -> int {
         if (!util::get_running()) [[unlikely]]
             break;
 
+        rclcpp_node.spin_once();
+
         if (auto image = capturer.fetch_image()) {
+
+            // FIXME:
+            // 目前运行时和 RMCS 那边强绑定，没有离线运行的选项
+            // 应该提供一个调试模式，将 Control State 设置为单位状态
+            // 方便在开发电脑上测试
             if (!feishu.updated()) continue;
+
             auto control_state = feishu.fetch();
 
             auto armors_2d = identifier.sync_identify(*image);
@@ -120,8 +128,13 @@ auto main() -> int {
             auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
 
             if (!armors_3d_opt.has_value()) continue;
+
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
+
+                // FIXME:
+                // 存在无时间间隔输出日志的风险
+                // 需要进一步确认
                 if (!success) rclcpp_node.info("可视化PNP结算后的装甲板失败");
             }
 
@@ -130,7 +143,9 @@ auto main() -> int {
 
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
+
             if (tracker_state != TrackerState::Tracking) continue;
+
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
@@ -139,8 +154,9 @@ auto main() -> int {
                 visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
             }
 
-            rclcpp_node.spin_once();
-        }
-    }
+        } // image receive scope
+
+    } // runtime loop scope
+
     rclcpp_node.shutdown();
 }

@@ -11,13 +11,11 @@ struct Decider::Impl {
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
     auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
-        // --- 1. 物理外推 (Predict) ---
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
             tracker->predict(t);
         }
 
-        // --- 2. 观测分发 (Dispatch & Update) ---
         // 将检测到的装甲板按 DeviceId 分发给对应的 RobotState
         for (const auto& armor : armors) {
             auto id = armor.genre;
@@ -33,7 +31,6 @@ struct Decider::Impl {
             last_seen_time[id] = t;
         }
 
-        // --- 3. 清理过期目标 (Cleanup) ---
         std::erase_if(trackers, [&](const auto& item) {
             bool expired = util::delta_time(t, last_seen_time[item.first]) > cleanup_interval;
             if (expired) {
@@ -44,19 +41,21 @@ struct Decider::Impl {
             return expired;
         });
 
-        // --- 4. 战术仲裁 (Arbitrate) ---
-        // 从当前所有活跃的 Tracker 中选出优先级最高的一个
         primary_target_id = arbitrate(t);
 
-        // --- 5. 组装输出 ---
         if (primary_target_id != DeviceId::UNKNOWN) {
             auto& target_tracker = trackers[primary_target_id];
-            return { .state = target_tracker->is_converged() ? State::Tracking : State::Detecting,
-                .target_id  = primary_target_id,
-                .snapshot   = target_tracker->get_snapshot() };
+            return {
+                .state     = target_tracker->is_converged() ? State::Tracking : State::Detecting,
+                .target_id = primary_target_id,
+                .snapshot  = target_tracker->get_snapshot(),
+            };
         }
-
-        return { .state = State::Lost, .target_id = DeviceId::UNKNOWN, .snapshot = std::nullopt };
+        return {
+            .state     = State::Lost,
+            .target_id = DeviceId::UNKNOWN,
+            .snapshot  = std::nullopt,
+        };
     }
 
     auto arbitrate(Clock::time_point now) -> DeviceId {
@@ -66,7 +65,6 @@ struct Decider::Impl {
 
         if (std::ranges::empty(candidates)) return DeviceId::UNKNOWN;
 
-        // 在候选者中寻找优先级评分最高的目标
         auto it = std::ranges::max_element(candidates, {},
             [&](const auto& pair) { return calculate_score(pair.first, *pair.second); });
 
