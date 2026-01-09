@@ -6,13 +6,13 @@
 #include "kernel/visualization.hpp"
 
 #include "module/debug/framerate.hpp"
+#include "module/debug/log_limiter.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
-#include "utility/times_limit.hpp"
 
 #include <csignal>
 #include <yaml-cpp/yaml.h>
@@ -49,7 +49,7 @@ auto main() -> int {
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
 
-    auto error_limit = util::TimesLimit { 3 };
+    auto log_limiter = util::LogLimiter { 3 };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -92,6 +92,11 @@ auto main() -> int {
         auto result = visualization.initialize(config, rclcpp_node);
         handle_result("visualization", result);
     }
+    // DEBUG
+    {
+        log_limiter.register_key("control_state_not_updated");
+        log_limiter.register_key("visualization_pnp_failed");
+    }
 
     for (;;) {
         if (!util::get_running()) [[unlikely]]
@@ -106,15 +111,13 @@ auto main() -> int {
                 control_state.set_identity();
             } else {
                 if (!feishu.updated()) {
-                    if (error_limit.tick()) {
+                    if (log_limiter.tick("control_state_not_updated")) {
                         rclcpp_node.warn("Control state尚未更新，使用上一次缓存值.");
-                    } else if (error_limit.enabled()) {
-                        error_limit.disable();
-                        rclcpp_node.warn("{} times, stop printing warnings", error_limit.count);
+                    } else if (log_limiter.enabled("control_state_not_updated")) {
+                        rclcpp_node.warn("Stop printing control state warnings");
                     }
                 } else {
-                    error_limit.reset();
-                    error_limit.enable();
+                    log_limiter.reset("control_state_not_updated");
                 }
 
                 control_state = feishu.fetch();
@@ -148,15 +151,13 @@ auto main() -> int {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
 
                 if (!success) {
-                    if (error_limit.tick()) {
-                        rclcpp_node.info("可视化PNP结算后的装甲板失败");
-                    } else if (error_limit.enabled()) {
-                        error_limit.disable();
-                        rclcpp_node.info("{} times, stop printing errors", error_limit.count);
+                    if (log_limiter.tick("visualization_pnp_failed")) {
+                        rclcpp_node.error("可视化PNP结算后的装甲板失败");
+                    } else if (log_limiter.enabled("visualization_pnp_failed")) {
+                        rclcpp_node.error("Stop printing visualization errors");
                     }
                 } else {
-                    error_limit.reset();
-                    error_limit.enable();
+                    log_limiter.reset("visualization_pnp_failed");
                 }
             }
 
