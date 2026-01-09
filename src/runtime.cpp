@@ -138,8 +138,8 @@ auto main() -> int {
                 if (!success) rclcpp_node.info("可视化PNP结算后的装甲板失败");
             }
 
-            pose_estimator.set_camera2world_transform(control_state.camera_to_odom_transform);
-            auto armors_3d = pose_estimator.camera2world(*armors_3d_opt);
+            pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
+            auto armors_3d = pose_estimator.odom_to_camera(*armors_3d_opt);
 
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());

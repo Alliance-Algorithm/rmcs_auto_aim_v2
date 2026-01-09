@@ -39,12 +39,8 @@ struct ControlState {
     double bullet_speed {};
 
     DeviceIds invincible_devices { DeviceIds::None() };
-    /*Note:
-     * 对应关系：
-     * odom<->fast_tf::OdomImu,
-     * camera<->fast_tf::CameraLink
-     * */
-    Transform camera_to_odom_transform {};
+
+    Transform odom_to_camera_transform {};
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
 }
