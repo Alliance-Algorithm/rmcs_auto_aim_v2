@@ -186,7 +186,11 @@ auto main() -> int {
             if (!snapshot_opt) continue;
 
             auto const& snapshot = *snapshot_opt;
-            auto result_opt      = fire_control.solve(snapshot);
+
+            auto muzzle_to_odom_translation = Eigen::Vector3d {};
+            control_state.muzzle_to_odom_translation.copy_to(muzzle_to_odom_translation);
+
+            auto result_opt = fire_control.solve(snapshot, muzzle_to_odom_translation);
             if (!result_opt) continue;
 
             feishu.commit(AutoAimState {

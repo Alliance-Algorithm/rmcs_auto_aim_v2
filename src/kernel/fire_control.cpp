@@ -91,16 +91,16 @@ struct FireControl::Impl {
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreold { 0.001 };
 
-    auto solve(const predictor::Snapshot& snapshot) -> std::optional<Result> {
+    auto solve(const predictor::Snapshot& snapshot,
+        Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {
         // 1. 初始猜测：以当前目标中心距离估算初次飞行时间
-        auto state = snapshot.ekf_x();
-        auto x = state[0], y = state[2], z = state[4];
-        auto distance = std::sqrt(x * x + y * y + z * z);
+        auto state                    = snapshot.ekf_x();
+        auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
-        auto current_fly_time = distance / config.v_initial;
+        // TODO:确定弹速的值
+        auto current_fly_time = target_position_in_world.norm() / config.v_initial;
 
         // 迭代中间变量
-        auto iter_pitch        = 0.0;
         auto best_armor_opt    = std::optional<Armor3D> {};
         auto trajectory_result = TrajectorySolution::Output {};
         auto horizon_distance  = 0.0;
@@ -110,7 +110,7 @@ struct FireControl::Impl {
             // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
             double total_predict_time = current_fly_time + config.shoot_delay;
             auto t_target             = snapshot.time_stamp()
-                + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                + std::chrono::duration_cast<Clock::duration>(
                     std::chrono::duration<double>(total_predict_time));
             // A. 预测该时刻所有装甲板的位置
             auto predicted_armors = snapshot.predicted_armors(t_target);
@@ -119,20 +119,16 @@ struct FireControl::Impl {
             best_armor_opt = aim_point_chooser.choose_armor(predicted_armors, predicted_ekf_x);
             if (!best_armor_opt) return std::nullopt;
 
-            // C. 针对这块选中的装甲板，解算带阻力的弹道
-            // ROS 坐标：x前 y左 z上，pitch 为绕 y 轴右手旋转（枪口抬起为正）。
-            // 因此旋转矩阵 R_y(pitch) = [[cos p,0,sin p],[0,1,0],[-sin p,0,cos p]]
-            double dynamic_offset_x = config.shoot_offset_x * std::cos(iter_pitch)
-                + config.shoot_offset_z * std::sin(iter_pitch);
-            double dynamic_offset_y = config.shoot_offset_y; // pitch 旋转对 y 不影响
-            double dynamic_offset_z = -config.shoot_offset_x * std::sin(iter_pitch)
-                + config.shoot_offset_z * std::cos(iter_pitch);
+            auto const& armor_translation = best_armor_opt->translation;
 
-            auto const& translation = best_armor_opt->translation;
-            double target_d =
-                std::sqrt((translation.x - dynamic_offset_x) * (translation.x - dynamic_offset_x)
-                    + (translation.y - dynamic_offset_y) * (translation.y - dynamic_offset_y));
-            auto target_z = translation.z - dynamic_offset_z;
+            auto armor_position_in_world = Eigen::Vector3d {};
+            armor_translation.copy_to(armor_position_in_world);
+
+            // 子弹相对于枪口的位移向量 (在云台系下描述)
+            auto bullet_in_muzzle = armor_position_in_world - muzzle_to_odom_translation;
+            auto target_d         = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
+                        + bullet_in_muzzle.y() * bullet_in_muzzle.y());
+            auto target_h         = bullet_in_muzzle.z();
 
             auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
             solution_params.k          = config.k;
@@ -142,7 +138,7 @@ struct FireControl::Impl {
             auto solution           = TrajectorySolution {};
             solution.input.v0       = config.v_initial;
             solution.input.target_d = target_d;
-            solution.input.target_h = target_z;
+            solution.input.target_h = target_h;
             solution.params         = solution_params;
 
             auto result = solution.solve();
@@ -150,7 +146,6 @@ struct FireControl::Impl {
 
             auto time_error   = std::abs(result->fly_time - current_fly_time);
             current_fly_time  = result->fly_time;
-            iter_pitch        = result->pitch;
             trajectory_result = *result;
             horizon_distance  = target_d;
 
@@ -173,6 +168,7 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
     return pimpl->initialize(yaml);
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot) -> std::optional<Result> {
-    return pimpl->solve(snapshot);
+auto FireControl::solve(const predictor::Snapshot& snapshot,
+    Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {
+    return pimpl->solve(snapshot, muzzle_to_odom_translation);
 }
