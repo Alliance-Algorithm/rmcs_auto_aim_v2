@@ -12,6 +12,7 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
+#include "utility/times_limit.hpp"
 
 #include <csignal>
 #include <yaml-cpp/yaml.h>
@@ -47,6 +48,8 @@ auto main() -> int {
     auto tracker        = kernel::Tracker {};
     auto pose_estimator = kernel::PoseEstimator {};
     auto visualization  = kernel::Visualization {};
+
+    auto error_limit = util::TimesLimit { 3 };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -132,10 +135,17 @@ auto main() -> int {
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
 
-                // FIXME:
-                // 存在无时间间隔输出日志的风险
-                // 需要进一步确认
-                if (!success) rclcpp_node.info("可视化PNP结算后的装甲板失败");
+                if (!success) {
+                    if (error_limit.tick()) {
+                        rclcpp_node.info("可视化PNP结算后的装甲板失败");
+                    } else if (error_limit.enabled()) {
+                        error_limit.disable();
+                        rclcpp_node.info("{} times, stop printing errors", error_limit.count);
+                    }
+                } else {
+                    error_limit.reset();
+                    error_limit.enable();
+                }
             }
 
             pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
