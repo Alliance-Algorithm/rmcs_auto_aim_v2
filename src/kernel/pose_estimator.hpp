@@ -23,10 +23,10 @@ public:
 
     auto solve_pnp(std::vector<Armor2D> const&) const -> std::optional<std::vector<Armor3D>>;
 
-    auto set_camera2world_transform(util::Transform const& transform) -> void;
+    auto set_odom_to_camera_transform(util::Transform const& transform) -> void;
 
-    auto camera2world(std::span<Armor3D const> armors) const -> std::vector<Armor3D>;
-    auto camera2world(Armor3D const& armor) const -> Armor3D;
+    auto odom_to_camera(std::span<Armor3D const> armors) const -> std::vector<Armor3D>;
+    auto odom_to_camera(Armor3D const& armor) const -> Armor3D;
 
     auto update_imu_link(const Orientation&) noexcept -> void;
 };

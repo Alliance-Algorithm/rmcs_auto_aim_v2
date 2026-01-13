@@ -24,11 +24,11 @@ public:
 
         visual::Transform::Config config {
             .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
-            .topic        = "camera_to_odom_transform", // 发布的 topic 名
+            .topic        = "odom_to_camera_transform", // 发布的 topic 名
             .parent_frame = "odom_imu_link",            // 父坐标系
             .child_frame  = "camera_link",              // 子坐标系
         };
-        visual_camera2odom = std::make_unique<visual::Transform>(config);
+        visual_odom_to_camera = std::make_unique<visual::Transform>(config);
     }
 
     auto update() -> void override {
@@ -40,17 +40,18 @@ public:
         {
             control_state.timestamp = Clock::now();
 
-            auto camera2odom =
-                fast_tf::lookup_transform<rmcs_description::CameraLink, rmcs_description::OdomImu>(
+            auto odom_to_camera_transform =
+                fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(
                     *rmcs_tf);
 
-            control_state.camera_to_odom_transform.position = camera2odom.translation();
-            control_state.camera_to_odom_transform.orientation =
-                Eigen::Quaterniond(camera2odom.rotation());
+            control_state.odom_to_camera_transform.position =
+                odom_to_camera_transform.translation();
+            control_state.odom_to_camera_transform.orientation =
+                Eigen::Quaterniond(odom_to_camera_transform.rotation());
 
-            visual_camera2odom->move(control_state.camera_to_odom_transform.position,
-                control_state.camera_to_odom_transform.orientation);
-            visual_camera2odom->update();
+            visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
+                control_state.odom_to_camera_transform.orientation);
+            visual_odom_to_camera->update();
 
             // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
             control_state.invincible_devices = DeviceIds::None();
@@ -72,7 +73,7 @@ private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
     RclcppNode rclcpp;
-    std::unique_ptr<visual::Transform> visual_camera2odom;
+    std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
     Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;
