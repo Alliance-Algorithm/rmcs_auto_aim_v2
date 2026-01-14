@@ -41,6 +41,7 @@ struct ControlState {
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform {};
+    Translation odom_to_muzzle_translation {};
 
     auto set_identity() noexcept -> void {
         timestamp                = Clock::now();
