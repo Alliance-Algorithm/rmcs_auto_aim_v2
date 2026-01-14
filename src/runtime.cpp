@@ -157,12 +157,6 @@ auto main() -> int {
                 continue;
             }
 
-            // TODO:set invincible armors
-            auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
-            if (filtered_armors_2d.empty()) {
-                continue;
-            }
-
             if (use_painted_image) {
                 for (const auto& armor_2d : filtered_armors_2d)
                     util::draw(*image, armor_2d);
