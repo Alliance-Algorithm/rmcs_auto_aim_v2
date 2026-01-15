@@ -140,6 +140,10 @@ auto main() -> int {
                 }
 
                 control_state = feishu.fetch();
+                action_throttler.dispatch("control_state_received", [&] {
+                    rclcpp_node.info("Control state received: yaw={:.3f}, pitch={:.3f}",
+                        control_state.yaw, control_state.pitch);
+                });
             }
 
             // Identify
