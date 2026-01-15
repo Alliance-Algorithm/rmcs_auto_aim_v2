@@ -142,7 +142,10 @@ struct FireControl::Impl {
             solution.params         = solution_params;
 
             auto result = solution.solve();
-            if (!result) return std::nullopt;
+
+            if (!result) {
+                return std::nullopt;
+            }
 
             auto time_error   = std::abs(result->fly_time - current_fly_time);
             current_fly_time  = result->fly_time;

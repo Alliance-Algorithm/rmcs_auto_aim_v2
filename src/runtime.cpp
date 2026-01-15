@@ -6,8 +6,9 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
-#include "module/debug/log_limiter.hpp"
+
 #include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
@@ -15,6 +16,7 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
+#include <chrono>
 #include <csignal>
 #include <yaml-cpp/yaml.h>
 
@@ -51,7 +53,7 @@ auto main() -> int {
     auto fire_control   = kernel::FireControl {};
     auto visualization  = kernel::Visualization {};
 
-    auto log_limiter = util::LogLimiter { 3 };
+    auto action_throttler = util::ActionThrottler { 1s, 3 };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -102,8 +104,12 @@ auto main() -> int {
     }
     // DEBUG
     {
-        log_limiter.register_key("control_state_not_updated");
-        log_limiter.register_key("visualization_pnp_failed");
+        action_throttler.register_action("control_state_not_updated");
+        action_throttler.register_action("control_state_received");
+        action_throttler.register_action("armor_not_detected");
+        action_throttler.register_action("visualization_pnp_failed");
+        action_throttler.register_action("fire_control_result");
+        action_throttler.register_action("fire_control_failed");
     }
 
     for (;;) {
@@ -119,22 +125,26 @@ auto main() -> int {
                 control_state.set_identity();
             } else {
                 if (!feishu.updated()) {
-                    if (log_limiter.tick("control_state_not_updated")) {
-                        rclcpp_node.warn("Control state尚未更新，使用上一次缓存值.");
-                    } else if (log_limiter.enabled("control_state_not_updated")) {
-                        rclcpp_node.warn("Stop printing control state warnings");
-                    }
+                    action_throttler.dispatch("control_state_not_updated",
+                        [&] { rclcpp_node.warn("Control state尚未更新，使用上一次缓存值."); });
                 } else {
-                    log_limiter.reset("control_state_not_updated");
+                    action_throttler.reset("control_state_not_updated");
                 }
 
                 control_state = feishu.fetch();
+                action_throttler.dispatch("control_state_received", [&] {
+                    rclcpp_node.info("Control state received: yaw={:.3f}, pitch={:.3f}",
+                        control_state.yaw, control_state.pitch);
+                });
             }
 
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
+                action_throttler.dispatch(
+                    "armor_not_detected", [&] { rclcpp_node.warn("未识别到装甲板"); });
                 continue;
             }
+            action_throttler.reset("armor_not_detected");
 
             tracker.set_invincible_armors(control_state.invincible_devices);
             auto filtered_armors_2d = tracker.filter_armors(*armors_2d);
@@ -159,13 +169,10 @@ auto main() -> int {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
 
                 if (!success) {
-                    if (log_limiter.tick("visualization_pnp_failed")) {
-                        rclcpp_node.error("可视化PNP结算后的装甲板失败");
-                    } else if (log_limiter.enabled("visualization_pnp_failed")) {
-                        rclcpp_node.error("Stop printing visualization errors");
-                    }
+                    action_throttler.dispatch("visualization_pnp_failed",
+                        [&] { rclcpp_node.error("可视化PNP结算后的装甲板失败"); });
                 } else {
-                    log_limiter.reset("visualization_pnp_failed");
+                    action_throttler.reset("visualization_pnp_failed");
                 }
             }
 
@@ -185,7 +192,12 @@ auto main() -> int {
             control_state.odom_to_muzzle_translation.copy_to(muzzle_to_odom_translation);
 
             auto result_opt = fire_control.solve(snapshot, muzzle_to_odom_translation);
-            if (!result_opt) continue;
+            if (!result_opt) {
+                action_throttler.dispatch(
+                    "fire_control_failed", [&] { rclcpp_node.warn("Fire control solve failed"); });
+                continue;
+            }
+            action_throttler.reset("fire_control_failed");
 
             feishu.commit(AutoAimState {
                 .timestamp      = Clock::now(),

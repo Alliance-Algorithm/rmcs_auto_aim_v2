@@ -36,7 +36,9 @@ struct ControlState {
     Clock::time_point timestamp {};
     ShootMode shoot_mode { ShootMode::BATTLE };
 
-    double bullet_speed {};
+    double bullet_speed { 0. };
+    double yaw { 0. };
+    double pitch { 0. };
 
     DeviceIds invincible_devices { DeviceIds::None() };
 
@@ -47,6 +49,8 @@ struct ControlState {
         timestamp                = Clock::now();
         shoot_mode               = ShootMode::STOPPING;
         bullet_speed             = 0.0;
+        yaw                      = 0.0;
+        pitch                    = 0.0;
         invincible_devices       = DeviceIds::None();
         odom_to_camera_transform = {};
     }
