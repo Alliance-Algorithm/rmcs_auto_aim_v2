@@ -1,5 +1,6 @@
 #include "fire_control.hpp"
 
+#include "module/debug/action_throttler.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
@@ -145,6 +146,16 @@ struct FireControl::Impl {
             solution.input.params   = solution_params;
 
             auto result = solution.solve();
+
+            if (result) {
+                throttler.dispatch("trajectory_solution", [&] {
+                    log.info("Trajectory solution: pitch={:.3f} rad, fly_time={:.3f} s, d={:.3f} "
+                             "m, "
+                             "h={:.3f} m, v0={:.3f}",
+                        result->pitch, result->fly_time, solution.input.target_d,
+                        solution.input.target_h, solution.input.v0);
+                });
+            }
 
             if (!result) {
                 return std::nullopt;
