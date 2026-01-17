@@ -24,6 +24,8 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
+    auto set_bullet_speed(double speed) -> void;
+
     auto solve(const predictor::Snapshot& snapshot,
         Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result>;
 };

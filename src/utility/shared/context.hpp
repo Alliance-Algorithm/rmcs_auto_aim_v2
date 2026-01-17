@@ -22,13 +22,22 @@ struct Transform {
 struct AutoAimState {
     Clock::time_point timestamp {};
 
-    bool should_control { false };
-    bool should_shoot = { false };
+    bool gimbal_takeover { false };
+    bool shoot_permitted = { false };
 
-    double yaw { 0 };
-    double pitch { 0 };
+    double yaw { 0. };
+    double pitch { 0. };
 
     DeviceId target { DeviceId::UNKNOWN };
+
+    auto set_identity() noexcept -> void {
+        timestamp = Clock::now();
+
+        gimbal_takeover = false;
+        shoot_permitted = false;
+        yaw             = 0.;
+        pitch           = 0.;
+    }
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 

@@ -1,8 +1,10 @@
 #include "fire_control.hpp"
 
+#include "module/debug/action_throttler.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
+#include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
 
@@ -10,11 +12,11 @@ using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
 struct FireControl::Impl {
     struct Config : util::Serializable {
-        double v_initial;      // m/s
-        double shoot_delay;    // s
-        double shoot_offset_x; // m
-        double shoot_offset_y; // m
-        double shoot_offset_z; // m
+        double initial_bullet_speed; // m/s
+        double shoot_delay;          // s
+        double shoot_offset_x;       // m
+        double shoot_offset_y;       // m
+        double shoot_offset_z;       // m
 
         double k;          // 基础阻力系数 (小弹丸~0.019, 大弹丸~0.005)
         double g;          // 重力加速度 (通常取 9.78~9.8)
@@ -27,8 +29,8 @@ struct FireControl::Impl {
         double angular_velocity_threshold; // rad/s
 
         constexpr static std::tuple metas {
-            &Config::v_initial,
-            "v_initial",
+            &Config::initial_bullet_speed,
+            "initial_bullet_speed",
             &Config::shoot_delay,
             "shoot_delay",
             &Config::shoot_offset_x,
@@ -60,13 +62,23 @@ struct FireControl::Impl {
 
     Config config;
 
+    double bullet_speed_buffer;
+    double bullet_speed;
+
     AimPointChooser aim_point_chooser;
+
+    rmcs::Printer log { "FireControl" };
+    util::ActionThrottler throttler { std::chrono::seconds(1), 233 };
+
+    Impl() { throttler.register_action("trajectory_solution"); }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
+
+        bullet_speed = config.initial_bullet_speed;
 
         // 配置文件中角度是度制、延迟是毫秒，内部统一转成弧度/秒
         config.coming_angle               = util::deg2rad(config.coming_angle);
@@ -91,28 +103,33 @@ struct FireControl::Impl {
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreold { 0.001 };
 
+    auto set_bullet_speed(double speed) -> void { bullet_speed_buffer = speed; }
+
     auto solve(const predictor::Snapshot& snapshot,
         Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {
-        // 1. 初始猜测：以当前目标中心距离估算初次飞行时间
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
         // TODO:确定弹速的值
-        auto current_fly_time = target_position_in_world.norm() / config.v_initial;
+        if (bullet_speed_buffer > 10.) bullet_speed = bullet_speed_buffer;
+        auto current_fly_time = target_position_in_world.norm() / bullet_speed;
 
-        // 迭代中间变量
         auto best_armor_opt    = std::optional<Armor3D> {};
         auto trajectory_result = TrajectorySolution::Output {};
         auto horizon_distance  = 0.0;
 
-        // 2. 迭代闭环
+        auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
+        solution_params.k          = config.k;
+        solution_params.g          = config.g;
+        solution_params.bias_scale = config.bias_scale;
+
         for (int i = 0; i < kMaxIterateCount; ++i) {
             // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
             double total_predict_time = current_fly_time + config.shoot_delay;
             auto t_target             = snapshot.time_stamp()
                 + std::chrono::duration_cast<Clock::duration>(
                     std::chrono::duration<double>(total_predict_time));
-            // A. 预测该时刻所有装甲板的位置
+
             auto predicted_armors = snapshot.predicted_armors(t_target);
             auto predicted_ekf_x  = snapshot.predict_at(t_target);
 
@@ -124,24 +141,28 @@ struct FireControl::Impl {
             auto armor_position_in_world = Eigen::Vector3d {};
             armor_translation.copy_to(armor_position_in_world);
 
-            // 子弹相对于枪口的位移向量 (在云台系下描述)
             auto bullet_in_muzzle = armor_position_in_world - muzzle_to_odom_translation;
             auto target_d         = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
                         + bullet_in_muzzle.y() * bullet_in_muzzle.y());
             auto target_h         = bullet_in_muzzle.z();
 
-            auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
-            solution_params.k          = config.k;
-            solution_params.g          = config.g;
-            solution_params.bias_scale = config.bias_scale;
-
             auto solution           = TrajectorySolution {};
-            solution.input.v0       = config.v_initial;
+            solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
             solution.input.target_h = target_h;
             solution.params         = solution_params;
 
             auto result = solution.solve();
+
+            if (result) {
+                throttler.dispatch("trajectory_solution", [&] {
+                    log.info("Trajectory solution: pitch={:.3f} rad, fly_time={:.3f} s, d={:.3f} "
+                             "m, "
+                             "h={:.3f} m, v0={:.3f}",
+                        result->pitch, result->fly_time, solution.input.target_d,
+                        solution.input.target_h, solution.input.v0);
+                });
+            }
 
             if (!result) {
                 return std::nullopt;
@@ -170,6 +191,8 @@ FireControl::~FireControl() noexcept = default;
 auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
     return pimpl->initialize(yaml);
 }
+
+auto FireControl::set_bullet_speed(double speed) -> void { return pimpl->set_bullet_speed(speed); }
 
 auto FireControl::solve(const predictor::Snapshot& snapshot,
     Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {

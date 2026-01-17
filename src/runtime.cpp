@@ -53,7 +53,7 @@ auto main() -> int {
     auto fire_control   = kernel::FireControl {};
     auto visualization  = kernel::Visualization {};
 
-    auto action_throttler = util::ActionThrottler { 1s, 3 };
+    auto action_throttler = util::ActionThrottler { 1s, 233 };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -105,12 +105,14 @@ auto main() -> int {
     // DEBUG
     {
         action_throttler.register_action("control_state_not_updated");
-        action_throttler.register_action("control_state_received");
+        action_throttler.register_action("control_state_received", 233);
         action_throttler.register_action("armor_not_detected");
         action_throttler.register_action("visualization_pnp_failed");
-        action_throttler.register_action("fire_control_result");
         action_throttler.register_action("fire_control_failed");
     }
+
+    // AUTO AIM RESULT
+    auto auto_aim_state = AutoAimState {};
 
     for (;;) {
         if (!util::get_running()) [[unlikely]]
@@ -123,6 +125,8 @@ auto main() -> int {
 
             if (is_local_runtime) {
                 control_state.set_identity();
+                action_throttler.dispatch("control_state_not_updated",
+                    [&] { rclcpp_node.info("在本机环境下运行，将Control State 设置为默认值"); });
             } else {
                 if (!feishu.updated()) {
                     action_throttler.dispatch("control_state_not_updated",
@@ -162,8 +166,9 @@ auto main() -> int {
             }
 
             auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
-
-            if (!armors_3d_opt.has_value()) continue;
+            if (!armors_3d_opt.has_value()) {
+                continue;
+            }
 
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
@@ -182,15 +187,24 @@ auto main() -> int {
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
-            // if (tracker_state != TrackerState::Tracking) continue;
+            // if (tracker_state == TrackerState::Tracking) {
+            //     action_throttler.dispatch(
+            //         "tracker_tracking", [&] { rclcpp_node.info("已进入 Tracking 状态"); });
+            // } else {
+            //     action_throttler.reset("tracker_tracking");
+            //     continue;
+            // }
 
-            if (!snapshot_opt) continue;
+            if (!snapshot_opt) {
+                continue;
+            }
 
             auto const& snapshot = *snapshot_opt;
 
             auto muzzle_to_odom_translation = Eigen::Vector3d {};
             control_state.odom_to_muzzle_translation.copy_to(muzzle_to_odom_translation);
 
+            fire_control.set_bullet_speed(control_state.bullet_speed);
             auto result_opt = fire_control.solve(snapshot, muzzle_to_odom_translation);
             if (!result_opt) {
                 action_throttler.dispatch(
@@ -199,13 +213,19 @@ auto main() -> int {
             }
             action_throttler.reset("fire_control_failed");
 
-            feishu.commit(AutoAimState {
-                .timestamp      = Clock::now(),
-                .should_control = false,
-                .should_shoot   = false,
-                .yaw            = result_opt->yaw,
-                .pitch          = result_opt->pitch,
-            });
+            auto_aim_state.timestamp       = Clock::now();
+            auto_aim_state.gimbal_takeover = true;
+            auto_aim_state.shoot_permitted = true;
+            auto_aim_state.yaw             = result_opt->yaw;
+            auto_aim_state.pitch           = result_opt->pitch;
+
+            {
+                auto success = feishu.commit(auto_aim_state);
+                if (!success) {
+                    action_throttler.dispatch("feishu_commit_failed",
+                        [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
+                }
+            }
 
             if (visualization.initialized()) {
                 visualization.predicted_armors(snapshot.predicted_armors(Clock::now()));
