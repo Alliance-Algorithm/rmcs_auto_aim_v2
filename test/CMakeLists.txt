@@ -120,3 +120,9 @@ ament_add_gtest(
     test_feishu
     ${TEST_DIR}/feishu_test.cpp
 )
+
+# Action throttler
+ament_add_gtest(
+    test_action_throttler
+    ${TEST_DIR}/action_throttler.cpp
+)

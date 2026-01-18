@@ -33,10 +33,10 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         }
         ASSERT_TRUE(ctrl.has_value());
 
-        auto auto_state           = AutoAimState {};
-        auto_state.should_control = true;
-        auto_state.should_shoot   = true;
-        auto_state.yaw            = 1.23;
+        auto auto_state            = AutoAimState {};
+        auto_state.gimbal_takeover = true;
+        auto_state.shoot_permitted = true;
+        auto_state.yaw             = 1.23;
 
         ASSERT_TRUE(feishu_child.commit(auto_state));
         exit(0);
@@ -62,8 +62,8 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
     }
 
     ASSERT_TRUE(auto_state.has_value());
-    EXPECT_TRUE(auto_state->should_control);
-    EXPECT_TRUE(auto_state->should_shoot);
+    EXPECT_TRUE(auto_state->gimbal_takeover);
+    EXPECT_TRUE(auto_state->shoot_permitted);
     EXPECT_DOUBLE_EQ(auto_state->yaw, 1.23);
 
     int status = 0;
