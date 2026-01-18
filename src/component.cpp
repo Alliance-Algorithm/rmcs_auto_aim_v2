@@ -85,8 +85,8 @@ public:
 private:
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
-    double current_gimbal_yaw;
-    double current_gimbal_pitch;
+    double current_gimbal_yaw { 0. };
+    double current_gimbal_pitch { 0. };
     InputInterface<float> bullet_speed;
 
     RclcppNode rclcpp;

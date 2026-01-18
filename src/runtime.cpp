@@ -196,11 +196,12 @@ auto main() -> int {
 
             auto const& snapshot = *snapshot_opt;
 
-            auto muzzle_to_odom_translation = Eigen::Vector3d {};
-            control_state.odom_to_muzzle_translation.copy_to(muzzle_to_odom_translation);
+            auto odom_to_muzzle_translation = Eigen::Vector3d {};
+            control_state.odom_to_muzzle_translation.copy_to(odom_to_muzzle_translation);
 
             fire_control.set_bullet_speed(control_state.bullet_speed);
-            auto result_opt = fire_control.solve(snapshot, muzzle_to_odom_translation);
+            auto result_opt =
+                fire_control.solve(snapshot, control_state.odom_to_muzzle_translation);
             if (!result_opt) {
                 action_throttler.dispatch(
                     "fire_control_failed", [&] { rclcpp_node.warn("Fire control solve failed"); });

@@ -61,7 +61,7 @@ struct FireControl::Impl {
 
     Config config;
 
-    double bullet_speed_buffer;
+    double bullet_speed_buffer { 0. };
     double bullet_speed;
 
     AimPointChooser aim_point_chooser;
@@ -100,8 +100,8 @@ struct FireControl::Impl {
 
     auto set_bullet_speed(double speed) -> void { bullet_speed_buffer = speed; }
 
-    auto solve(const predictor::Snapshot& snapshot,
-        Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {
+    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
+        -> std::optional<Result> {
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
@@ -140,7 +140,9 @@ struct FireControl::Impl {
             auto armor_position_in_world = Eigen::Vector3d {};
             armor_translation.copy_to(armor_position_in_world);
 
-            auto bullet_in_muzzle = armor_position_in_world - muzzle_to_odom_translation;
+            auto _odom_to_muzzle_translation = Eigen::Vector3d {};
+            odom_to_muzzle_translation.copy_to(_odom_to_muzzle_translation);
+            auto bullet_in_muzzle = armor_position_in_world - _odom_to_muzzle_translation;
             auto target_d         = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
                         + bullet_in_muzzle.y() * bullet_in_muzzle.y());
             auto target_h         = bullet_in_muzzle.z();
@@ -174,7 +176,7 @@ struct FireControl::Impl {
 };
 
 FireControl::FireControl() noexcept
-    : pimpl { std::make_unique<Impl>() } { }
+    : pimpl { std::make_unique<Impl>() } { };
 FireControl::~FireControl() noexcept = default;
 
 auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
@@ -184,6 +186,6 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
 auto FireControl::set_bullet_speed(double speed) -> void { return pimpl->set_bullet_speed(speed); }
 
 auto FireControl::solve(const predictor::Snapshot& snapshot,
-    Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result> {
-    return pimpl->solve(snapshot, muzzle_to_odom_translation);
+    Translation const& odom_to_muzzle_translation) -> std::optional<Result> {
+    return pimpl->solve(snapshot, odom_to_muzzle_translation);
 }

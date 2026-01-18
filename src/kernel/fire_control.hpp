@@ -1,11 +1,11 @@
 #pragma once
 
-#include <eigen3/Eigen/Geometry>
 #include <expected>
 #include <yaml-cpp/yaml.h>
 
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::kernel {
@@ -26,7 +26,7 @@ public:
 
     auto set_bullet_speed(double speed) -> void;
 
-    auto solve(const predictor::Snapshot& snapshot,
-        Eigen::Vector3d const& muzzle_to_odom_translation) -> std::optional<Result>;
+    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
+        -> std::optional<Result>;
 };
 }

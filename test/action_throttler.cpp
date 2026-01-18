@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <thread>
 
 #include "module/debug/action_throttler.hpp"
 
@@ -41,4 +42,3 @@ TEST(ActionThrottler, ResetRestoreQuota) {
     EXPECT_TRUE(throttler.dispatch("bar", [&] { ++count; }));
     EXPECT_EQ(count, 2);
 }
-
