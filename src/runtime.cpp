@@ -104,10 +104,10 @@ auto main() -> int {
     }
     // DEBUG
     {
-        action_throttler.register_action("control_state_not_updated");
-        action_throttler.register_action("control_state_received", 233);
+        action_throttler.register_action("control_state_not_updated", 3);
+        action_throttler.register_action("tracker_tracking", 1);
         action_throttler.register_action("armor_not_detected");
-        action_throttler.register_action("visualization_pnp_failed");
+        action_throttler.register_action("visualization_pnp_failed", 3);
         action_throttler.register_action("fire_control_failed");
     }
 
@@ -136,10 +136,6 @@ auto main() -> int {
                 }
 
                 control_state = feishu.fetch();
-                action_throttler.dispatch("control_state_received", [&] {
-                    rclcpp_node.info("Control state received: yaw={:.3f}, pitch={:.3f}",
-                        control_state.yaw, control_state.pitch);
-                });
             }
 
             auto armors_2d = identifier.sync_identify(*image);
@@ -172,7 +168,6 @@ auto main() -> int {
 
             if (visualization.initialized()) {
                 auto success = visualization.solved_pnp_armors(*armors_3d_opt);
-
                 if (!success) {
                     action_throttler.dispatch("visualization_pnp_failed",
                         [&] { rclcpp_node.error("可视化PNP结算后的装甲板失败"); });
@@ -187,13 +182,13 @@ auto main() -> int {
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
-            // if (tracker_state == TrackerState::Tracking) {
-            //     action_throttler.dispatch(
-            //         "tracker_tracking", [&] { rclcpp_node.info("已进入 Tracking 状态"); });
-            // } else {
-            //     action_throttler.reset("tracker_tracking");
-            //     continue;
-            // }
+            if (tracker_state == TrackerState::Tracking) {
+                action_throttler.dispatch(
+                    "tracker_tracking", [&] { rclcpp_node.info("已进入 Tracking 状态"); });
+            } else {
+                action_throttler.reset("tracker_tracking");
+                continue;
+            }
 
             if (!snapshot_opt) {
                 continue;

@@ -1,6 +1,5 @@
 #include "fire_control.hpp"
 
-#include "module/debug/action_throttler.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
@@ -19,7 +18,7 @@ struct FireControl::Impl {
         double shoot_offset_z;       // m
 
         double k;          // 基础阻力系数 (小弹丸~0.019, 大弹丸~0.005)
-        double g;          // 重力加速度 (通常取 9.78~9.8)
+        double g;          // 重力加速度
         double bias_scale; // 动态补偿系数：修正额外阻力,阻力越大，该系数越大，default=1
 
         double coming_angle;               // rad
@@ -68,9 +67,6 @@ struct FireControl::Impl {
     AimPointChooser aim_point_chooser;
 
     rmcs::Printer log { "FireControl" };
-    util::ActionThrottler throttler { std::chrono::seconds(1), 233 };
-
-    Impl() { throttler.register_action("trajectory_solution"); }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
@@ -80,7 +76,6 @@ struct FireControl::Impl {
 
         bullet_speed = config.initial_bullet_speed;
 
-        // 配置文件中角度是度制、延迟是毫秒，内部统一转成弧度/秒
         config.coming_angle               = util::deg2rad(config.coming_angle);
         config.leaving_angle              = util::deg2rad(config.leaving_angle);
         config.outpost_coming_angle       = util::deg2rad(config.outpost_coming_angle);
@@ -110,8 +105,12 @@ struct FireControl::Impl {
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
-        // TODO:确定弹速的值
-        if (bullet_speed_buffer > 10.) bullet_speed = bullet_speed_buffer;
+        if (bullet_speed_buffer > 10.) {
+            bullet_speed = bullet_speed_buffer;
+        } else {
+            bullet_speed = config.initial_bullet_speed;
+        }
+
         auto current_fly_time = target_position_in_world.norm() / bullet_speed;
 
         auto best_armor_opt    = std::optional<Armor3D> {};
@@ -153,16 +152,6 @@ struct FireControl::Impl {
             solution.params         = solution_params;
 
             auto result = solution.solve();
-
-            if (result) {
-                throttler.dispatch("trajectory_solution", [&] {
-                    log.info("Trajectory solution: pitch={:.3f} rad, fly_time={:.3f} s, d={:.3f} "
-                             "m, "
-                             "h={:.3f} m, v0={:.3f}",
-                        result->pitch, result->fly_time, solution.input.target_d,
-                        solution.input.target_h, solution.input.v0);
-                });
-            }
 
             if (!result) {
                 return std::nullopt;
