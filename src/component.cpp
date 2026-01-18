@@ -49,15 +49,17 @@ public:
         if (!rmcs_tf.ready()) [[unlikely]] {
             action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
             control_state.set_identity();
+            reset_control_commands();
             return;
         }
         if (!bullet_speed.ready()) [[unlikely]] {
             action_throttler.dispatch(
                 "bullet_speed_not_ready", [&] { rclcpp.warn("bullet_speed is not ready"); });
             control_state.set_identity();
+            reset_control_commands();
             return;
         }
-
+        // TODO:适时交出云台和发射机构控制权
         {
             update_gimbal_direction();
             update_control_state();
@@ -136,6 +138,12 @@ private:
             std::sin(pitch)
         };
         // clang-format on
+    }
+
+    auto reset_control_commands() -> void {
+        *gimbal_takeover  = false;
+        *shoot_permitted  = false;
+        *target_direction = Eigen::Vector3d::Zero();
     }
 
     auto update_gimbal_direction() -> void {
