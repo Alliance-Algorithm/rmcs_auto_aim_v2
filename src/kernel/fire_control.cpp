@@ -62,7 +62,7 @@ struct FireControl::Impl {
     Config config;
 
     double bullet_speed_buffer { 0. };
-    double bullet_speed;
+    double bullet_speed { 0. };
 
     AimPointChooser aim_point_chooser;
 
