@@ -141,7 +141,7 @@ private:
 
     auto update_gimbal_direction() -> void {
         auto odom_to_muzzle_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description ::MuzzleLink>(
+            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
                 *rmcs_tf);
 
         auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.rotation() };
