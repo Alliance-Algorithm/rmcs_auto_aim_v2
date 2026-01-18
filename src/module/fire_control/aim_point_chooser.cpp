@@ -59,13 +59,12 @@ struct AimPointChooser::Impl {
 
         auto chosen_id = int { -1 };
 
-        // --- 模式 A: 非小陀螺模式 (低速旋转) ---
-        // 判断标准：角速度绝对值小于阈值 且 不是前哨站
+        // ---  非小陀螺模式 (低速旋转) ---
         if ((std::abs(angular_velocity) < angular_velocity_threshold)
             && (armors.front().genre != DeviceId::OUTPOST)) {
             for (auto& candidate : candidates) {
                 candidate.score = std::abs(candidate.delta_yaw);
-                // 【锁定逻辑】如果该板是上一帧选中的，给它一个“粘滞补偿” (减分即优选)
+
                 if (candidate.index == last_chosen_id)
                     candidate.score -= util::deg2rad(8); // 约 8 度的优先权，防止微小跳变导致换板
             }
@@ -77,7 +76,7 @@ struct AimPointChooser::Impl {
                 });
             if (std::abs(valid_it->delta_yaw) < util::deg2rad(90)) chosen_id = valid_it->index;
         }
-        // --- 模式 B: 小陀螺模式 (快速旋转) ---
+        // --- 小陀螺模式 (快速旋转) ---
         else {
             auto genre         = armors.front().genre;
             auto _coming_angle = (genre == DeviceId::OUTPOST) ? outpost_coming_angle : coming_angle;
@@ -93,7 +92,7 @@ struct AimPointChooser::Impl {
                     || (angular_velocity < 0 && candidate.delta_yaw < 0);
 
                 if (is_incoming) candidate.score -= 0.2;
-                // 【锁定逻辑】强粘滞：小陀螺下换板的代价更高
+
                 if (candidate.index == last_chosen_id) {
                     candidate.score -= util::deg2rad(17); // 约 17 度的优先权
                 }

@@ -72,7 +72,7 @@ pose_estimator:
 
 fire_control:
   initial_bullet_speed: 20 # m/s
-  shoot_delay: 100 # ms
+  shoot_delay: 0.1 # s
   shoot_offset_x: 0.0 # m
   shoot_offset_y: 0.0 # m
   shoot_offset_z: 0.0 # m

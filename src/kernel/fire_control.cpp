@@ -81,7 +81,6 @@ struct FireControl::Impl {
         config.outpost_coming_angle       = util::deg2rad(config.outpost_coming_angle);
         config.outpost_leaving_angle      = util::deg2rad(config.outpost_leaving_angle);
         config.angular_velocity_threshold = util::deg2rad(config.angular_velocity_threshold);
-        config.shoot_delay /= 1000.0; // ms -> s
 
         auto chooser_config = AimPointChooser::Config {
             .coming_angle               = config.coming_angle,
