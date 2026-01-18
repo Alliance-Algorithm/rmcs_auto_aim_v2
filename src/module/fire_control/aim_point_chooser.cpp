@@ -1,6 +1,8 @@
 #include "aim_point_chooser.hpp"
 
 #include "utility/math/conversion.hpp"
+#include <optional>
+#include <span>
 
 using namespace rmcs::fire_control;
 

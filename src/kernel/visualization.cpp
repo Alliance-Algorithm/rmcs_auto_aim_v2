@@ -10,8 +10,6 @@
 
 using namespace rmcs::kernel;
 using namespace rmcs::util;
-using Clock = std::chrono::steady_clock;
-using Stamp = Clock::time_point;
 
 constexpr std::array kVideoTypes {
     "RTP_JEPG",
