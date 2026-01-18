@@ -41,7 +41,6 @@ public:
         action_throttler.register_action("tf_not_ready");
         action_throttler.register_action("bullet_speed_not_ready");
         action_throttler.register_action("commit_control_state_failed");
-        action_throttler.register_action("fetch_auto_aim_failed");
     }
 
     auto update() -> void override {
