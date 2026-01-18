@@ -95,7 +95,7 @@ struct FireControl::Impl {
     }
 
     const int kMaxIterateCount { 5 };
-    const double kMaxFlyTimeThreold { 0.001 };
+    const double kMaxFlyTimeThreshold { 0.001 };
 
     auto set_bullet_speed(double speed) -> void { bullet_speed_buffer = speed; }
 
@@ -163,7 +163,7 @@ struct FireControl::Impl {
             trajectory_result = *result;
             horizon_distance  = target_d;
 
-            if (time_error < kMaxFlyTimeThreold) break;
+            if (time_error < kMaxFlyTimeThreshold) break;
         }
 
         auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
