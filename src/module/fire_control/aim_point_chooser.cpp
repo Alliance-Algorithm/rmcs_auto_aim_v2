@@ -1,8 +1,6 @@
 #include "aim_point_chooser.hpp"
 
 #include "utility/math/conversion.hpp"
-#include <optional>
-#include <span>
 
 using namespace rmcs::fire_control;
 
@@ -90,7 +88,7 @@ struct AimPointChooser::Impl {
                 candidate.score = std::abs(candidate.delta_yaw);
                 // 判断旋转方向，给予“顺势”补偿
                 // 如果 omega > 0 (逆时针)，板从右侧 (delta > 0) 进入。
-                // 我们给正处于“迎面而来”位置的板减分（优选）
+                // 我们给正处于“迎面而来”位置的板减分
                 bool is_incoming = (angular_velocity > 0 && candidate.delta_yaw > 0)
                     || (angular_velocity < 0 && candidate.delta_yaw < 0);
 
@@ -102,14 +100,14 @@ struct AimPointChooser::Impl {
                 // 剔除已经快要转没的板 (Leaving Angle)
                 if ((angular_velocity > 0 && candidate.delta_yaw < -_leaving_angle)
                     || (angular_velocity < 0 && candidate.delta_yaw > _leaving_angle)) {
-                    candidate.score += 10.0; // 极大的惩罚项，强制换到下一块进入的板
+                    candidate.score += 10.0;
                 }
-
-                auto it = std::ranges::min_element(
-                    candidates | std::views::take(n), std::ranges::less {}, &ArmorCandidate::score);
-
-                if (std::abs(it->delta_yaw) < _coming_angle) chosen_id = it->index;
             }
+
+            auto it = std::ranges::min_element(
+                candidates | std::views::take(n), std::ranges::less {}, &ArmorCandidate::score);
+
+            if (std::abs(it->delta_yaw) < _coming_angle) chosen_id = it->index;
         }
 
         if (chosen_id != -1) {

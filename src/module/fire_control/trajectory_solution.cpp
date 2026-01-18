@@ -16,14 +16,12 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
     if (input.v0 <= 0 || input.target_d <= 0) return std::nullopt;
 
     // 实际参与计算的阻力系数 = 基础系数 * 动态补偿
-    const double k_effective = params.k * params.bias_scale;
+    const double k_effective = input.params.k * input.params.bias_scale;
 
-    // 1. 初始猜测值：使用解析解或简单的几何角度
     double pitch = std::atan2(input.target_h, input.target_d);
 
-    // 2. 迭代反馈：修正由于空气阻力导致的下坠偏差
     for (int i = 0; i < kMaxIterateCount; ++i) {
-        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, k_effective, params.g);
+        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, k_effective, input.params.g);
 
         auto h_error = input.target_h - actual_h;
         if (std::abs(h_error) < kHeightErrorThreold) {
@@ -53,28 +51,33 @@ auto TrajectorySolution::Estimate(double v0, double pitch, double d, double k, d
     double vx = v0 * std::cos(pitch);
     double vy = v0 * std::sin(pitch);
 
-    while (x < d) {
-        // F = -k * v * v_vec => a = -k * v * v_vec
-        double v = std::sqrt(vx * vx + vy * vy);
+    double prev_x = 0, prev_y = 0, prev_t = 0;
 
-        // 速度更新：dv = a * dt
+    while (x < d) {
+        prev_x = x;
+        prev_y = y;
+        prev_t = t;
+
+        // F = -k * v * v_vec => a = -k * v * v_vec
+        const double v = std::sqrt(vx * vx + vy * vy);
+
+        // dv = a * dt
         vx -= k * v * vx * kEstimateDeltaTime;
         vy -= (g + k * v * vy) * kEstimateDeltaTime;
 
-        // 位移更新
         x += vx * kEstimateDeltaTime;
         y += vy * kEstimateDeltaTime;
         t += kEstimateDeltaTime;
 
-        if (t > kEstimateTimeOutThreold) break; // 超时保护
+        if (t > kEstimateTimeOutThreold || vx <= kMinVelocityX) [[unlikely]]
+            break;
     }
 
     // 线性插值修正
     // 数值积分最后一步通常会超过 d，通过插值回到精确的 d 位置提高 t 和 y 的精度
-    double last_x  = x - vx * kEstimateDeltaTime;
-    double ratio   = (d - last_x) / (x - last_x);
-    double final_y = (y - vy * kEstimateDeltaTime) + (y - (y - vy * kEstimateDeltaTime)) * ratio;
-    double final_t = (t - kEstimateDeltaTime) + kEstimateDeltaTime * ratio;
-
-    return { final_y, final_t };
+    if (x >= d && x > prev_x) {
+        double ratio = (d - prev_x) / (x - prev_x);
+        return { std::lerp(prev_y, y, ratio), std::lerp(prev_t, t, ratio) };
+    }
+    return { y, t };
 }

@@ -151,7 +151,7 @@ struct FireControl::Impl {
             solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
             solution.input.target_h = target_h;
-            solution.params         = solution_params;
+            solution.input.params   = solution_params;
 
             auto result = solution.solve();
 

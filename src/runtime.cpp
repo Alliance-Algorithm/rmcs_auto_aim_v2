@@ -109,6 +109,7 @@ auto main() -> int {
         action_throttler.register_action("armor_not_detected");
         action_throttler.register_action("visualization_pnp_failed", 3);
         action_throttler.register_action("fire_control_failed");
+        action_throttler.register_action("feishu_commit_failed");
     }
 
     // AUTO AIM RESULT
@@ -195,9 +196,6 @@ auto main() -> int {
             }
 
             auto const& snapshot = *snapshot_opt;
-
-            auto odom_to_muzzle_translation = Eigen::Vector3d {};
-            control_state.odom_to_muzzle_translation.copy_to(odom_to_muzzle_translation);
 
             fire_control.set_bullet_speed(control_state.bullet_speed);
             auto result_opt =

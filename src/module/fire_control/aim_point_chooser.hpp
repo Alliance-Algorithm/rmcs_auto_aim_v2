@@ -1,6 +1,8 @@
 #pragma once
 
 #include <eigen3/Eigen/Geometry>
+#include <optional>
+#include <span>
 #include <yaml-cpp/yaml.h>
 
 #include "utility/math/kalman_filter/ekf.hpp"
