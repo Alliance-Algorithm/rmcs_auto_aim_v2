@@ -23,7 +23,7 @@ include_directories(
 
 set(TOOL_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Camera calibration (OpenCV + fmt)
+# Camera calibration 
 add_executable(
     camera_calibration
     ${TOOL_DIR}/calibration/camera_calibration.cpp
