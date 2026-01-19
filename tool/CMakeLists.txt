@@ -34,6 +34,17 @@ target_link_libraries(
         ${OpenCV_LIBS}
 )
 
+# Hand-eye calibration
+add_executable(
+    handeye_calibration
+    ${TOOL_DIR}/calibration/handeye_calibration.cpp
+)
+target_link_libraries(
+    handeye_calibration
+    PRIVATE
+        ${OpenCV_LIBS}
+)
+
 # Visualization
 add_executable(
     visualization

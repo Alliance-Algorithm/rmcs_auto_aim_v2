@@ -17,7 +17,7 @@ namespace fs = std::filesystem;
 namespace config {
 struct CalibrationOptions {
     cv::Size pattern_size { 9, 6 };
-    float square_size_m { 0.02f };
+    float square_size_m { 0.02f }; // 方格边长 (m)
 
     cv::Size subpix_win { 11, 11 };
     cv::Size subpix_zero { 1, 1 };
