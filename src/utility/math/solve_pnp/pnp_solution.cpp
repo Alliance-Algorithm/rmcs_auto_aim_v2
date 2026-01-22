@@ -1,7 +1,6 @@
 #define OPENCV_DISABLE_EIGEN_TENSOR_SUPPORT
 
 #include "pnp_solution.hpp"
-#include "utility/math/conversion.hpp"
 #include "utility/math/solve_pnp/solve_pnp.hpp"
 
 #include <eigen3/Eigen/Geometry>
@@ -40,9 +39,9 @@ auto PnpSolution::solve() -> bool {
 
         result.genre       = input.genre;
         result.color       = input.color;
-        result.translation = opencv2ros_position(tran_vec_eigen_opencv);
-        result.orientation =
-            Eigen::Quaterniond { opencv2ros_rotation(rotation_eigen_opencv) }.normalized();
+        result.translation = tran_vec_eigen_opencv;
+        result.orientation = Eigen::Quaterniond { rotation_eigen_opencv }.normalized();
+
     } catch (cv::Exception const& e) {
         throw std::runtime_error("solve pnp throw a error:" + std::string(e.what()));
     }

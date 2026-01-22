@@ -129,7 +129,6 @@ struct DeviceIds {
     constexpr static auto kLargeArmor() {
         return DeviceIds {
             DeviceId::HERO,
-            DeviceId::ENGINEER,
             DeviceId::BASE,
         };
     }

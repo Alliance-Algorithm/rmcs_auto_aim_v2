@@ -109,6 +109,19 @@ auto main() -> int {
 
             if (is_local_runtime) {
                 control_state.set_identity();
+                auto armors_2d = identifier.sync_identify(*image);
+                if (!armors_2d.has_value()) {
+                    continue;
+                }
+                if (use_painted_image) {
+                    if (!armors_2d->empty()) {
+                        for (const auto& armor_2d : *armors_2d)
+                            util::draw(*image, armor_2d);
+                    }
+                }
+                if (visualization.initialized()) {
+                    visualization.send_image(*image);
+                }
             } else {
                 if (!feishu.updated()) {
                     if (log_limiter.tick("control_state_not_updated")) {
@@ -143,12 +156,11 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
-            auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
-
-            if (!armors_3d_opt.has_value()) continue;
+            auto armors_3d = pose_estimator.odom_to_camera_pipeline(filtered_armors_2d);
+            if (armors_3d.empty()) continue;
 
             if (visualization.initialized()) {
-                auto success = visualization.solved_pnp_armors(*armors_3d_opt);
+                auto success = visualization.solved_pnp_armors(armors_3d);
 
                 if (!success) {
                     if (log_limiter.tick("visualization_pnp_failed")) {
@@ -160,9 +172,6 @@ auto main() -> int {
                     log_limiter.reset("visualization_pnp_failed");
                 }
             }
-
-            pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
-            auto armors_3d = pose_estimator.odom_to_camera(*armors_3d_opt);
 
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
