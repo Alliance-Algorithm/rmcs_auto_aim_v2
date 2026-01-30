@@ -2,10 +2,10 @@
 #include <expected>
 #include <filesystem>
 #include <format>
-#include <opencv2/calib3d.hpp>   // 标定核心算法：calibrateCamera, projectPoints
-#include <opencv2/core.hpp>      // 核心数据结构：cv::Mat, cv::Size, cv::Point
-#include <opencv2/imgcodecs.hpp> // 图像 IO：imread
-#include <opencv2/imgproc.hpp>   // 图像处理：cornerSubPix, cvtColor
+#include <opencv2/calib3d.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #include <print>
 #include <ranges>
 #include <string>
@@ -13,11 +13,10 @@
 
 namespace fs = std::filesystem;
 
-// --- 1. 配置管理 ---
 namespace config {
 struct CalibrationOptions {
-    cv::Size pattern_size { 9, 6 };
-    float square_size_m { 0.02f }; // 方格边长 (m)
+    cv::Size pattern_size { 11, 8 };
+    float square_size_m { 0.015f }; // 方格边长 (m)
 
     cv::Size subpix_win { 11, 11 };
     cv::Size subpix_zero { 1, 1 };
@@ -29,7 +28,6 @@ struct CalibrationOptions {
 };
 }
 
-// --- 2. 格式化输出---
 template <>
 struct std::formatter<cv::Mat> : std::formatter<std::string> {
     auto format(const cv::Mat& mat, format_context& ctx) const {
@@ -46,8 +44,6 @@ struct std::formatter<cv::Mat> : std::formatter<std::string> {
         return std::formatter<std::string>::format(result, ctx);
     }
 };
-
-// --- 3. 业务逻辑实现 ---
 
 auto get_object_points(const config::CalibrationOptions& opts) -> std::vector<cv::Point3f> {
     auto points = std::vector<cv::Point3f> {};

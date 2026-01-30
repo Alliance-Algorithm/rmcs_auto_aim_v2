@@ -103,6 +103,17 @@ if(HIKCAMERA_AVAILABLE)
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )
+
+    # Calibration collector
+    add_executable(
+        calibration_collector
+        ${TOOL_DIR}/calibration_collector.cpp
+    )
+    target_link_libraries(
+        calibration_collector
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+    )
 else()
     message(STATUS "hikcamera 未检测到，跳过相关构建")
 endif()
