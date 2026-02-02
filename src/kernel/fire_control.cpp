@@ -9,6 +9,7 @@
 
 using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
+
 struct FireControl::Impl {
     struct Config : util::Serializable {
         double initial_bullet_speed; // m/s
@@ -28,34 +29,23 @@ struct FireControl::Impl {
         double angular_velocity_threshold; // rad/s
 
         constexpr static std::tuple metas {
-            &Config::initial_bullet_speed,
-            "initial_bullet_speed",
-            &Config::shoot_delay,
-            "shoot_delay",
-            &Config::shoot_offset_x,
-            "shoot_offset_x",
-            &Config::shoot_offset_y,
-            "shoot_offset_y",
-            &Config::shoot_offset_z,
-            "shoot_offset_z",
+            // clang-format off
+            &Config::initial_bullet_speed,  "initial_bullet_speed",
+            &Config::shoot_delay,           "shoot_delay",
+            &Config::shoot_offset_x,        "shoot_offset_x",
+            &Config::shoot_offset_y,        "shoot_offset_y",
+            &Config::shoot_offset_z,        "shoot_offset_z",
 
-            &Config::k,
-            "k",
-            &Config::g,
-            "g",
-            &Config::bias_scale,
-            "bias_scale",
+            &Config::k,             "k",
+            &Config::g,             "g",
+            &Config::bias_scale,    "bias_scale",
 
-            &Config::coming_angle,
-            "coming_angle",
-            &Config::leaving_angle,
-            "leaving_angle",
-            &Config::outpost_coming_angle,
-            "outpost_coming_angle",
-            &Config::outpost_leaving_angle,
-            "outpost_leaving_angle",
-            &Config::angular_velocity_threshold,
-            "angular_velocity_threshold",
+            &Config::coming_angle,                  "coming_angle",
+            &Config::leaving_angle,                 "leaving_angle",
+            &Config::outpost_coming_angle,          "outpost_coming_angle",
+            &Config::outpost_leaving_angle,         "outpost_leaving_angle",
+            &Config::angular_velocity_threshold,    "angular_velocity_threshold",
+            // clang-format on
         };
     };
 
@@ -141,10 +131,12 @@ struct FireControl::Impl {
 
             auto _odom_to_muzzle_translation = Eigen::Vector3d {};
             odom_to_muzzle_translation.copy_to(_odom_to_muzzle_translation);
+
             auto bullet_in_muzzle = armor_position_in_world - _odom_to_muzzle_translation;
-            auto target_d         = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
-                        + bullet_in_muzzle.y() * bullet_in_muzzle.y());
-            auto target_h         = bullet_in_muzzle.z();
+
+            auto target_d = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
+                + bullet_in_muzzle.y() * bullet_in_muzzle.y());
+            auto target_h = bullet_in_muzzle.z();
 
             auto solution           = TrajectorySolution {};
             solution.input.v0       = bullet_speed;
@@ -169,7 +161,9 @@ struct FireControl::Impl {
         auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
 
         return Result {
-            .pitch = trajectory_result.pitch, .yaw = final_yaw, .horizon_distance = horizon_distance
+            .pitch            = trajectory_result.pitch,
+            .yaw              = final_yaw,
+            .horizon_distance = horizon_distance,
         };
     }
 };

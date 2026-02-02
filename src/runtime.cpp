@@ -124,6 +124,9 @@ auto main() -> int {
         if (auto image = capturer.fetch_image()) {
             auto control_state = ControlState {};
 
+            // Feishu Sync
+            // FIXME:
+            // 嵌套有点严重，将该段逻辑提取为 lambda 定义在前面
             if (is_local_runtime) {
                 control_state.set_identity();
                 action_throttler.dispatch("control_state_not_updated",
@@ -139,6 +142,7 @@ auto main() -> int {
                 control_state = feishu.fetch();
             }
 
+            // Identify
             auto armors_2d = identifier.sync_identify(*image);
             if (!armors_2d.has_value()) {
                 action_throttler.dispatch(
@@ -162,6 +166,7 @@ auto main() -> int {
                 visualization.send_image(*image);
             }
 
+            // Solve Pnp
             auto armors_3d_opt = pose_estimator.solve_pnp(filtered_armors_2d);
             if (!armors_3d_opt.has_value()) {
                 continue;
@@ -180,6 +185,7 @@ auto main() -> int {
             pose_estimator.set_odom_to_camera_transform(control_state.odom_to_camera_transform);
             auto armors_3d = pose_estimator.odom_to_camera(*armors_3d_opt);
 
+            // Track Armors
             auto [tracker_state, target_device, snapshot_opt] =
                 tracker.decide(armors_3d, Clock::now());
 
@@ -197,6 +203,7 @@ auto main() -> int {
 
             auto const& snapshot = *snapshot_opt;
 
+            // Fire Control
             fire_control.set_bullet_speed(control_state.bullet_speed);
             auto result_opt =
                 fire_control.solve(snapshot, control_state.odom_to_muzzle_translation);
@@ -207,18 +214,17 @@ auto main() -> int {
             }
             action_throttler.reset("fire_control_failed");
 
+            // Feishu Sync
             auto_aim_state.timestamp       = Clock::now();
             auto_aim_state.gimbal_takeover = true;
             auto_aim_state.shoot_permitted = true;
             auto_aim_state.yaw             = result_opt->yaw;
             auto_aim_state.pitch           = result_opt->pitch;
 
-            {
-                auto success = feishu.commit(auto_aim_state);
-                if (!success) {
-                    action_throttler.dispatch("feishu_commit_failed",
-                        [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
-                }
+            auto success = feishu.commit(auto_aim_state);
+            if (!success) {
+                action_throttler.dispatch("feishu_commit_failed",
+                    [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
             }
 
             if (visualization.initialized()) {

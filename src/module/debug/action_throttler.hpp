@@ -14,13 +14,6 @@
 namespace rmcs::util {
 
 class ActionThrottler {
-    struct string_hash {
-        using is_transparent = void;
-        auto operator()(std::string_view sv) const -> std::size_t {
-            return std::hash<std::string_view> {}(sv);
-        }
-    };
-
 public:
     using duration = std::chrono::milliseconds;
 
@@ -65,7 +58,14 @@ public:
     }
 
 private:
-    ::rmcs::FramerateCounter metronome_;
+    struct string_hash {
+        using is_transparent = void;
+        auto operator()(std::string_view sv) const -> std::size_t {
+            return std::hash<std::string_view> {}(sv);
+        }
+    };
+
+    FramerateCounter metronome_;
     std::size_t default_quota_;
     std::unordered_map<std::string, TimesLimit, string_hash, std::equal_to<>> actions_;
 };
