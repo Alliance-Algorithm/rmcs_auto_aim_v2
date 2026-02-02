@@ -78,7 +78,6 @@ fire_control:
   shoot_offset_z: 0.0 # m
 
   k: 0.019
-  g: 9.81
   bias_scale: 1.0
 
   coming_angle: 60.0      # degree

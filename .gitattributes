@@ -1,0 +1,22 @@
+# 核心规则：自动处理换行符转换
+* text=auto
+
+# C/C++ 源代码
+*.c     text
+*.cpp   text
+*.h     text
+*.hpp   text
+*.cc    text
+*.cxx   text
+
+# 脚本文件：强制使用 LF
+*.sh   text eol=lf
+*.bash text eol=lf
+*.py   text eol=lf
+
+# 配置文件与文档
+*.json  text
+*.yaml  text
+*.yml   text
+*.md    text
+*.xml   text
