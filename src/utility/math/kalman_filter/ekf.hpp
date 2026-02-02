@@ -1,5 +1,5 @@
 #pragma once
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry>
 
 namespace rmcs::util {
 

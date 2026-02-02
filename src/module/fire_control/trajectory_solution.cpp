@@ -21,7 +21,7 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
     double pitch = std::atan2(input.target_h, input.target_d);
 
     for (int i = 0; i < kMaxIterateCount; ++i) {
-        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, k_effective, input.params.g);
+        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, k_effective);
 
         auto h_error = input.target_h - actual_h;
         if (std::abs(h_error) < kHeightErrorThreold) {
@@ -45,7 +45,7 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
  * @brief 弹道前向仿真（数值积分）
  * 计算在给定仰角下，飞行到水平距离 d 时的高度和时间
  */
-auto TrajectorySolution::Estimate(double v0, double pitch, double d, double k, double g) const
+auto TrajectorySolution::Estimate(double v0, double pitch, double d, double k) const
     -> std::tuple<double, double> {
     double x = 0, y = 0, t = 0;
     double vx = v0 * std::cos(pitch);
@@ -63,7 +63,7 @@ auto TrajectorySolution::Estimate(double v0, double pitch, double d, double k, d
 
         // dv = a * dt
         vx -= k * v * vx * kEstimateDeltaTime;
-        vy -= (g + k * v * vy) * kEstimateDeltaTime;
+        vy -= (kGravity + k * v * vy) * kEstimateDeltaTime;
 
         x += vx * kEstimateDeltaTime;
         y += vy * kEstimateDeltaTime;

@@ -19,7 +19,6 @@ struct FireControl::Impl {
         double shoot_offset_z;       // m
 
         double k;          // 基础阻力系数 (小弹丸~0.019, 大弹丸~0.005)
-        double g;          // 重力加速度
         double bias_scale; // 动态补偿系数：修正额外阻力,阻力越大，该系数越大，default=1
 
         double coming_angle;               // rad
@@ -28,25 +27,24 @@ struct FireControl::Impl {
         double outpost_leaving_angle;      // rad
         double angular_velocity_threshold; // rad/s
 
+        // clang-format off
         constexpr static std::tuple metas {
-            // clang-format off
-            &Config::initial_bullet_speed,  "initial_bullet_speed",
-            &Config::shoot_delay,           "shoot_delay",
-            &Config::shoot_offset_x,        "shoot_offset_x",
-            &Config::shoot_offset_y,        "shoot_offset_y",
-            &Config::shoot_offset_z,        "shoot_offset_z",
+            &Config::initial_bullet_speed, "initial_bullet_speed",
+            &Config::shoot_delay,"shoot_delay",
+            &Config::shoot_offset_x,"shoot_offset_x",
+            &Config::shoot_offset_y,"shoot_offset_y",
+            &Config::shoot_offset_z,"shoot_offset_z",
 
-            &Config::k,             "k",
-            &Config::g,             "g",
-            &Config::bias_scale,    "bias_scale",
+            &Config::k,"k",
+            &Config::bias_scale,"bias_scale",
 
-            &Config::coming_angle,                  "coming_angle",
-            &Config::leaving_angle,                 "leaving_angle",
-            &Config::outpost_coming_angle,          "outpost_coming_angle",
-            &Config::outpost_leaving_angle,         "outpost_leaving_angle",
-            &Config::angular_velocity_threshold,    "angular_velocity_threshold",
-            // clang-format on
+            &Config::coming_angle,"coming_angle",
+            &Config::leaving_angle,"leaving_angle",
+            &Config::outpost_coming_angle,"outpost_coming_angle",
+            &Config::outpost_leaving_angle,"outpost_leaving_angle",
+            &Config::angular_velocity_threshold,"angular_velocity_threshold",
         };
+        // clang-format on
     };
 
     Config config;
@@ -108,7 +106,6 @@ struct FireControl::Impl {
 
         auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
         solution_params.k          = config.k;
-        solution_params.g          = config.g;
         solution_params.bias_scale = config.bias_scale;
 
         for (int i = 0; i < kMaxIterateCount; ++i) {
