@@ -6,6 +6,9 @@
 namespace rmcs::util::visual {
 
 struct Posture : Movable {
+    friend Movable;
+
+public:
     struct Config {
         RclcppNode& rclcpp;
 
@@ -20,9 +23,9 @@ struct Posture : Movable {
 
     auto update() noexcept -> void;
 
+private:
     auto impl_move(const Translation&, const Orientation&) noexcept -> void;
 
-private:
     struct Impl;
     std::unique_ptr<Impl> pimpl;
 };
