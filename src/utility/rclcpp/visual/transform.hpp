@@ -6,6 +6,9 @@
 namespace rmcs::util::visual {
 
 struct Transform : Movable {
+    friend Movable;
+
+public:
     struct Config {
         RclcppNode& rclcpp;
 
@@ -22,9 +25,9 @@ struct Transform : Movable {
 
     auto update() -> void;
 
+private:
     auto impl_move(const Translation&, const Orientation&) -> void;
 
-private:
     struct Impl;
     std::unique_ptr<Impl> pimpl;
 };

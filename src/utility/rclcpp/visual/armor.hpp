@@ -7,6 +7,8 @@
 namespace rmcs::util::visual {
 
 struct Armor : public Movable {
+    friend Movable;
+
 public:
     struct Config {
         RclcppNode& rclcpp;
@@ -28,9 +30,9 @@ public:
 
     auto update() noexcept -> void;
 
+private:
     auto impl_move(const Translation&, const Orientation&) noexcept -> void;
 
-private:
     struct Impl;
     std::unique_ptr<Impl> pimpl;
 };
