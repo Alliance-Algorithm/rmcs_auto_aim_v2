@@ -41,17 +41,17 @@ auto main() -> int {
         }
     };
 
-    auto framerate = FramerateCounter { };
+    auto framerate = FramerateCounter {};
     framerate.set_interval(5s);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> { };
-    auto capturer       = kernel::Capturer { };
-    auto identifier     = kernel::Identifier { };
-    auto tracker        = kernel::Tracker { };
-    auto pose_estimator = kernel::PoseEstimator { };
-    auto fire_control   = kernel::FireControl { };
-    auto visualization  = kernel::Visualization { };
+    auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
+    auto capturer       = kernel::Capturer {};
+    auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
+    auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
+    auto visualization  = kernel::Visualization {};
 
     auto action_throttler = util::ActionThrottler { 1s, 233 };
 
@@ -119,7 +119,7 @@ auto main() -> int {
         if (is_local_runtime) {
             action_throttler.dispatch("control_state_not_updated",
                 [&] { rclcpp_node.info("在本机环境下运行，将Control State 设置为默认值"); });
-            auto state = ControlState { };
+            auto state = ControlState {};
             state.set_identity();
             return state;
         }
@@ -133,6 +133,8 @@ auto main() -> int {
 
         return feishu.fetch();
     };
+    /// TODO:
+    /// 较短的逻辑块没有必要提升 Lambda，当时的建议只是是将 fetch_control_state 提出来
     auto detect_armors =
         [&](const auto& image,
             const auto& control_state) -> std::optional<std::vector<rmcs::Armor2D>> {
@@ -206,7 +208,7 @@ auto main() -> int {
         }
     };
     const auto commit_result = [&](const FireControl::Result& result) {
-        auto state = AutoAimState { };
+        auto state = AutoAimState {};
 
         state.timestamp       = Clock::now();
         state.gimbal_takeover = true;

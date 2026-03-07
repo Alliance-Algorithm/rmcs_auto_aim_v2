@@ -65,7 +65,7 @@ auto assert_sync_infer_with_expected(
     const auto model_location = location / "../models" / model_name;
     yaml["model_location"]    = model_location.string();
 
-    auto detector         = identifier::ArmorDetection { };
+    auto detector         = identifier::ArmorDetection {};
     auto configure_result = detector.initialize(yaml);
     ASSERT_TRUE(configure_result.has_value())
         << error_head << model_name << " | " << configure_result.error();
@@ -101,7 +101,7 @@ auto assert_sync_infer_with_expected(
         << error_head << model_name << " | armor count mismatch";
 
     auto matched   = std::array<bool, expected.size()> { false, false };
-    auto threshold = 5.0;
+    auto threshold = 4.0;
     for (const auto&& [i, armor] : armors | std::views::enumerate) {
         auto lt = armor.tl + roi_offset;
         auto rt = armor.tr + roi_offset;
@@ -141,7 +141,7 @@ auto assert_sync_infer_with_expected(
 
 TEST(model, sync_infer) {
     const auto image_location = assets_manager.path("model_infer_example.jpg");
-    auto image { Image { } };
+    auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());
