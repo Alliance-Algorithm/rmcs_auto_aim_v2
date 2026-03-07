@@ -3,25 +3,16 @@
 
 #include <algorithm>
 #include <array>
-#include <expected>
 #include <ranges>
 #include <stdexcept>
 #include <string_view>
-#include <utility>
 
-#include <openvino/core/preprocess/pre_post_process.hpp>
-#include <openvino/runtime/compiled_model.hpp>
 #include <openvino/runtime/core.hpp>
 
-namespace rmcs::util::common_model::details {
+namespace rmcs {
 
-using ModelCompiler = std::function<std::shared_ptr<ov::CompiledModel>(ov::Core&)>;
-
-template <typename T>
-concept model_compiler_trait = requires {
-    requires std::invocable<T, ov::Core&>;
-    requires std::same_as<std::invoke_result_t<T, ov::Core&>, std::shared_ptr<ov::CompiledModel>>;
-};
+inline auto kRealTimePerformanceMode =
+    ov::hint::performance_mode(ov::hint::PerformanceMode::LATENCY);
 
 /// @brief:
 /// POD 结构体，用于语义化地设置各个维度的值，比如：
@@ -129,144 +120,6 @@ public:
             static_cast<std::size_t>(dimensions.at(chars[2])),
             static_cast<std::size_t>(dimensions.at(chars[3])),
         } };
-    }
-};
-
-}
-namespace rmcs::util {
-
-/// Filename: ../../develop_ws/RobotDetectionModel/Model/0526.onnx
-/// ==== Model Basic Status ====
-/// Model loaded: ../../develop_ws/RobotDetectionModel/Model/0526.onnx
-/// Input count : 1
-/// Output count: 1
-/// ---- Inputs ----
-/// Name        : images
-/// Element type: f16
-/// Shape       : [1,3,640,640]
-/// Static shape: yes
-/// Layout      : <not set>
-/// Color format: <not stored in model metadata>
-///
-/// ---- Outputs ----
-/// Name        : output
-/// Element type: f32
-/// Shape       : [1,25200,22]
-
-/// Filename: ../models/yolov5.xml
-/// ==== Model Basic Status ====
-/// Model loaded: ../models/yolov5.xml
-/// Input count : 1
-/// Output count: 1
-/// ---- Inputs ----
-/// Name        : images
-/// Element type: f32
-/// Shape       : [1,3,640,640]
-/// Static shape: yes
-/// Layout      : <not set>
-/// Color format: <not stored in model metadata>
-///
-/// ---- Outputs ----
-/// Name        : output
-/// Element type: f32
-/// Shape       : [1,25200,22]
-
-struct OvModelAdapter {
-    std::shared_ptr<ov::CompiledModel> compiled_model = nullptr;
-
-    // @NOTE:
-    //  由于模型的构建参数并不能完全从序列化文本中传递，
-    //  所幸直接用代码注册，并指定一个固定的 model 目录
-    bool has_set_location = false;
-    auto set_location(std::string_view location) {
-        std::ignore      = location;
-        has_set_location = true;
-    }
-
-    bool has_set_compiler = false;
-
-    using ModelCompiler = common_model::details::ModelCompiler;
-    ModelCompiler compiler {};
-
-    template <common_model::details::model_compiler_trait Compiler>
-    auto set_compiler(Compiler&& _compiler) noexcept {
-        compiler = std::forward<Compiler>(_compiler);
-    }
-
-    auto compile_model(ov::Core& core) noexcept -> std::expected<void, std::string> {
-        const auto completed = std::ranges::all_of(
-            std::array {
-                has_set_location,
-                has_set_compiler,
-            },
-            std::identity {});
-        if (!completed) {
-            return std::unexpected { "Not set completely, check your initialization" };
-        }
-
-        try {
-            compiled_model = compiler(core);
-        } catch (const std::exception& e) {
-            return std::unexpected { e.what() };
-        }
-        return {};
-    }
-};
-
-struct OvModel {
-    using TensorLayout = common_model::details::TensorLayout;
-    using Dimensions   = common_model::details::Dimensions;
-
-    struct Config {
-        // Image
-        std::string image_element_type;
-        std::string image_color_format;
-
-        // Model
-        std::string location;
-        std::string input_layout_str;
-        std::string infer_layout_str;
-        std::string infer_color_format;
-
-        auto is_valid() const noexcept -> std::expected<void, std::string> {
-            // Image
-            std::array invalid_type { "u8", "u16", "f32", "f16" };
-            if (!std::ranges::contains(invalid_type, image_element_type))
-                return std::unexpected { std::format("{} is a wrong type", image_element_type) };
-
-            std::array invalid_format { "bgr", "rgb", "bgrx", "rgbx", "gray" };
-            if (!std::ranges::contains(invalid_format, image_color_format))
-                return std::unexpected { std::format("{} is a wrong format", image_color_format) };
-
-            // Model
-            if (!std::filesystem::exists(location))
-                return std::unexpected { std::format("{} is not exists in filesystem", location) };
-
-            if (!TensorLayout::is_valid_description(input_layout_str))
-                return std::unexpected { std::format(
-                    "{} is a wrong input layout", input_layout_str) };
-            if (!TensorLayout::is_valid_description(infer_layout_str))
-                return std::unexpected { std::format(
-                    "{} is a wrong infer layout", infer_layout_str) };
-
-            if (!std::ranges::contains(invalid_format, infer_color_format))
-                return std::unexpected { std::format("{} is a wrong format", image_color_format) };
-
-            return {};
-        }
-    };
-    Config config;
-
-    TensorLayout input_layout;
-    TensorLayout infer_layout;
-
-    explicit OvModel(Config config, ov::Core& core)
-        : config { std::move(config) }
-        , input_layout { config.input_layout_str }
-        , infer_layout { config.infer_layout_str } {
-
-        using namespace common_model::details;
-        auto raw_model = core.read_model(config.location);
     }
 };
 }
