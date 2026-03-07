@@ -15,28 +15,38 @@
 
 namespace rmcs::util::common_model::details {
 
+using ModelCompiler = std::function<std::shared_ptr<ov::CompiledModel>(ov::Core&)>;
+
+template <typename T>
+concept model_compiler_trait = requires {
+    requires std::invocable<T, ov::Core&>;
+    requires std::same_as<std::invoke_result_t<T, ov::Core&>, std::shared_ptr<ov::CompiledModel>>;
+};
+
 /// @brief:
 /// POD 结构体，用于语义化地设置各个维度的值，比如：
 /// ```
 /// auto dimensions = Dimensions{ .W = 100, .H = 100 };
 /// ```
-using dimension_type = ov::Dimension::value_type;
 struct Dimensions {
-    dimension_type N = 1;
-    dimension_type C = 3;
-    dimension_type W;
-    dimension_type H;
+    using Value = ov::Dimension::value_type;
 
-    constexpr auto at(char dimension) const -> dimension_type {
-        /*  */ if (dimension == 'N') {
+    Value N = 1;
+    Value C = 3;
+    Value W = 0;
+    Value H = 0;
+
+    constexpr auto at(char dimension) const -> Value {
+        switch (dimension) {
+        case 'N':
             return N;
-        } else if (dimension == 'C') {
+        case 'C':
             return C;
-        } else if (dimension == 'W') {
+        case 'W':
             return W;
-        } else if (dimension == 'H') {
+        case 'H':
             return H;
-        } else {
+        default:
             throw std::runtime_error("Wrong dimension char, valid: N, C, W, H");
         }
     }
@@ -102,9 +112,9 @@ public:
         std::ranges::copy_n(description.begin(), 4, chars.begin());
     }
 
-    constexpr auto layout() noexcept { return ov::Layout { chars.data() }; }
+    constexpr auto layout() const noexcept { return ov::Layout { chars.data() }; }
 
-    constexpr auto partial_shape(const Dimensions& dimensions) noexcept {
+    constexpr auto partial_shape(const Dimensions& dimensions) const noexcept {
         return ov::PartialShape {
             dimensions.at(chars[0]),
             dimensions.at(chars[1]),
@@ -112,7 +122,7 @@ public:
             dimensions.at(chars[3]),
         };
     }
-    constexpr auto shape(const Dimensions& dimensions) noexcept {
+    constexpr auto shape(const Dimensions& dimensions) const noexcept {
         return ov::Shape { {
             static_cast<std::size_t>(dimensions.at(chars[0])),
             static_cast<std::size_t>(dimensions.at(chars[1])),
@@ -162,14 +172,45 @@ namespace rmcs::util {
 /// Shape       : [1,25200,22]
 
 struct OvModelAdapter {
+    std::shared_ptr<ov::CompiledModel> compiled_model = nullptr;
 
+    // @NOTE:
+    //  由于模型的构建参数并不能完全从序列化文本中传递，
+    //  所幸直接用代码注册，并指定一个固定的 model 目录
     bool has_set_location = false;
     auto set_location(std::string_view location) {
         std::ignore      = location;
         has_set_location = true;
     }
 
-    auto set_compiler() { }
+    bool has_set_compiler = false;
+
+    using ModelCompiler = common_model::details::ModelCompiler;
+    ModelCompiler compiler {};
+
+    template <common_model::details::model_compiler_trait Compiler>
+    auto set_compiler(Compiler&& _compiler) noexcept {
+        compiler = std::forward<Compiler>(_compiler);
+    }
+
+    auto compile_model(ov::Core& core) noexcept -> std::expected<void, std::string> {
+        const auto completed = std::ranges::all_of(
+            std::array {
+                has_set_location,
+                has_set_compiler,
+            },
+            std::identity {});
+        if (!completed) {
+            return std::unexpected { "Not set completely, check your initialization" };
+        }
+
+        try {
+            compiled_model = compiler(core);
+        } catch (const std::exception& e) {
+            return std::unexpected { e.what() };
+        }
+        return {};
+    }
 };
 
 struct OvModel {
@@ -194,7 +235,7 @@ struct OvModel {
                 return std::unexpected { std::format("{} is a wrong type", image_element_type) };
 
             std::array invalid_format { "bgr", "rgb", "bgrx", "rgbx", "gray" };
-            if (!std::ranges::contains(invalid_format, image_element_type))
+            if (!std::ranges::contains(invalid_format, image_color_format))
                 return std::unexpected { std::format("{} is a wrong format", image_color_format) };
 
             // Model
@@ -211,7 +252,7 @@ struct OvModel {
             if (!std::ranges::contains(invalid_format, infer_color_format))
                 return std::unexpected { std::format("{} is a wrong format", image_color_format) };
 
-            return { };
+            return {};
         }
     };
     Config config;
@@ -228,5 +269,4 @@ struct OvModel {
         auto raw_model = core.read_model(config.location);
     }
 };
-
 }

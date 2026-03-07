@@ -79,19 +79,19 @@ TEST(model, common_model) {
         EXPECT_EQ(partial_shape[2].get_length(), 320);
         EXPECT_EQ(partial_shape[3].get_length(), 240);
 
-        EXPECT_THROW((TensorLayout { std::string_view { "NCW" } }), std::runtime_error);
-        EXPECT_THROW((TensorLayout { std::string_view { "NCCW" } }), std::runtime_error);
-        EXPECT_THROW((TensorLayout { std::string_view { "NAXH" } }), std::runtime_error);
+        EXPECT_THROW((TensorLayout { std::string_view { "NCW" } }), std::invalid_argument);
+        EXPECT_THROW((TensorLayout { std::string_view { "NCCW" } }), std::invalid_argument);
+        EXPECT_THROW((TensorLayout { std::string_view { "NAXH" } }), std::invalid_argument);
     }
 }
 
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
-    auto net  = OpenVinoNet { };
+    auto net  = OpenVinoNet {};
     auto yaml = YAML::Load(config);
 
-    auto model_location    = location / "../models/yolov5.xml";
+    auto model_location    = location / "../models/tongji-yolov5.xml";
     yaml["model_location"] = model_location.string();
 
     auto result = net.configure(yaml);
@@ -99,7 +99,7 @@ TEST(model, sync_infer) {
 
     const auto image_location = assets_manager.path("model_infer_example.jpg");
 
-    auto image { Image { } };
+    auto image { Image {} };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());

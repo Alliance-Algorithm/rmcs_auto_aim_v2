@@ -36,7 +36,11 @@ identifier:
   binarization_threshold: 0.5
 
   # openvino infer
-  model_location: "yolov5.xml"
+  avaliable_models:
+    - "tongji-yolov5.xml"
+    - "shenzhen-0526.onnx"
+    - "shenzhen-0708.onnx"
+  model_location: "tongji-yolov5.xml"
   infer_device: "AUTO"
   use_roi_segment: false
   use_corner_correction: false
