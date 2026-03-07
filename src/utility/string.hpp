@@ -8,6 +8,8 @@ template <std::size_t N>
 struct StaticString {
     char data[N];
 
+    static constexpr auto length() -> std::size_t { return N; }
+
     // NOLINTBEGIN(google-explicit-constructor)
     constexpr StaticString(const char (&s)[N]) noexcept {
         for (std::size_t i = 0; i < N; ++i)

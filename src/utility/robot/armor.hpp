@@ -56,6 +56,7 @@ struct Armor2D {
         co_yield bl;
     }
 };
+using Armor2Ds = std::vector<Armor2D>;
 
 struct Armor3D {
     ArmorGenre genre;
@@ -65,9 +66,7 @@ struct Armor3D {
     Translation translation;
     Orientation orientation;
 };
-
-struct Armor { };
-using Armors = std::vector<Armor>;
+using Armor3Ds = std::vector<Armor3D>;
 
 constexpr auto kLightBarHeight  = 0.056;
 constexpr auto kLargeArmorWidth = 0.23;

@@ -1,16 +1,17 @@
 #include "assets_manager.hpp"
 #include "module/identifier/model.hpp"
 #include "utility/image/image.details.hpp"
-
-#include <gtest/gtest.h>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
+#include "utility/model/common_model.hpp"
 
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <print>
 #include <ranges>
+
+#include <gtest/gtest.h>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 
 using namespace rmcs;
 auto error_head = "[MODEL INFER ERROR]:\n";
@@ -37,10 +38,57 @@ constexpr auto config = R"(
 // - 运行前需执行: cd test && ./download_assets.sh
 AssetsManager assets_manager;
 
+TEST(model, common_model) {
+    using namespace rmcs::util::common_model::details;
+    {
+        auto layout = TensorLayout::from<"NCWH">();
+
+        auto dimensions = Dimensions { .W = 640, .H = 480 };
+
+        auto shape = layout.shape(dimensions);
+        ASSERT_EQ(shape.size(), 4);
+        EXPECT_EQ(shape[0], 1);
+        EXPECT_EQ(shape[1], 3);
+        EXPECT_EQ(shape[2], 640);
+        EXPECT_EQ(shape[3], 480);
+
+        auto partial_shape = layout.partial_shape(dimensions);
+        ASSERT_EQ(partial_shape.size(), 4);
+        EXPECT_EQ(partial_shape[0].get_length(), 1);
+        EXPECT_EQ(partial_shape[1].get_length(), 3);
+        EXPECT_EQ(partial_shape[2].get_length(), 640);
+        EXPECT_EQ(partial_shape[3].get_length(), 480);
+    }
+    {
+        auto description = std::string { "NCWH" };
+        auto layout      = TensorLayout { description };
+
+        auto dimensions = Dimensions { .W = 320, .H = 240 };
+
+        auto shape = layout.shape(dimensions);
+        ASSERT_EQ(shape.size(), 4);
+        EXPECT_EQ(shape[0], 1);
+        EXPECT_EQ(shape[1], 3);
+        EXPECT_EQ(shape[2], 320);
+        EXPECT_EQ(shape[3], 240);
+
+        auto partial_shape = layout.partial_shape(dimensions);
+        ASSERT_EQ(partial_shape.size(), 4);
+        EXPECT_EQ(partial_shape[0].get_length(), 1);
+        EXPECT_EQ(partial_shape[1].get_length(), 3);
+        EXPECT_EQ(partial_shape[2].get_length(), 320);
+        EXPECT_EQ(partial_shape[3].get_length(), 240);
+
+        EXPECT_THROW((TensorLayout { std::string_view { "NCW" } }), std::runtime_error);
+        EXPECT_THROW((TensorLayout { std::string_view { "NCCW" } }), std::runtime_error);
+        EXPECT_THROW((TensorLayout { std::string_view { "NAXH" } }), std::runtime_error);
+    }
+}
+
 TEST(model, sync_infer) {
     using namespace rmcs::identifier;
 
-    auto net  = OpenVinoNet {};
+    auto net  = OpenVinoNet { };
     auto yaml = YAML::Load(config);
 
     auto model_location    = location / "../models/yolov5.xml";
@@ -51,7 +99,7 @@ TEST(model, sync_infer) {
 
     const auto image_location = assets_manager.path("model_infer_example.jpg");
 
-    auto image { Image {} };
+    auto image { Image { } };
     image.details().mat = cv::imread(image_location);
     ASSERT_FALSE(image.details().mat.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());
