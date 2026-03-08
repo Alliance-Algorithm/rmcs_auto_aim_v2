@@ -1,6 +1,6 @@
 #pragma once
-#include <eigen3/Eigen/Geometry>
 #include <eigen3/Eigen/Cholesky>
+#include <eigen3/Eigen/Geometry>
 
 namespace rmcs::util {
 
@@ -48,6 +48,8 @@ public:
     explicit EKF(XVec const& initial_x, PMat const& initial_P)
         : x(initial_x)
         , P_(initial_P) { }
+
+    auto P() const -> PMat const& { return P_; }
 
     /**
      * @brief 预测步

@@ -79,6 +79,36 @@ inline auto xyz2ypd_jacobian(Eigen::Vector3d const& xyz) -> Eigen::Matrix3d {
     return J;
 }
 
+inline auto ypd2xyz_jacobian(const Eigen::Vector3d& ypd) -> Eigen::Matrix3d {
+    auto yaw = ypd[0], pitch = ypd[1], distance = ypd[2];
+    double cos_yaw   = std::cos(yaw);
+    double sin_yaw   = std::sin(yaw);
+    double cos_pitch = std::cos(pitch);
+    double sin_pitch = std::sin(pitch);
+
+    auto dx_dyaw = distance * cos_pitch * -sin_yaw;
+    auto dy_dyaw = distance * cos_pitch * cos_yaw;
+    auto dz_dyaw = 0.0;
+
+    auto dx_dpitch = distance * -sin_pitch * cos_yaw;
+    auto dy_dpitch = distance * -sin_pitch * sin_yaw;
+    auto dz_dpitch = distance * cos_pitch;
+
+    auto dx_ddistance = cos_pitch * cos_yaw;
+    auto dy_ddistance = cos_pitch * sin_yaw;
+    auto dz_ddistance = sin_pitch;
+
+    // clang-format off
+    auto J=Eigen::Matrix3d{
+    {dx_dyaw, dx_dpitch, dx_ddistance},
+    {dy_dyaw, dy_dpitch, dy_ddistance},
+    {dz_dyaw, dz_dpitch, dz_ddistance}
+  };
+    // clang-format on
+
+    return J;
+}
+
 inline auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, int axis2 = 0,
     bool extrinsic = false) -> Eigen::Vector3d {
     if (!extrinsic) std::swap(axis0, axis2);
