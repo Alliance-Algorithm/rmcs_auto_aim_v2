@@ -13,7 +13,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "assets_manager.hpp"
-#include "module/identifier/model.hpp"
+#include "module/identifier/armor_detection.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/math/point.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
@@ -92,16 +92,16 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         nms_threshold: 0.3
     )";
 
-    auto net  = OpenVinoNet {};
-    auto yaml = YAML::Load(config_yaml);
+    auto detector = identifier::ArmorDetection {};
+    auto yaml     = YAML::Load(config_yaml);
 
     const auto location    = std::filesystem::path { __FILE__ }.parent_path();
-    auto model_location    = location / "../models/yolov5.xml";
+    auto model_location    = location / "../models/shenzhen-0526.onnx";
     yaml["model_location"] = model_location.string();
 
-    auto cfg_result = net.configure(yaml);
+    auto cfg_result = detector.initialize(yaml);
     if (!cfg_result.has_value()) {
-        throw std::runtime_error("Failed to configure OpenVinoNet: " + cfg_result.error());
+        throw std::runtime_error("Failed to configure ArmorDetection: " + cfg_result.error());
     }
 
     const auto full_path = assets_manager.path(filename);
@@ -113,11 +113,11 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
     auto image          = rmcs::Image {};
     image.details().mat = cv_mat;
 
-    auto infer_result = net.sync_infer(image);
-    if (!infer_result.has_value()) {
-        throw std::runtime_error("OpenVino inference failed: " + infer_result.error());
+    auto detect_result = detector.sync_detect(image);
+    if (!detect_result.has_value()) {
+        throw std::runtime_error("Armor detection failed");
     }
-    const auto& armors = infer_result.value();
+    const auto& armors = detect_result.value();
     if (armors.empty()) {
         throw std::runtime_error("No armor detected from image: " + full_path.string());
     }
@@ -125,10 +125,10 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
     const auto& armor = armors.front();
     //  [Top Left, Top Right, Bottom Right, Bottom Left] 与 3D 坐标定义一致
     return std::array<Point2d, 4> {
-        Point2d { armor.tl() }, // 0
-        Point2d { armor.tr() }, // 1
-        Point2d { armor.br() }, // 2
-        Point2d { armor.bl() }, // 3
+        Point2d { armor.tl }, // 0
+        Point2d { armor.tr }, // 1
+        Point2d { armor.br }, // 2
+        Point2d { armor.bl }, // 3
     };
 }
 

@@ -72,6 +72,7 @@ struct PoseEstimator::Impl {
 
         auto armors_in_camera = std::vector<Armor3D> {};
 
+        // TODO: YAW 角优化
         std::ranges::for_each(armors | std::views::enumerate,
             [&armors_in_camera, &armor_shape, this](auto const& item) {
                 auto [i, armor] = item;
