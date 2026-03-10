@@ -239,6 +239,9 @@ auto main() -> int {
             if (!armors_2d_opt) continue;
             auto& armors_2d = *armors_2d_opt;
 
+            // @FIXME:
+            //  串流逻辑错误，没有扫描到装甲板时
+            //  没有图像
             visualize_detection(*image, armors_2d);
 
             auto armors_3d_opt = solve_pnp(armors_2d, control_state);
