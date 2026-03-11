@@ -24,6 +24,17 @@ include_directories(
 
 set(TOOL_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_library(
+    tool_terminal
+    ${TOOL_DIR}/util/terminal.cpp
+    ${TOOL_DIR}/util/snapshot.cpp
+)
+target_include_directories(
+    tool_terminal
+    PUBLIC
+    ${TOOL_DIR}
+)
+
 # Visualization
 add_executable(
     visualization
@@ -75,6 +86,7 @@ if(HIKCAMERA_AVAILABLE)
     )
     target_link_libraries(
         hikcamera
+        tool_terminal
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )
@@ -91,6 +103,7 @@ if(HIKCAMERA_AVAILABLE)
     )
     target_link_libraries(
         streaming
+        tool_terminal
         rclcpp::rclcpp
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
