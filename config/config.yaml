@@ -24,7 +24,7 @@ capturer:
     fixed_framerate: true
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/mix.mp4"
+    location: "/workspaces/alliance/test_videos/translation.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -48,12 +48,12 @@ identifier:
   input_rows: 640
   input_cols: 640
   min_confidence: 0.5
-  score_threshold: 0.7
-  nms_threshold: 0.3
+  score_threshold: 0.8
+  nms_threshold: 0.45
 
 tracker:
   # blue or red
-  enemy_color: red
+  enemy_color: blue
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
