@@ -48,7 +48,8 @@ struct Armor::Impl {
         } else if (DeviceIds::kLargeArmor().contains(config.device)) {
             marker.scale.x = 0.003, marker.scale.y = 0.235, marker.scale.z = 0.127;
         } else {
-            util::panic("Wrong device id for a visualized armor");
+            // std::cout << to_string(config.device) << std::endl;
+            //  util::panic("Wrong device id for a visualized armor");
         };
 
         /*  */ if (config.camp == CampColor::RED) {

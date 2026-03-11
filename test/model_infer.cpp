@@ -24,7 +24,6 @@ constexpr auto config = R"(
     model_location: "assets/yolov5.xml"
     infer_device: "AUTO"
     use_roi_segment: false
-    use_corner_correction: false
     roi_rows: 640
     roi_cols: 640
     input_rows: 640

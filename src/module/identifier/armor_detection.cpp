@@ -34,7 +34,6 @@ struct ArmorDetection::Impl {
         std::string infer_device;
 
         bool use_roi_segment;
-        bool use_corner_correction;
 
         int roi_rows;
         int roi_cols;
@@ -52,7 +51,6 @@ struct ArmorDetection::Impl {
             &Config::model_location,         "model_location",
             &Config::infer_device,           "infer_device",
             &Config::use_roi_segment,        "use_roi_segment",
-            &Config::use_corner_correction,  "use_corner_correction",
             &Config::roi_rows,               "roi_rows",
             &Config::roi_cols,               "roi_cols",
             &Config::input_rows,             "input_rows",

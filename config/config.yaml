@@ -24,7 +24,7 @@ capturer:
     fixed_framerate: true
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/solve_pnp_v2.mp4"
+    location: "/workspaces/alliance/test_videos/mix.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
