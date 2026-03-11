@@ -70,13 +70,15 @@ struct ArmorDetection::Impl {
         float score_threshold;
         float nms_threshold;
         const float& adapt_scaling;
+        const cv::Point2f& roi_offset;
 
         explicit StaticExplainFunctor(float min_confidence, float score_threshold,
-            float nms_threshold, const float& scaling) noexcept
+            float nms_threshold, const float& scaling, const cv::Point2f& offset) noexcept
             : min_confidence { min_confidence }
             , score_threshold { score_threshold }
             , nms_threshold { nms_threshold }
-            , adapt_scaling { scaling } { }
+            , adapt_scaling { scaling }
+            , roi_offset { offset } { }
 
         auto explain(ov::InferRequest& finished_request) const noexcept -> Armor2Ds override {
             using result_type    = typename model_type::Result;
@@ -115,11 +117,12 @@ struct ArmorDetection::Impl {
             final_result.reserve(kept_points.size());
 
             for (auto idx : kept_points) {
-                auto armor = cast_to_armor_result(parsed_results[idx]);
-                armor.tl *= 1.f / adapt_scaling;
-                armor.tr *= 1.f / adapt_scaling;
-                armor.br *= 1.f / adapt_scaling;
-                armor.bl *= 1.f / adapt_scaling;
+                auto armor       = cast_to_armor_result(parsed_results[idx]);
+                const auto scale = 1.f / adapt_scaling;
+                for (auto* point : { &armor.tl, &armor.tr, &armor.br, &armor.bl }) {
+                    *point = (*point) * scale + roi_offset;
+                }
+
                 armor.center = (armor.tl + armor.tr + armor.br + armor.bl) * 0.25f;
                 final_result.push_back(armor);
             }
@@ -140,6 +143,7 @@ struct ArmorDetection::Impl {
     Dimensions input_dimensions { .W = 640, .H = 640 };
 
     float adapt_scaling = 1.f;
+    cv::Point2f roi_offset { 0.f, 0.f };
 
     auto configure(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
@@ -184,11 +188,12 @@ struct ArmorDetection::Impl {
             model.dimensions.H = config.input_rows;
         }
 
-        openvino_model        = model.compile(openvino_core, config.model_location);
-        input_layout          = model.input_layout;
-        input_dimensions      = model.dimensions;
-        explain_infer_functor = std::make_unique<StaticExplainFunctor<model_type>>(
-            config.min_confidence, config.score_threshold, config.nms_threshold, adapt_scaling);
+        openvino_model   = model.compile(openvino_core, config.model_location);
+        input_layout     = model.input_layout;
+        input_dimensions = model.dimensions;
+        explain_infer_functor =
+            std::make_unique<StaticExplainFunctor<model_type>>(config.min_confidence,
+                config.score_threshold, config.nms_threshold, adapt_scaling, roi_offset);
     }
 
     auto generate_openvino_request(const Image& image) noexcept
@@ -200,6 +205,7 @@ struct ArmorDetection::Impl {
         }
 
         auto segmentation = origin_mat;
+        roi_offset        = { 0.f, 0.f };
         if (config.use_roi_segment) {
             auto action_success = false;
             do {
@@ -213,7 +219,11 @@ struct ArmorDetection::Impl {
                 const auto rect = cv::Rect2i { x, y, cols, rows };
 
                 action_success = true;
-                segmentation   = origin_mat(rect);
+                roi_offset     = {
+                    static_cast<float>(x),
+                    static_cast<float>(y),
+                };
+                segmentation = origin_mat(rect);
             } while (false);
 
             if (!action_success) {
