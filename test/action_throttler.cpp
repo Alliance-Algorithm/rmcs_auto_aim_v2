@@ -27,6 +27,21 @@ TEST(ActionThrottler, DispatchByIntervalAndQuota) {
     EXPECT_EQ(count, 2);
 }
 
+TEST(ActionThrottler, DifferentTagsDoNotShareInterval) {
+    ActionThrottler throttler { 10ms, 1 };
+    throttler.register_action("foo");
+    throttler.register_action("bar");
+
+    int foo_count = 0;
+    int bar_count = 0;
+
+    EXPECT_TRUE(throttler.dispatch("foo", [&] { ++foo_count; }));
+    EXPECT_TRUE(throttler.dispatch("bar", [&] { ++bar_count; }));
+
+    EXPECT_EQ(foo_count, 1);
+    EXPECT_EQ(bar_count, 1);
+}
+
 TEST(ActionThrottler, ResetRestoreQuota) {
     ActionThrottler throttler { 1ms, 1 };
     throttler.register_action("bar");
