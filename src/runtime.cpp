@@ -34,18 +34,18 @@ auto main() -> int {
     auto rclcpp_node = util::RclcppNode { "AutoAim" };
     rclcpp_node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
-    auto framerate = FramerateCounter {};
+    auto framerate = FramerateCounter { };
     framerate.set_interval(5s);
 
     {
         /// Runtime
-        auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
-        auto capturer       = kernel::Capturer {};
-        auto identifier     = kernel::Identifier {};
-        auto tracker        = kernel::Tracker {};
-        auto pose_estimator = kernel::PoseEstimator {};
-        auto fire_control   = kernel::FireControl {};
-        auto visualization  = kernel::Visualization {};
+        auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> { };
+        auto capturer       = kernel::Capturer { };
+        auto identifier     = kernel::Identifier { };
+        auto tracker        = kernel::Tracker { };
+        auto pose_estimator = kernel::PoseEstimator { };
+        auto fire_control   = kernel::FireControl { };
+        auto visualization  = kernel::Visualization { };
 
         auto action_throttler = util::ActionThrottler { 1s, 233 };
 
@@ -127,7 +127,7 @@ auto main() -> int {
             if (is_local_runtime) {
                 action_throttler.dispatch(control_state_label,
                     [&] { rclcpp_node.info("在本机环境下运行，将Control State 设置为默认值"); });
-                auto state = ControlState {};
+                auto state = ControlState { };
                 state.set_identity();
                 return state;
             }
@@ -158,7 +158,7 @@ auto main() -> int {
 
                 /// 1. Identify Armor
                 ///
-                auto armors_2d = Armor2Ds {};
+                auto armors_2d = Armor2Ds { };
                 {
                     auto result = identifier.sync_identify(*image);
                     if (!result.has_value()) {
@@ -239,7 +239,7 @@ auto main() -> int {
 
                 /// 5. Transmit State
                 ///
-                auto state            = AutoAimState {};
+                auto state            = AutoAimState { };
                 state.timestamp       = Clock::now();
                 state.gimbal_takeover = true;
                 state.shoot_permitted = true;

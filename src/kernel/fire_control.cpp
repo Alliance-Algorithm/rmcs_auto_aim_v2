@@ -79,7 +79,7 @@ struct FireControl::Impl {
         };
         aim_point_chooser.initialize(chooser_config);
 
-        return {};
+        return { };
     }
 
     const int kMaxIterateCount { 5 };
@@ -100,11 +100,11 @@ struct FireControl::Impl {
 
         auto current_fly_time = target_position_in_world.norm() / bullet_speed;
 
-        auto best_armor_opt    = std::optional<Armor3D> {};
-        auto trajectory_result = TrajectorySolution::Output {};
+        auto best_armor_opt    = std::optional<Armor3D> { };
+        auto trajectory_result = TrajectorySolution::Output { };
         auto horizon_distance  = 0.0;
 
-        auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams {};
+        auto solution_params       = fire_control::TrajectorySolution::TrajectoryParams { };
         solution_params.k          = config.k;
         solution_params.bias_scale = config.bias_scale;
 
@@ -123,10 +123,10 @@ struct FireControl::Impl {
 
             auto const& armor_translation = best_armor_opt->translation;
 
-            auto armor_position_in_world = Eigen::Vector3d {};
+            auto armor_position_in_world = Eigen::Vector3d { };
             armor_translation.copy_to(armor_position_in_world);
 
-            auto _odom_to_muzzle_translation = Eigen::Vector3d {};
+            auto _odom_to_muzzle_translation = Eigen::Vector3d { };
             odom_to_muzzle_translation.copy_to(_odom_to_muzzle_translation);
 
             auto bullet_in_muzzle = armor_position_in_world - _odom_to_muzzle_translation;
@@ -135,7 +135,7 @@ struct FireControl::Impl {
                 + bullet_in_muzzle.y() * bullet_in_muzzle.y());
             auto target_h = bullet_in_muzzle.z();
 
-            auto solution           = TrajectorySolution {};
+            auto solution           = TrajectorySolution { };
             solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
             solution.input.target_h = target_h;
@@ -156,6 +156,77 @@ struct FireControl::Impl {
         }
 
         auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
+
+        return Result {
+            .pitch            = trajectory_result.pitch,
+            .yaw              = final_yaw,
+            .horizon_distance = horizon_distance,
+        };
+    }
+
+    using HitPointPredictor = std::function<std::optional<Eigen::Vector3d>(Clock::time_point)>;
+
+    auto solve_buff(const Clock::time_point& t0, const HitPointPredictor& predict_hitpoint_in_odom,
+        Translation const& odom_to_muzzle_translation) -> std::optional<Result> {
+        // bullet_speed 同你原逻辑
+        double bullet_speed =
+            (bullet_speed_buffer > 10.) ? bullet_speed_buffer : config.initial_bullet_speed;
+
+        Eigen::Vector3d odom_to_muzzle { };
+        odom_to_muzzle_translation.copy_to(odom_to_muzzle);
+
+        // 用 t0 的预测点做初值（也可用当前观测点）
+        auto p0_opt = predict_hitpoint_in_odom(t0);
+        if (!p0_opt) return std::nullopt;
+
+        double current_fly_time = (*p0_opt - odom_to_muzzle).norm() / bullet_speed;
+
+        TrajectorySolution::Output trajectory_result { };
+        double horizon_distance        = 0.0;
+        Eigen::Vector3d final_hitpoint = *p0_opt;
+
+        fire_control::TrajectorySolution::TrajectoryParams params;
+        params.k          = config.k;
+        params.bias_scale = config.bias_scale;
+
+        for (int i = 0; i < kMaxIterateCount; ++i) {
+            double total_predict_time = current_fly_time + config.shoot_delay;
+
+            auto t_target = t0
+                + std::chrono::duration_cast<Clock::duration>(
+                    std::chrono::duration<double>(total_predict_time));
+
+            auto p_opt = predict_hitpoint_in_odom(t_target);
+            if (!p_opt) return std::nullopt;
+
+            final_hitpoint = *p_opt;
+
+            Eigen::Vector3d bullet_vec = final_hitpoint - odom_to_muzzle;
+
+            double target_d =
+                std::sqrt(bullet_vec.x() * bullet_vec.x() + bullet_vec.y() * bullet_vec.y());
+            double target_h = bullet_vec.z();
+
+            TrajectorySolution solution;
+            solution.input.v0       = bullet_speed;
+            solution.input.target_d = target_d;
+            solution.input.target_h = target_h;
+            solution.input.params   = params;
+
+            auto result = solution.solve();
+            if (!result) return std::nullopt;
+
+            double time_error = std::abs(result->fly_time - current_fly_time);
+            current_fly_time  = result->fly_time;
+            trajectory_result = *result;
+            horizon_distance  = target_d;
+
+            if (time_error < kMaxFlyTimeThreshold) break;
+        }
+
+        // yaw 按最终 hitpoint 的水平指向
+        Eigen::Vector3d bullet_vec = final_hitpoint - odom_to_muzzle;
+        double final_yaw           = std::atan2(bullet_vec.y(), bullet_vec.x());
 
         return Result {
             .pitch            = trajectory_result.pitch,

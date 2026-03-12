@@ -24,6 +24,7 @@ find_package(rmcs_executor REQUIRED)
 find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
 find_package(hikcamera REQUIRED)
+find_package(rmcs_auto_rune REQUIRED)
 
 ## 目录包含
 include_directories(
