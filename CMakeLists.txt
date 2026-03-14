@@ -81,6 +81,13 @@ target_link_libraries(
     ${geometry_msgs_LIBRARIES}
 )
 
+target_link_libraries(
+    ${PROJECT_NAME}_module
+    rmcs_auto_rune::VisCore_rune_detector
+    rmcs_auto_rune::VisCore_rune_group
+    rmcs_auto_rune::VisCore_rune_tracker
+)
+
 ## 组件构建: component
 add_library(
     ${PROJECT_NAME}_component SHARED

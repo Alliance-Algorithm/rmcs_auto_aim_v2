@@ -31,7 +31,16 @@ struct BuffDetection::BuffDetectionFrame {
     const util::ControlState& control_state;
 };
 
+struct BuffDetection::BuffDetectionResult {
+    shared_ptr<RuneTracker> target_tracker;
+};
+
 struct BuffDetection::Impl {
+
+    auto initialize([[maybe_unused]] const YAML::Node& yaml) noexcept
+        -> std::expected<void, std::string> {
+        return { };
+    }
 
     shared_ptr<RuneTracker> buff_detect(const BuffDetectionFrame& frame) {
         static auto rune_groups   = vector<FeatureNode_ptr> { };
@@ -42,7 +51,7 @@ struct BuffDetection::Impl {
 
         input.setImage(frame.image->details().mat);
         input.setGyroData(frame.gyro_data);
-        input.setTick(frame.control_state.timestamp);
+        input.setTick(frame.control_state.timestamp.time_since_epoch().count());
         input.setColor(frame.control_state.color == rmcs_msgs::RobotColor::BLUE ? PixChannel::BLUE
                                                                                 : PixChannel::RED);
         input.setFeatureNodes(rune_groups);
@@ -88,4 +97,24 @@ struct BuffDetection::Impl {
         return RuneTracker::cast(target_tracker);
     }
 };
+
+BuffDetection::BuffDetection() noexcept
+    : pimpl { std::make_unique<Impl>() } { }
+
+BuffDetection::~BuffDetection() noexcept = default;
+
+auto BuffDetection::initialize(const YAML::Node& yaml) noexcept
+    -> std::expected<void, std::string> {
+    return pimpl->initialize(yaml);
+}
+
+auto BuffDetection::auto_detect(const BuffDetectionFrame& frame) noexcept
+    -> std::optional<BuffDetectionResult> {
+    auto result = pimpl->buff_detect(frame);
+    if (!result) {
+        return std::nullopt;
+    }
+    return BuffDetectionResult { std::move(result) };
+}
+
 }
