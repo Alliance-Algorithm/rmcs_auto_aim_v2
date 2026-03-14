@@ -32,6 +32,11 @@ struct Tracker::Impl {
             return std::unexpected { "enemy_color 应该是 [blue] or [red]." };
         }
 
+        result = decider.initialize(yaml);
+        if (!result.has_value()) {
+            return std::unexpected { result.error() };
+        }
+
         return {};
     }
 

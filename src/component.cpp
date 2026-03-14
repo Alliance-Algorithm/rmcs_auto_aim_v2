@@ -5,6 +5,7 @@
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
@@ -22,10 +23,10 @@ public:
         register_input("/tf", rmcs_tf);
         register_input("/referee/shooter/initial_speed", bullet_speed);
 
-        register_output("/gimbal/auto_aim/controllable", gimbal_takeover, false);
+        register_output("/gimbal/auto_aim/auto_aim_enabled", gimbal_takeover, false);
         register_output(
             "/gimbal/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
-        register_output("/gimbal/auto_aim/shoot_permit", shoot_permitted, false);
+        register_output("/gimbal/auto_aim/shoot_enable", shoot_permitted, false);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
@@ -55,11 +56,9 @@ public:
         if (!bullet_speed.ready()) [[unlikely]] {
             action_throttler.dispatch(
                 "bullet_speed_not_ready", [&] { rclcpp.warn("bullet_speed is not ready"); });
-            control_state.set_identity();
-            reset_control_commands();
-            return;
+        } else {
+            action_throttler.reset("bullet_speed_not_ready");
         }
-        // TODO:适时交出云台和发射机构控制权
         {
             update_gimbal_direction();
             update_control_state();
@@ -73,17 +72,17 @@ public:
             }
         }
         {
-            if (feishu.updated()) {
-                auto_aim_state = feishu.fetch();
+            refresh_auto_aim_state();
+            if (should_invalidate_auto_aim_state()) {
+                invalidate_auto_aim_state();
             }
-
-            *gimbal_takeover = auto_aim_state.gimbal_takeover;
-            *shoot_permitted = auto_aim_state.shoot_permitted;
-            update_target_direction();
+            apply_auto_aim_state();
         }
     }
 
 private:
+    static constexpr auto auto_aim_state_timeout_ { std::chrono::milliseconds { 100 } };
+
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
     double current_gimbal_yaw { 0. };
@@ -96,6 +95,7 @@ private:
     Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
+    bool auto_aim_state_received_ { false };
 
     OutputInterface<bool> gimbal_takeover;
     OutputInterface<bool> shoot_permitted;
@@ -104,7 +104,32 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-private:
+    auto refresh_auto_aim_state() -> void {
+        if (!feishu.updated()) return;
+
+        auto_aim_state           = feishu.fetch();
+        auto_aim_state_received_ = true;
+    }
+
+    auto should_invalidate_auto_aim_state() const -> bool {
+        return auto_aim_state_received_ && auto_aim_state_stale();
+    }
+
+    auto auto_aim_state_stale() const -> bool {
+        return Clock::now() - auto_aim_state.timestamp > auto_aim_state_timeout_;
+    }
+
+    auto invalidate_auto_aim_state() -> void {
+        auto_aim_state.gimbal_takeover = false;
+        auto_aim_state.shoot_permitted = false;
+    }
+
+    auto apply_auto_aim_state() -> void {
+        *gimbal_takeover = auto_aim_state.gimbal_takeover;
+        *shoot_permitted = auto_aim_state.shoot_permitted;
+        update_target_direction();
+    }
+
     auto update_control_state() -> void {
         control_state.timestamp = Clock::now();
 
@@ -123,12 +148,17 @@ private:
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
 
-        control_state.bullet_speed = *bullet_speed;
+        control_state.bullet_speed = bullet_speed.ready() ? *bullet_speed : 0.0;
         control_state.yaw          = current_gimbal_yaw;
         control_state.pitch        = current_gimbal_pitch;
     }
 
     auto update_target_direction() -> void {
+        if (!auto_aim_state.gimbal_takeover) {
+            *target_direction = Eigen::Vector3d::Zero();
+            return;
+        }
+
         const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
 
         // clang-format off

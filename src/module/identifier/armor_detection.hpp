@@ -5,6 +5,8 @@
 #include "utility/robot/armor.hpp"
 
 #include <expected>
+#include <string>
+#include <vector>
 
 #include <opencv2/core/types.hpp>
 #include <yaml-cpp/yaml.h>
@@ -16,7 +18,7 @@ class ArmorDetection {
 
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto sync_detect(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
+    auto sync_detect(const Image&) noexcept -> std::expected<std::vector<Armor2D>, std::string>;
 };
 
 }

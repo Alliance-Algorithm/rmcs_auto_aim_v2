@@ -1,6 +1,7 @@
 #pragma once
 
 #include <expected>
+#include <span>
 #include <yaml-cpp/yaml.h>
 
 #include "module/tracker/decider.hpp"

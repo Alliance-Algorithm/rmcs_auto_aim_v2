@@ -1,5 +1,8 @@
 #include "fire_control.hpp"
 
+#include <cmath>
+#include <optional>
+
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
@@ -49,8 +52,7 @@ struct FireControl::Impl {
 
     Config config;
 
-    double bullet_speed_buffer { 0. };
-    double bullet_speed { 0. };
+    std::optional<double> bullet_speed_buffer;
 
     AimPointChooser aim_point_chooser;
 
@@ -61,8 +63,6 @@ struct FireControl::Impl {
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
-
-        bullet_speed = config.initial_bullet_speed;
 
         config.coming_angle               = util::deg2rad(config.coming_angle);
         config.leaving_angle              = util::deg2rad(config.leaving_angle);
@@ -84,21 +84,27 @@ struct FireControl::Impl {
 
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreshold { 0.001 };
+    const double kMinValidBulletSpeed { 10. };
 
-    auto set_bullet_speed(double speed) -> void { bullet_speed_buffer = speed; }
+    [[nodiscard]] auto is_valid_bullet_speed(double speed) const -> bool {
+        return std::isfinite(speed) && speed > kMinValidBulletSpeed;
+    }
+
+    auto set_bullet_speed(double speed) -> void {
+        if (is_valid_bullet_speed(speed)) {
+            bullet_speed_buffer = speed;
+        } else {
+            bullet_speed_buffer.reset();
+        }
+    }
 
     auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
         -> std::optional<Result> {
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
-        if (bullet_speed_buffer > 10.) {
-            bullet_speed = bullet_speed_buffer;
-        } else {
-            bullet_speed = config.initial_bullet_speed;
-        }
-
-        auto current_fly_time = target_position_in_world.norm() / bullet_speed;
+        const double bullet_speed = bullet_speed_buffer.value_or(config.initial_bullet_speed);
+        auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
 
         auto best_armor_opt    = std::optional<Armor3D> {};
         auto trajectory_result = TrajectorySolution::Output {};
@@ -156,7 +162,6 @@ struct FireControl::Impl {
         }
 
         auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
-
         return Result {
             .pitch            = trajectory_result.pitch,
             .yaw              = final_yaw,

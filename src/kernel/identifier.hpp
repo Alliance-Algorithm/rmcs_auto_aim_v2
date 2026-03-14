@@ -5,6 +5,8 @@
 #include "utility/robot/armor.hpp"
 
 #include <expected>
+#include <string>
+#include <vector>
 #include <yaml-cpp/node/node.h>
 
 namespace rmcs::kernel {
@@ -15,7 +17,7 @@ class Identifier {
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto sync_identify(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
+    auto sync_identify(const Image&) noexcept -> std::expected<std::vector<Armor2D>, std::string>;
 };
 
 }

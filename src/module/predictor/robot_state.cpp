@@ -60,10 +60,9 @@ struct RobotState::Impl {
             return;
         }
 
-        auto [id, error, valid] = match(armor);
-        if (!valid) return;
+        auto match_result = match(armor);
+        if (!match_result.is_valid) return;
 
-        last_id = id;
         update_count++;
 
         auto const [pos_x, pos_y, pos_z] = armor.translation;
@@ -79,8 +78,11 @@ struct RobotState::Impl {
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
-            z, [id, this](EKF::XVec const& x) { return EKFParameters::h(x, id, armor_num); },
-            [id, this](EKF::XVec const& x) { return EKFParameters::H(x, id, armor_num); },
+            z,
+            [id = match_result.armor_id, this](
+                EKF::XVec const& x) { return EKFParameters::h(x, id, armor_num); },
+            [id = match_result.armor_id, this](
+                EKF::XVec const& x) { return EKFParameters::H(x, id, armor_num); },
             EKFParameters::R(xyz, ypr, ypd), EKFParameters::x_add, EKFParameters::z_subtract);
 
         // 前哨站转速特判
@@ -108,7 +110,6 @@ struct RobotState::Impl {
     Clock::time_point time_stamp;
 
     bool initialized;
-    int last_id { 0 };
     int update_count { 0 };
     const std::chrono::duration<double> reset_interval { 1.0 };
 

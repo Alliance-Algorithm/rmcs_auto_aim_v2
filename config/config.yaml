@@ -14,7 +14,7 @@ capturer:
     # float
     exposure_us: 2000.0
     # float
-    framerate: 60
+    framerate: 120
     # float
     gain: 16.9807
 
@@ -40,7 +40,7 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "shenzhen-0526.onnx"
+  model_location: "tongji-yolov5.xml"
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
@@ -48,12 +48,14 @@ identifier:
   input_rows: 640
   input_cols: 640
   min_confidence: 0.5
-  score_threshold: 0.8
-  nms_threshold: 0.45
+  score_threshold: 0.7
+  nms_threshold: 0.3
 
 tracker:
   # blue or red
   enemy_color: blue
+  max_temporary_loss_frames: 5
+  max_temporary_loss_duration_ms: 120.0 #ms
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
@@ -74,7 +76,7 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 fire_control:
-  initial_bullet_speed: 20 # m/s
+  initial_bullet_speed: 25 # m/s
   shoot_delay: 0.1 # s
   shoot_offset_x: 0.0 # m
   shoot_offset_y: 0.0 # m

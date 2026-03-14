@@ -27,7 +27,8 @@ auto Identifier::initialize(const YAML::Node& yaml) noexcept -> std::expected<vo
     return pimpl->initialize(yaml);
 }
 
-auto Identifier::sync_identify(const Image& src) noexcept -> std::optional<std::vector<Armor2D>> {
+auto Identifier::sync_identify(const Image& src) noexcept
+    -> std::expected<std::vector<Armor2D>, std::string> {
     return pimpl->identify(src);
 }
 
