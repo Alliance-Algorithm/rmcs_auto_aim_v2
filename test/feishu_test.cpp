@@ -45,9 +45,8 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
     auto feishu_parent = Feishu<RuntimeRole::Control> {};
     std::this_thread::sleep_for(50ms); // ensure shm is ready
 
-    auto ctrl         = ControlState {};
-    ctrl.bullet_speed = 42.0;
-    ctrl.timestamp    = Clock::now();
+    auto ctrl      = ControlState {};
+    ctrl.timestamp = Clock::now();
 
     ASSERT_TRUE(feishu_parent.commit(ctrl));
 

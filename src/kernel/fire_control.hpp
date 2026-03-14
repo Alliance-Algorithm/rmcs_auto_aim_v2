@@ -24,8 +24,6 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto set_bullet_speed(double speed) -> void;
-
     auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
         -> std::optional<Result>;
 };
