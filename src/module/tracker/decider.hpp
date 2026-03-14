@@ -1,5 +1,12 @@
 #pragma once
 
+#include <expected>
+#include <optional>
+#include <span>
+#include <string>
+
+#include <yaml-cpp/yaml.h>
+
 #include "module/predictor/snapshot.hpp"
 #include "state.hpp"
 #include "utility/clock.hpp"
@@ -20,6 +27,8 @@ public:
         DeviceId target_id;
         std::optional<predictor::Snapshot> snapshot;
     };
+
+    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
 

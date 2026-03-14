@@ -9,8 +9,10 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <memory>
 #include <print>
 #include <ranges>
+#include <stdexcept>
 
 #include <gtest/gtest.h>
 #include <opencv2/imgcodecs.hpp>
@@ -40,6 +42,22 @@ constexpr auto config = R"(
 // - 运行前需执行: cd test && ./download_assets.sh
 AssetsManager assets_manager;
 
+template <class model_type>
+auto make_detector(YAML::Node yaml = YAML::Load(config))
+    -> std::unique_ptr<identifier::ArmorDetection> {
+    const auto model_name     = std::string { model_type::kLocation };
+    const auto model_location = location / "../models" / model_name;
+    yaml["model_location"]    = model_location.string();
+
+    auto detector         = std::make_unique<identifier::ArmorDetection>();
+    auto configure_result = detector->initialize(yaml);
+    if (!configure_result.has_value()) {
+        throw std::runtime_error(
+            std::string { error_head } + model_name + " | " + configure_result.error());
+    }
+    return detector;
+}
+
 struct ExpectedCorners {
     float lt_x;
     float lt_y;
@@ -61,20 +79,16 @@ auto assert_sync_infer_with_expected(const Image& image,
     const std::array<ExpectedCorners, 2>& expected, bool use_roi_segment = false) -> void {
     const auto model_name     = std::string { model_type::kLocation };
     auto yaml                 = YAML::Load(config);
-    const auto model_location = location / "../models" / model_name;
-    yaml["model_location"]    = model_location.string();
     yaml["use_roi_segment"]   = use_roi_segment;
 
-    auto detector         = identifier::ArmorDetection {};
-    auto configure_result = detector.initialize(yaml);
-    ASSERT_TRUE(configure_result.has_value())
-        << error_head << model_name << " | " << configure_result.error();
+    auto detector = make_detector<model_type>(yaml);
 
     auto infer_begin   = std::chrono::steady_clock::now();
-    auto detect_result = detector.sync_detect(image);
+    auto detect_result = detector->sync_detect(image);
     auto infer_elapsed =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - infer_begin);
-    ASSERT_TRUE(detect_result.has_value()) << error_head << model_name << " | detect failed";
+    ASSERT_TRUE(detect_result.has_value())
+        << error_head << model_name << " | detect failed: " << detect_result.error();
 
     const auto& armors = detect_result.value();
 
@@ -156,4 +170,44 @@ TEST(model, sync_infer_with_roi_segment) {
     assert_sync_infer_with_expected<TongJiYoloV5>(image, expected, true);
     assert_sync_infer_with_expected<ShenZhen0526>(image, expected, true);
     assert_sync_infer_with_expected<ShenZhen0708>(image, expected, true);
+}
+
+TEST(model, sync_infer_reports_empty_image) {
+    auto detector      = make_detector<TongJiYoloV5>();
+    auto empty_image   = Image {};
+    auto detect_result = detector->sync_detect(empty_image);
+
+    ASSERT_FALSE(detect_result.has_value());
+    EXPECT_NE(detect_result.error().find("Empty image mat"), std::string::npos);
+}
+
+TEST(model, sync_infer_reports_invalid_roi) {
+    const auto image_location = assets_manager.path("model_infer_example.jpg");
+    auto image { Image {} };
+    image.details().mat = cv::imread(image_location);
+    ASSERT_FALSE(image.details().mat.empty())
+        << error_head << std::format("Failed to read image from '{}'", image_location.string());
+
+    auto yaml               = YAML::Load(config);
+    yaml["use_roi_segment"] = true;
+    yaml["roi_cols"]        = 0;
+    yaml["roi_rows"]        = image.details().mat.rows;
+
+    auto detector      = make_detector<TongJiYoloV5>(yaml);
+    auto detect_result = detector->sync_detect(image);
+
+    ASSERT_FALSE(detect_result.has_value());
+    EXPECT_NE(detect_result.error().find("Invalid ROI size"), std::string::npos);
+}
+
+TEST(model, initialize_reports_supported_models_for_unknown_model) {
+    auto yaml              = YAML::Load(config);
+    yaml["model_location"] = "unknown-model.bin";
+
+    auto detector         = identifier::ArmorDetection {};
+    auto configure_result = detector.initialize(yaml);
+
+    ASSERT_FALSE(configure_result.has_value());
+    EXPECT_NE(configure_result.error().find("Unsupported model type"), std::string::npos);
+    EXPECT_NE(configure_result.error().find("Supported models"), std::string::npos);
 }

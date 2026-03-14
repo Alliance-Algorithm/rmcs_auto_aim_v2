@@ -37,6 +37,17 @@ struct AutoAimState {
         shoot_permitted = false;
         yaw             = 0.;
         pitch           = 0.;
+        target          = DeviceId::UNKNOWN;
+    }
+
+    auto set_safe_state(double current_yaw, double current_pitch) noexcept -> void {
+        timestamp = Clock::now();
+
+        gimbal_takeover = false;
+        shoot_permitted = false;
+        yaw             = current_yaw;
+        pitch           = current_pitch;
+        target          = DeviceId::UNKNOWN;
     }
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
