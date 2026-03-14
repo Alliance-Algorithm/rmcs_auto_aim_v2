@@ -39,7 +39,7 @@ struct BuffDetection::Impl {
 
     auto initialize([[maybe_unused]] const YAML::Node& yaml) noexcept
         -> std::expected<void, std::string> {
-        return {};
+        return { };
     }
 
     shared_ptr<RuneTracker> buff_detect(const BuffDetectionFrame& frame) {
@@ -51,7 +51,7 @@ struct BuffDetection::Impl {
 
         input.setImage(frame.image->details().mat);
         input.setGyroData(frame.gyro_data);
-        input.setTick(frame.control_state.timestamp);
+        input.setTick(frame.control_state.timestamp.time_since_epoch().count());
         input.setColor(frame.control_state.color == rmcs_msgs::RobotColor::BLUE ? PixChannel::BLUE
                                                                                 : PixChannel::RED);
         input.setFeatureNodes(rune_groups);
