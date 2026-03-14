@@ -1,6 +1,7 @@
 #include "fire_control.hpp"
 
 #include <cmath>
+#include <format>
 #include <optional>
 
 #include "module/fire_control/aim_point_chooser.hpp"
@@ -52,16 +53,20 @@ struct FireControl::Impl {
 
     Config config;
 
-    std::optional<double> bullet_speed_buffer;
-
     AimPointChooser aim_point_chooser;
 
     rmcs::Printer log { "FireControl" };
+
+    const double kMinValidBulletSpeed { 10. };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
+        }
+        if (!(config.initial_bullet_speed > kMinValidBulletSpeed)) {
+            return std::unexpected { std::format(
+                "Invalid initial_bullet_speed: {}", config.initial_bullet_speed) };
         }
 
         config.coming_angle               = util::deg2rad(config.coming_angle);
@@ -84,26 +89,13 @@ struct FireControl::Impl {
 
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreshold { 0.001 };
-    const double kMinValidBulletSpeed { 10. };
-
-    [[nodiscard]] auto is_valid_bullet_speed(double speed) const -> bool {
-        return std::isfinite(speed) && speed > kMinValidBulletSpeed;
-    }
-
-    auto set_bullet_speed(double speed) -> void {
-        if (is_valid_bullet_speed(speed)) {
-            bullet_speed_buffer = speed;
-        } else {
-            bullet_speed_buffer.reset();
-        }
-    }
 
     auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
         -> std::optional<Result> {
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
-        const double bullet_speed = bullet_speed_buffer.value_or(config.initial_bullet_speed);
+        const double bullet_speed = config.initial_bullet_speed;
         auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
 
         auto best_armor_opt    = std::optional<Armor3D> {};
@@ -177,8 +169,6 @@ FireControl::~FireControl() noexcept = default;
 auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
     return pimpl->initialize(yaml);
 }
-
-auto FireControl::set_bullet_speed(double speed) -> void { return pimpl->set_bullet_speed(speed); }
 
 auto FireControl::solve(const predictor::Snapshot& snapshot,
     Translation const& odom_to_muzzle_translation) -> std::optional<Result> {

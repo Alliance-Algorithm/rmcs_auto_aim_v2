@@ -21,7 +21,6 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
-        register_input("/referee/shooter/initial_speed", bullet_speed);
 
         register_output("/gimbal/auto_aim/auto_aim_enabled", gimbal_takeover, false);
         register_output(
@@ -40,7 +39,6 @@ public:
         visual_odom_to_camera = std::make_unique<visual::Transform>(config);
 
         action_throttler.register_action("tf_not_ready");
-        action_throttler.register_action("bullet_speed_not_ready");
         action_throttler.register_action("commit_control_state_failed");
     }
 
@@ -52,12 +50,6 @@ public:
             control_state.set_identity();
             reset_control_commands();
             return;
-        }
-        if (!bullet_speed.ready()) [[unlikely]] {
-            action_throttler.dispatch(
-                "bullet_speed_not_ready", [&] { rclcpp.warn("bullet_speed is not ready"); });
-        } else {
-            action_throttler.reset("bullet_speed_not_ready");
         }
         {
             update_gimbal_direction();
@@ -73,10 +65,7 @@ public:
         }
         {
             refresh_auto_aim_state();
-            if (should_invalidate_auto_aim_state()) {
-                invalidate_auto_aim_state();
-            }
-            apply_auto_aim_state();
+            apply_auto_aim_state(current_auto_aim_state());
         }
     }
 
@@ -87,7 +76,6 @@ private:
 
     double current_gimbal_yaw { 0. };
     double current_gimbal_pitch { 0. };
-    InputInterface<float> bullet_speed;
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
@@ -111,23 +99,28 @@ private:
         auto_aim_state_received_ = true;
     }
 
-    auto should_invalidate_auto_aim_state() const -> bool {
-        return auto_aim_state_received_ && auto_aim_state_stale();
+    auto has_valid_auto_aim_state() const -> bool {
+        return auto_aim_state_received_
+            && Clock::now() - auto_aim_state.timestamp <= auto_aim_state_timeout_;
     }
 
-    auto auto_aim_state_stale() const -> bool {
-        return Clock::now() - auto_aim_state.timestamp > auto_aim_state_timeout_;
+    auto current_auto_aim_state() const -> AutoAimState {
+        auto state = auto_aim_state;
+        if (has_valid_auto_aim_state()) {
+            return state;
+        }
+
+        state.gimbal_takeover = false;
+        state.shoot_permitted = false;
+        state.yaw             = current_gimbal_yaw;
+        state.pitch           = current_gimbal_pitch;
+        return state;
     }
 
-    auto invalidate_auto_aim_state() -> void {
-        auto_aim_state.gimbal_takeover = false;
-        auto_aim_state.shoot_permitted = false;
-    }
-
-    auto apply_auto_aim_state() -> void {
-        *gimbal_takeover = auto_aim_state.gimbal_takeover;
-        *shoot_permitted = auto_aim_state.shoot_permitted;
-        update_target_direction();
+    auto apply_auto_aim_state(const AutoAimState& state) -> void {
+        *gimbal_takeover = state.gimbal_takeover;
+        *shoot_permitted = state.shoot_permitted;
+        update_target_direction(state);
     }
 
     auto update_control_state() -> void {
@@ -148,18 +141,12 @@ private:
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
 
-        control_state.bullet_speed = bullet_speed.ready() ? *bullet_speed : 0.0;
-        control_state.yaw          = current_gimbal_yaw;
-        control_state.pitch        = current_gimbal_pitch;
+        control_state.yaw   = current_gimbal_yaw;
+        control_state.pitch = current_gimbal_pitch;
     }
 
-    auto update_target_direction() -> void {
-        if (!auto_aim_state.gimbal_takeover) {
-            *target_direction = Eigen::Vector3d::Zero();
-            return;
-        }
-
-        const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
+    auto update_target_direction(const AutoAimState& state) -> void {
+        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
 
         // clang-format off
         *target_direction = Eigen::Vector3d {

@@ -233,7 +233,6 @@ auto main() -> int {
                 ///
                 auto control_cmd = std::optional<FireControl::Result> { std::nullopt };
                 {
-                    fire_control.set_bullet_speed(control_state.bullet_speed);
                     auto translation = control_state.odom_to_muzzle_translation;
                     control_cmd      = fire_control.solve(*snapshot, translation);
                     if (!control_cmd) {
