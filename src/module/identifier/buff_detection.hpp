@@ -15,8 +15,10 @@ class BuffDetection {
     RMCS_PIMPL_DEFINITION(BuffDetection)
 
 public:
+    struct BuffDetectionFrame;
+    struct BuffDetectionResult;
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto sync_detect(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
+    auto auto_detect(const BuffDetectionFrame&) noexcept -> std::optional<BuffDetectionResult>;
 };
 
 }

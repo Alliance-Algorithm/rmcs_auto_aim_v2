@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rmcs_msgs/robot_color.hpp"
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
@@ -15,12 +16,12 @@ enum class ShootMode {
 };
 
 struct Transform {
-    Translation position {};
-    Orientation orientation {};
+    Translation position { };
+    Orientation orientation { };
 };
 
 struct AutoAimState {
-    Clock::time_point timestamp {};
+    Clock::time_point timestamp { };
 
     bool gimbal_takeover { false };
     bool shoot_permitted = { false };
@@ -42,17 +43,18 @@ struct AutoAimState {
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
 struct ControlState {
-    Clock::time_point timestamp {};
+    Clock::time_point timestamp { };
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double bullet_speed { 0. };
     double yaw { 0. };
     double pitch { 0. };
 
+    rmcs_msgs::RobotColor color;
     DeviceIds invincible_devices { DeviceIds::None() };
 
-    Transform odom_to_camera_transform {};
-    Translation odom_to_muzzle_translation {};
+    Transform odom_to_camera_transform { };
+    Translation odom_to_muzzle_translation { };
 
     auto set_identity() noexcept -> void {
         timestamp                  = Clock::now();
@@ -61,8 +63,8 @@ struct ControlState {
         yaw                        = 0.0;
         pitch                      = 0.0;
         invincible_devices         = DeviceIds::None();
-        odom_to_camera_transform   = {};
-        odom_to_muzzle_translation = {};
+        odom_to_camera_transform   = { };
+        odom_to_muzzle_translation = { };
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

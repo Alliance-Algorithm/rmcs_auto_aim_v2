@@ -5,9 +5,11 @@
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
-#include <cmath>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/robot_id.hpp>
+
+#include <cmath>
 
 namespace rmcs {
 
@@ -20,6 +22,7 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
+        register_input("/referee/id", robot_id_);
         register_input("/referee/shooter/initial_speed", bullet_speed);
 
         register_output("/gimbal/auto_aim/controllable", gimbal_takeover, false);
@@ -84,6 +87,7 @@ public:
     }
 
 private:
+    InputInterface<rmcs_msgs::RobotId> robot_id_;
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
     double current_gimbal_yaw { 0. };
@@ -122,10 +126,10 @@ private:
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
-
-        control_state.bullet_speed = *bullet_speed;
-        control_state.yaw          = current_gimbal_yaw;
-        control_state.pitch        = current_gimbal_pitch;
+        control_state.color              = robot_id_->color();
+        control_state.bullet_speed       = *bullet_speed;
+        control_state.yaw                = current_gimbal_yaw;
+        control_state.pitch              = current_gimbal_pitch;
     }
 
     auto update_target_direction() -> void {

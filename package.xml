@@ -16,6 +16,7 @@
   <depend>rmcs_executor</depend>
   <depend>hikcamera</depend>
   <depend>rmcs_auto_rune</depend>
+  <depend>rmcs_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

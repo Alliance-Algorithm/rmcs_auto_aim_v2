@@ -1,5 +1,11 @@
 
+#include "module/identifier/buff_detection.hpp"
+#include "rmcs_msgs/robot_color.hpp"
+#include "utility/image/image.details.hpp"
 #include "utility/image/image.hpp"
+
+#include "utility/shared/context.hpp"
+#include "vc/core/type_expansion.hpp"
 #include "vc/dataio/dataio.h"
 #include "vc/detector/detector_input.h"
 #include "vc/detector/detector_output.h"
@@ -17,56 +23,69 @@
 using namespace std;
 using namespace cv;
 
-shared_ptr<RuneTracker> buff_detect(const std::unique_ptr<rmcs::Image>& image) {
-    static auto rune_groups   = vector<FeatureNode_ptr> { };
-    static auto rune_detector = RuneDetector::make_detector();
+namespace rmcs::identifier {
 
-    DetectorInput input;
-    DetectorOutput output;
+struct BuffDetection::BuffDetectionFrame {
+    const unique_ptr<rmcs::Image>& image;
+    const GyroData& gyro_data;
+    const util::ControlState& control_state;
+};
 
-    input.setImage(image);
-    input.setGyroData(GyroData { });
-    input.setTick(cv::getTickCount());
-    input.setColor(1); // TODO： 对接rmcs
-    input.setFeatureNodes(rune_groups);
+struct BuffDetection::Impl {
 
-    rune_detector->detect(input, output);
+    shared_ptr<RuneTracker> buff_detect(const BuffDetectionFrame& frame) {
+        static auto rune_groups   = vector<FeatureNode_ptr> { };
+        static auto rune_detector = RuneDetector::make_detector();
 
-    if (!output.getValid()) {
-        return nullptr;
-    }
+        DetectorInput input;
+        DetectorOutput output;
 
-    rune_groups = output.getFeatureNodes();
-    if (rune_groups.empty()) {
-        return nullptr;
-    }
+        input.setImage(frame.image->details().mat);
+        input.setGyroData(frame.gyro_data);
+        input.setTick(frame.control_state.timestamp);
+        input.setColor(frame.control_state.color == rmcs_msgs::RobotColor::BLUE ? PixChannel::BLUE
+                                                                                : PixChannel::RED);
+        input.setFeatureNodes(rune_groups);
 
-    auto rune_group = RuneGroup::cast(rune_groups.front());
-    if (rune_group == nullptr || rune_group->childFeatures().empty()) {
-        return nullptr;
-    }
+        rune_detector->detect(input, output);
 
-    FeatureNode_ptr target_tracker = nullptr;
-    for (const auto& tracker : rune_group->getTrackers()) {
-        auto _tracker = TrackingFeatureNode::cast(tracker);
-        if (_tracker == nullptr) {
-            continue;
+        if (!output.getValid()) {
+            return nullptr;
         }
-        if (_tracker->getHistoryNodes().empty()) {
-            continue;
+
+        rune_groups = output.getFeatureNodes();
+        if (rune_groups.empty()) {
+            return nullptr;
         }
-        auto rune_combo = RuneCombo::cast(_tracker->getHistoryNodes().front());
-        if (rune_combo == nullptr) {
-            continue;
+
+        auto rune_group = RuneGroup::cast(rune_groups.front());
+        if (rune_group == nullptr || rune_group->childFeatures().empty()) {
+            return nullptr;
         }
-        auto type = rune_combo->getRuneType();
-        if (type == RuneType::PENDING_STRUCK) {
-            target_tracker = _tracker;
-            break;
+
+        FeatureNode_ptr target_tracker = nullptr;
+        for (const auto& tracker : rune_group->getTrackers()) {
+            auto _tracker = TrackingFeatureNode::cast(tracker);
+            if (_tracker == nullptr) {
+                continue;
+            }
+            if (_tracker->getHistoryNodes().empty()) {
+                continue;
+            }
+            auto rune_combo = RuneCombo::cast(_tracker->getHistoryNodes().front());
+            if (rune_combo == nullptr) {
+                continue;
+            }
+            auto type = rune_combo->getRuneType();
+            if (type == RuneType::PENDING_STRUCK) {
+                target_tracker = _tracker;
+                break;
+            }
         }
+        if (target_tracker == nullptr) {
+            return nullptr;
+        }
+        return RuneTracker::cast(target_tracker);
     }
-    if (target_tracker == nullptr) {
-        return nullptr;
-    }
-    return RuneTracker::cast(target_tracker);
+};
 }
