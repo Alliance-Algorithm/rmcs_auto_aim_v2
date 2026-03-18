@@ -78,14 +78,10 @@ pose_estimator:
 fire_control:
   initial_bullet_speed: 25 # m/s
   shoot_delay: 0.1 # s
-  shoot_offset_x: 0.0 # m
-  shoot_offset_y: 0.0 # m
-  shoot_offset_z: 0.0 # m
+  yaw_offset: 0.0 # degree
+  pitch_offset: 0.8 # degree
 
-  k: 0.019
-  bias_scale: 1.0
-
-  coming_angle: 60.0      # degree
+  coming_angle: 70.0      # degree
   leaving_angle: 20.0     # degree
   outpost_coming_angle: 70.0      # degree
   outpost_leaving_angle: 30.0     # degree
