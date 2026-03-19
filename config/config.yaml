@@ -24,7 +24,7 @@ capturer:
     fixed_framerate: true
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/translation.mp4"
+    location: "/workspaces/RMCS/develop_ws/buffer-0.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放

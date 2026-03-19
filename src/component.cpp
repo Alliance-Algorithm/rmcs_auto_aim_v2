@@ -1,15 +1,19 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
+#include "utility/math/angle.hpp"
+#include "utility/math/conversion.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/robot_color.hpp>
 #include <rmcs_msgs/robot_id.hpp>
 
 #include <cmath>
+#include <vc/core/type_expansion.hpp>
 
 namespace rmcs {
 
@@ -92,6 +96,12 @@ private:
 
     double current_gimbal_yaw { 0. };
     double current_gimbal_pitch { 0. };
+    double current_gimbal_roll { 0. };
+    double previous_gimbal_yaw { 0. };
+    double previous_gimbal_pitch { 0. };
+    double previous_gimbal_roll { 0. };
+    Clock::time_point previous_gimbal_timestamp { };
+    bool has_previous_gimbal_state { false };
     InputInterface<float> bullet_speed;
 
     RclcppNode rclcpp;
@@ -126,10 +136,35 @@ private:
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
-        control_state.color              = robot_id_->color();
-        control_state.bullet_speed       = *bullet_speed;
-        control_state.yaw                = current_gimbal_yaw;
-        control_state.pitch              = current_gimbal_pitch;
+        control_state.color =
+            robot_id_->color() == rmcs_msgs::RobotColor::BLUE ? PixChannel::BLUE : PixChannel::RED;
+        control_state.bullet_speed             = *bullet_speed;
+        control_state.yaw                      = current_gimbal_yaw;
+        control_state.pitch                    = current_gimbal_pitch;
+        control_state.gyro_data.rotation.yaw   = static_cast<float>(current_gimbal_yaw);
+        control_state.gyro_data.rotation.pitch = static_cast<float>(current_gimbal_pitch);
+        control_state.gyro_data.rotation.roll  = static_cast<float>(current_gimbal_roll);
+
+        if (has_previous_gimbal_state) {
+            const auto dt =
+                std::chrono::duration<double>(control_state.timestamp - previous_gimbal_timestamp)
+                    .count();
+            if (dt > 1e-6) {
+                control_state.gyro_data.rotation.yaw_speed = static_cast<float>(
+                    util::normalize_angle(current_gimbal_yaw - previous_gimbal_yaw) / dt);
+                control_state.gyro_data.rotation.pitch_speed = static_cast<float>(
+                    util::normalize_angle(current_gimbal_pitch - previous_gimbal_pitch) / dt);
+                control_state.gyro_data.rotation.roll_speed = static_cast<float>(
+                    util::normalize_angle(current_gimbal_roll - previous_gimbal_roll) / dt);
+            }
+        }
+
+        previous_gimbal_yaw       = current_gimbal_yaw;
+        previous_gimbal_pitch     = current_gimbal_pitch;
+        previous_gimbal_roll      = current_gimbal_roll;
+        previous_gimbal_timestamp = control_state.timestamp;
+        has_previous_gimbal_state = true;
+        control_state.shoot_mode  = ShootMode::BUFF_LARGE; // TODO:更新自瞄模式
     }
 
     auto update_target_direction() -> void {
@@ -155,13 +190,15 @@ private:
             fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
                 *rmcs_tf);
 
-        auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.rotation() };
+        auto quat      = Eigen::Quaterniond { odom_to_muzzle_transform.rotation() };
+        const auto ypr = util::eulers(quat);
 
         auto current_muzzle_direction = quat * Eigen::Vector3d::UnitX();
 
         current_gimbal_yaw = std::atan2(current_muzzle_direction.y(), current_muzzle_direction.x());
         current_gimbal_pitch = std::atan2(current_muzzle_direction.z(),
             std::hypot(current_muzzle_direction.x(), current_muzzle_direction.y()));
+        current_gimbal_roll  = ypr[2];
     }
 };
 

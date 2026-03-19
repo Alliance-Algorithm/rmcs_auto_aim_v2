@@ -234,6 +234,39 @@ struct FireControl::Impl {
             .horizon_distance = horizon_distance,
         };
     }
+
+    auto solve_buff(std::shared_ptr<RuneTracker> target_tracker,
+        const util::ControlState& control_state) -> std::optional<Result> {
+        if (!target_tracker) return std::nullopt;
+
+        Eigen::Vector3d odom_to_camera_translation(
+            control_state.odom_to_camera_transform.position.x,
+            control_state.odom_to_camera_transform.position.y,
+            control_state.odom_to_camera_transform.position.z);
+        Eigen::Quaterniond odom_to_camera_orientation(
+            control_state.odom_to_camera_transform.orientation.w,
+            control_state.odom_to_camera_transform.orientation.x,
+            control_state.odom_to_camera_transform.orientation.y,
+            control_state.odom_to_camera_transform.orientation.z);
+
+        auto predict_hitpoint_in_odom = [tracker = std::move(target_tracker),
+                                            t0   = control_state.timestamp,
+                                            odom_to_camera_translation, odom_to_camera_orientation](
+                                            Clock::time_point t) -> std::optional<Eigen::Vector3d> {
+            const auto dt                  = std::chrono::duration<double>(t - t0).count();
+            const auto predicted_in_camera = tracker->getPredictedTargetPos(dt);
+            if (!std::isfinite(predicted_in_camera.x) || !std::isfinite(predicted_in_camera.y)
+                || !std::isfinite(predicted_in_camera.z))
+                return std::nullopt;
+
+            const Eigen::Vector3d camera_hitpoint(
+                predicted_in_camera.x, predicted_in_camera.y, predicted_in_camera.z);
+            return odom_to_camera_orientation * camera_hitpoint + odom_to_camera_translation;
+        };
+
+        return solve_buff(control_state.timestamp, predict_hitpoint_in_odom,
+            control_state.odom_to_muzzle_translation);
+    }
 };
 
 FireControl::FireControl() noexcept
@@ -249,4 +282,9 @@ auto FireControl::set_bullet_speed(double speed) -> void { return pimpl->set_bul
 auto FireControl::solve(const predictor::Snapshot& snapshot,
     Translation const& odom_to_muzzle_translation) -> std::optional<Result> {
     return pimpl->solve(snapshot, odom_to_muzzle_translation);
+}
+
+auto FireControl::solve_buff(std::shared_ptr<RuneTracker> target_tracker,
+    const util::ControlState& control_state) -> std::optional<Result> {
+    return pimpl->solve_buff(std::move(target_tracker), control_state);
 }

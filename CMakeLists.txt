@@ -25,6 +25,7 @@ find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
 find_package(hikcamera REQUIRED)
 find_package(rmcs_auto_rune REQUIRED)
+find_package(rmcs_msgs REQUIRED)
 
 ## 目录包含
 include_directories(
@@ -39,6 +40,7 @@ include_directories(
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
+	${rmcs_msgs_INCLUDE_DIRS}
 )
 
 ## 代码资源搜索
@@ -79,6 +81,13 @@ target_link_libraries(
     ${hikcamera_LIBRARIES}
     ${visualization_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
+)
+
+target_link_libraries(
+    ${PROJECT_NAME}_module
+    rmcs_auto_rune::VisCore_rune_detector
+    rmcs_auto_rune::VisCore_rune_group
+    rmcs_auto_rune::VisCore_rune_tracker
 )
 
 ## 组件构建: component
