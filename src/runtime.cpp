@@ -9,16 +9,19 @@
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
 
+#include "module/identifier/buff_detection.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
 #include <chrono>
 #include <csignal>
 #include <experimental/scope>
+#include <opencv2/highgui.hpp>
 #include <yaml-cpp/yaml.h>
 
 using namespace rmcs;
@@ -39,13 +42,14 @@ auto main() -> int {
 
     {
         /// Runtime
-        auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> { };
-        auto capturer       = kernel::Capturer { };
-        auto identifier     = kernel::Identifier { };
-        auto tracker        = kernel::Tracker { };
-        auto pose_estimator = kernel::PoseEstimator { };
-        auto fire_control   = kernel::FireControl { };
-        auto visualization  = kernel::Visualization { };
+        auto feishu            = kernel::Feishu<RuntimeRole::AutoAim> { };
+        auto capturer          = kernel::Capturer { };
+        auto identifier        = kernel::Identifier { };
+        auto buffer_identifier = rmcs::identifier::BuffDetection { };
+        auto tracker           = kernel::Tracker { };
+        auto pose_estimator    = kernel::PoseEstimator { };
+        auto fire_control      = kernel::FireControl { };
+        auto visualization     = kernel::Visualization { };
 
         auto action_throttler = util::ActionThrottler { 1s, 233 };
 
@@ -152,108 +156,132 @@ auto main() -> int {
                         visualization.send_image(*image);
                     }
                 } };
-                std::ignore = stream_guard;
-
+                std::ignore        = stream_guard;
                 auto control_state = fetch_control_state();
 
-                /// 1. Identify Armor
-                ///
-                auto armors_2d = Armor2Ds { };
-                {
-                    auto result = identifier.sync_identify(*image);
-                    if (!result.has_value()) {
-                        action_throttler.dispatch(
-                            armor_detected_label, [&] { rclcpp_node.warn("未识别到装甲板"); });
+                auto buff_frame =
+                    rmcs::identifier::BuffDetection::BuffDetectionFrame { .image = image,
+                        .gyro_data     = control_state.gyro_data,
+                        .control_state = control_state };
+                if (control_state.shoot_mode == util::ShootMode::BUFF_SMALL
+                    || control_state.shoot_mode == util::ShootMode::BUFF_LARGE) {
+                    if (auto buff_tracker = buffer_identifier.auto_detect(buff_frame)) {
+                        fire_control.set_bullet_speed(control_state.bullet_speed);
+                        auto control_cmd = fire_control.solve_buff(*buff_tracker, control_state);
+                        if (control_cmd) {
+                            auto state            = AutoAimState { };
+                            state.timestamp       = Clock::now();
+                            state.gimbal_takeover = true;
+                            state.shoot_permitted = true;
+                            state.yaw             = control_cmd->yaw;
+                            state.pitch           = control_cmd->pitch;
+                            if (!feishu.commit(state)) {
+                                action_throttler.dispatch(feishu_commit_label,
+                                    [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
+                            }
+                            continue;
+                        }
+                    }
+                } else if (control_state.shoot_mode == ShootMode::BATTLE) {
+
+                    /// 1. Identify Armor
+                    ///
+                    auto armors_2d = Armor2Ds { };
+                    {
+                        auto result = identifier.sync_identify(*image);
+                        if (!result.has_value()) {
+                            action_throttler.dispatch(
+                                armor_detected_label, [&] { rclcpp_node.warn("未识别到装甲板"); });
+                            continue;
+                        }
+                        action_throttler.reset(armor_detected_label);
+
+                        tracker.set_invincible_armors(control_state.invincible_devices);
+                        auto filtered = tracker.filter_armors(*result);
+                        // No available armors to shoot
+                        if (filtered.empty()) continue;
+
+                        if (use_painted_image) {
+                            for (const auto& armor_2d : filtered)
+                                util::draw(*image, armor_2d);
+                        }
+
+                        armors_2d = std::move(filtered);
+                    }
+
+                    /// 2. Transform 2d to 3d
+                    ///
+                    auto armors_3d = pose_estimator.solve_pnp(armors_2d);
+                    if (armors_3d && visualization.initialized()) {
+                        auto success = visualization.solved_pnp_armors(*armors_3d);
+                        if (!success) {
+                            action_throttler.dispatch(visualization_pnp_label,
+                                [&] { rclcpp_node.error("可视化PNP结算后的装甲板失败"); });
+                        } else {
+                            action_throttler.reset(visualization_pnp_label);
+                        }
+                    }
+                    if (armors_3d) {
+                        auto transform = control_state.odom_to_camera_transform;
+                        pose_estimator.set_odom_to_camera_transform(transform);
+
+                        armors_3d = pose_estimator.odom_to_camera(*armors_3d);
+                    } else {
                         continue;
                     }
-                    action_throttler.reset(armor_detected_label);
 
-                    tracker.set_invincible_armors(control_state.invincible_devices);
-                    auto filtered = tracker.filter_armors(*result);
-                    // No available armors to shoot
-                    if (filtered.empty()) continue;
+                    /// 3. Apply Tracker
+                    ///
+                    auto snapshot = std::optional<predictor::Snapshot> { std::nullopt };
+                    {
+                        auto result = tracker.decide(*armors_3d, Clock::now());
 
-                    if (use_painted_image) {
-                        for (const auto& armor_2d : filtered)
-                            util::draw(*image, armor_2d);
+                        if (result.state == TrackerState::Tracking) {
+                            action_throttler.dispatch(tracker_tracking_label,
+                                [&] { rclcpp_node.info("已进入 Tracking 状态"); });
+                        } else {
+                            action_throttler.reset(tracker_tracking_label);
+                            continue;
+                        }
+
+                        snapshot = result.snapshot;
+                        if (!snapshot) continue;
                     }
 
-                    armors_2d = std::move(filtered);
-                }
+                    /// 4. Fire Control
+                    ///
+                    auto control_cmd = std::optional<FireControl::Result> { std::nullopt };
+                    {
+                        fire_control.set_bullet_speed(control_state.bullet_speed);
+                        auto translation = control_state.odom_to_muzzle_translation;
 
-                /// 2. Transform 2d to 3d
-                ///
-                auto armors_3d = pose_estimator.solve_pnp(armors_2d);
-                if (armors_3d && visualization.initialized()) {
-                    auto success = visualization.solved_pnp_armors(*armors_3d);
-                    if (!success) {
-                        action_throttler.dispatch(visualization_pnp_label,
-                            [&] { rclcpp_node.error("可视化PNP结算后的装甲板失败"); });
-                    } else {
-                        action_throttler.reset(visualization_pnp_label);
-                    }
-                }
-                if (armors_3d) {
-                    auto transform = control_state.odom_to_camera_transform;
-                    pose_estimator.set_odom_to_camera_transform(transform);
-
-                    armors_3d = pose_estimator.odom_to_camera(*armors_3d);
-                } else {
-                    continue;
-                }
-
-                /// 3. Apply Tracker
-                ///
-                auto snapshot = std::optional<predictor::Snapshot> { std::nullopt };
-                {
-                    auto result = tracker.decide(*armors_3d, Clock::now());
-
-                    if (result.state == TrackerState::Tracking) {
-                        action_throttler.dispatch(tracker_tracking_label,
-                            [&] { rclcpp_node.info("已进入 Tracking 状态"); });
-                    } else {
-                        action_throttler.reset(tracker_tracking_label);
-                        continue;
+                        control_cmd = fire_control.solve(*snapshot, translation);
+                        if (!control_cmd) {
+                            action_throttler.dispatch(fire_control_label,
+                                [&] { rclcpp_node.warn("Fire control solve failed"); });
+                            continue;
+                        } else {
+                            action_throttler.reset(fire_control_label);
+                        }
                     }
 
-                    snapshot = result.snapshot;
-                    if (!snapshot) continue;
-                }
+                    /// 5. Transmit State
+                    ///
+                    auto state            = AutoAimState { };
+                    state.timestamp       = Clock::now();
+                    state.gimbal_takeover = true;
+                    state.shoot_permitted = true;
+                    state.yaw             = control_cmd->yaw;
+                    state.pitch           = control_cmd->pitch;
+                    if (!feishu.commit(state)) {
+                        action_throttler.dispatch(feishu_commit_label,
+                            [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
+                    }
 
-                /// 4. Fire Control
-                ///
-                auto control_cmd = std::optional<FireControl::Result> { std::nullopt };
-                {
-                    fire_control.set_bullet_speed(control_state.bullet_speed);
-                    auto translation = control_state.odom_to_muzzle_translation;
-
-                    control_cmd = fire_control.solve(*snapshot, translation);
-                    if (!control_cmd) {
-                        action_throttler.dispatch(fire_control_label,
-                            [&] { rclcpp_node.warn("Fire control solve failed"); });
-                        continue;
-                    } else {
-                        action_throttler.reset(fire_control_label);
+                    if (visualization.initialized()) {
+                        visualization.predicted_armors(snapshot->predicted_armors(Clock::now()));
                     }
                 }
-
-                /// 5. Transmit State
-                ///
-                auto state            = AutoAimState { };
-                state.timestamp       = Clock::now();
-                state.gimbal_takeover = true;
-                state.shoot_permitted = true;
-                state.yaw             = control_cmd->yaw;
-                state.pitch           = control_cmd->pitch;
-                if (!feishu.commit(state)) {
-                    action_throttler.dispatch(feishu_commit_label,
-                        [&] { rclcpp_node.warn("Commit auto_aim_state failed"); });
-                }
-
-                if (visualization.initialized()) {
-                    visualization.predicted_armors(snapshot->predicted_armors(Clock::now()));
-                }
-
             } // image receive scope
 
         } // runtime loop scope

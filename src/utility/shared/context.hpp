@@ -1,9 +1,10 @@
 #pragma once
 
-#include "rmcs_msgs/robot_color.hpp"
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
+#include "vc/dataio/dataio.h"
+#include <vc/core/type_expansion.hpp>
 
 namespace rmcs::util {
 
@@ -49,8 +50,9 @@ struct ControlState {
     double bullet_speed { 0. };
     double yaw { 0. };
     double pitch { 0. };
+    GyroData gyro_data { };
 
-    rmcs_msgs::RobotColor color;
+    PixChannel color;
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform { };
@@ -62,6 +64,7 @@ struct ControlState {
         bullet_speed               = 0.0;
         yaw                        = 0.0;
         pitch                      = 0.0;
+        gyro_data                  = { };
         invincible_devices         = DeviceIds::None();
         odom_to_camera_transform   = { };
         odom_to_muzzle_translation = { };

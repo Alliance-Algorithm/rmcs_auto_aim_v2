@@ -25,6 +25,7 @@ find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
 find_package(hikcamera REQUIRED)
 find_package(rmcs_auto_rune REQUIRED)
+find_package(rmcs_msgs REQUIRED)
 
 ## 目录包含
 include_directories(
@@ -39,6 +40,7 @@ include_directories(
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
+	${rmcs_msgs_INCLUDE_DIRS}
 )
 
 ## 代码资源搜索

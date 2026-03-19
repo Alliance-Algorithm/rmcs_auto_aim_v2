@@ -5,8 +5,11 @@
 
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
+#include "utility/shared/context.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
+
+#include "vc/feature/rune_tracker.h"
 
 namespace rmcs::kernel {
 
@@ -28,5 +31,9 @@ public:
 
     auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
         -> std::optional<Result>;
+
+    auto solve_buff(
+        std::shared_ptr<RuneTracker> target_tracker,
+        const util::ControlState& control_state) -> std::optional<Result>;
 };
 }
