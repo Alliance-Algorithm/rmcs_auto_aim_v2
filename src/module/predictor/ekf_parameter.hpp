@@ -57,11 +57,8 @@ struct EKFParameters {
     }
 
     static auto armor_num(DeviceId const& device) -> int {
-        auto is_balance = DeviceIds::kInfantry().contains(device);
-
         auto num = int {};
         if (device == DeviceId::OUTPOST || device == DeviceId::BASE) num = 3;
-        else if (is_balance) num = 2;
         else num = 4;
         return num;
     }
