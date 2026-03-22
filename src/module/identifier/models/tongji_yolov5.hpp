@@ -31,10 +31,6 @@ struct TongJiYoloV5 {
                 .scale(255.0);
             input.model().set_layout(model_layout.layout());
         }
-        {
-            auto& output = ppp.output();
-            output.tensor().set_element_type(ov::element::f32);
-        }
         return core.compile_model(ppp.build(), infer_device, kRealTimePerformanceMode);
     }
 

@@ -166,7 +166,6 @@ auto main() -> int {
                     if (!result.has_value()) {
                         action_throttler.dispatch(identifier_failed_label, [&] {
                             rclcpp_node.error("Armor detection failed");
-                            rclcpp_node.error("  {}", result.error());
                         });
                     } else {
                         action_throttler.reset(identifier_failed_label);
