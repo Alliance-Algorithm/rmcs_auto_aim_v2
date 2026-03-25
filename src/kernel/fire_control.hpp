@@ -20,11 +20,12 @@ public:
         double pitch;
         double yaw;
         double horizon_distance;
+        bool shoot_permitted;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
-        -> std::optional<Result>;
+    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation,
+        bool control, double current_yaw) -> std::optional<Result>;
 };
 }

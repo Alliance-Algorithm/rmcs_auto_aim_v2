@@ -87,6 +87,11 @@ fire_control:
   outpost_leaving_angle: 30.0     # degree
   angular_velocity_threshold: 120 # degree/s
 
+  first_tolerance: 3 # 近距离射击容差，degree
+  second_tolerance: 2 # 远距离射击容差，degree
+  judge_distance: 2 #距离判断阈值
+  auto_fire: true # 是否由自瞄控制射击
+
 visualization:
   framerate: 60
   monitor_host: "127.0.0.1"

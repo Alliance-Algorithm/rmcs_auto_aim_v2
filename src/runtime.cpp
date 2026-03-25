@@ -164,9 +164,8 @@ auto main() -> int {
                 {
                     auto result = identifier.sync_identify(*image);
                     if (!result.has_value()) {
-                        action_throttler.dispatch(identifier_failed_label, [&] {
-                            rclcpp_node.error("Armor detection failed");
-                        });
+                        action_throttler.dispatch(identifier_failed_label,
+                            [&] { rclcpp_node.error("Armor detection failed"); });
                     } else {
                         action_throttler.reset(identifier_failed_label);
 
@@ -230,16 +229,23 @@ auto main() -> int {
 
                 /// 4. Fire Control
                 ///
+                auto state            = AutoAimState {};
+                state.timestamp       = Clock::now();
+                state.gimbal_takeover = true;
+                state.shoot_permitted = (tracker_state == TrackerState::Tracking);
+                state.target          = tracked_target;
+
                 auto control_cmd = std::optional<FireControl::Result> { std::nullopt };
                 {
                     auto translation = control_state.odom_to_muzzle_translation;
-                    control_cmd      = fire_control.solve(*snapshot, translation);
+                    control_cmd      = fire_control.solve(
+                        *snapshot, translation, state.shoot_permitted, control_state.yaw);
                     if (!control_cmd) {
                         action_throttler.dispatch(fire_control_label,
                             [&] { rclcpp_node.warn("Fire control solve failed"); });
-                        auto state = AutoAimState {};
-                        state.set_safe_state(control_state.yaw, control_state.pitch);
-                        commit_state(state);
+                        auto safe_state = AutoAimState {};
+                        safe_state.set_safe_state(control_state.yaw, control_state.pitch);
+                        commit_state(safe_state);
                         continue;
                     }
                 }
@@ -247,13 +253,9 @@ auto main() -> int {
 
                 /// 5. Transmit State
                 ///
-                auto state            = AutoAimState {};
-                state.timestamp       = Clock::now();
-                state.gimbal_takeover = true;
-                state.shoot_permitted = (tracker_state == TrackerState::Tracking);
+                state.shoot_permitted = control_cmd->shoot_permitted;
                 state.yaw             = control_cmd->yaw;
                 state.pitch           = control_cmd->pitch;
-                state.target          = tracked_target;
                 commit_state(state);
 
                 if (visualization.initialized()) {

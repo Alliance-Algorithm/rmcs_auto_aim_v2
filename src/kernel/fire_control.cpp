@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "module/fire_control/aim_point_chooser.hpp"
+#include "module/fire_control/shoot_evaluator.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/logging/printer.hpp"
@@ -46,6 +47,7 @@ struct FireControl::Impl {
     Config config;
 
     AimPointChooser aim_point_chooser;
+    ShootEvaluator shoot_evaluator;
 
     rmcs::Printer log { "FireControl" };
 
@@ -78,14 +80,20 @@ struct FireControl::Impl {
         };
         aim_point_chooser.initialize(chooser_config);
 
+        auto evaluate_result = shoot_evaluator.initialize(yaml);
+        if (!evaluate_result.has_value()) {
+            return std::unexpected { std::format(
+                "shoot_evaluator init failed: {}", evaluate_result.error()) };
+        }
+
         return {};
     }
 
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreshold { 0.001 };
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
-        -> std::optional<Result> {
+    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation,
+        bool control, double current_yaw) -> std::optional<Result> {
         // 以整车位置来初步迭代飞行时间
         auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
@@ -144,10 +152,22 @@ struct FireControl::Impl {
         }
 
         auto final_yaw = std::atan2(best_armor_opt->translation.y, best_armor_opt->translation.x);
+        final_yaw += config.yaw_offset;
+
+        auto command = ShootEvaluator::Command {
+            .control          = control,
+            .auto_aim_enabled = control,
+            .aim_point_valid  = true,
+            .yaw              = final_yaw,
+            .distance         = horizon_distance,
+        };
+        auto shoot_permitted = shoot_evaluator.evaluate(command, current_yaw);
+
         return Result {
             .pitch            = trajectory_result.pitch + config.pitch_offset,
-            .yaw              = final_yaw + config.yaw_offset,
+            .yaw              = final_yaw,
             .horizon_distance = horizon_distance,
+            .shoot_permitted  = shoot_permitted,
         };
     }
 };
@@ -161,6 +181,7 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
 }
 
 auto FireControl::solve(const predictor::Snapshot& snapshot,
-    Translation const& odom_to_muzzle_translation) -> std::optional<Result> {
-    return pimpl->solve(snapshot, odom_to_muzzle_translation);
+    Translation const& odom_to_muzzle_translation, bool control, double current_yaw)
+    -> std::optional<Result> {
+    return pimpl->solve(snapshot, odom_to_muzzle_translation, control, current_yaw);
 }
