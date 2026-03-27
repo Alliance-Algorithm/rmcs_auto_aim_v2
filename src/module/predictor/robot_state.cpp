@@ -54,14 +54,14 @@ struct RobotState::Impl {
         time_stamp = t;
     }
 
-    auto update(Armor3D const& armor) -> void {
+    auto update(Armor3D const& armor) -> bool {
         if (!initialized) {
             initialize(armor, time_stamp);
-            return;
+            return true;
         }
 
         auto match_result = match(armor);
-        if (!match_result.is_valid) return;
+        if (!match_result.is_valid) return false;
 
         update_count++;
 
@@ -87,6 +87,7 @@ struct RobotState::Impl {
 
         // 前哨站转速特判
         correct();
+        return true;
     }
 
     constexpr auto is_converged() const -> bool {
@@ -113,7 +114,7 @@ struct RobotState::Impl {
     int update_count { 0 };
     const std::chrono::duration<double> reset_interval { 1.0 };
 
-    const double angle_error_threshold { 0.5 };
+    const double angle_error_threshold { 0.65 };
     // 前哨站转速特判
     constexpr auto correct() -> void {
         if (device == DeviceId::OUTPOST) {
@@ -184,7 +185,7 @@ auto RobotState::initialize(rmcs::Armor3D const& armor, Clock::time_point t) -> 
 auto RobotState::predict(Clock::time_point t) -> void { return pimpl->predict(t); }
 
 auto RobotState::match(Armor3D const& armor) const -> MatchResult { return pimpl->match(armor); }
-auto RobotState::update(rmcs::Armor3D const& armor) -> void { return pimpl->update(armor); }
+auto RobotState::update(rmcs::Armor3D const& armor) -> bool { return pimpl->update(armor); }
 
 auto RobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 

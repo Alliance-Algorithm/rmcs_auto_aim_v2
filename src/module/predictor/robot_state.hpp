@@ -23,7 +23,7 @@ public:
     auto predict(Clock::time_point t) -> void;
 
     auto match(Armor3D const& armor) const -> MatchResult;
-    auto update(Armor3D const& armor) -> void;
+    auto update(Armor3D const& armor) -> bool;
 
     auto is_converged() const -> bool;
 

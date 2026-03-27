@@ -106,12 +106,14 @@ auto main() -> int {
         constexpr auto visualization_pnp_label { "visualization_pnp_failed" };
         constexpr auto fire_control_label { "fire_control_failed" };
         constexpr auto feishu_commit_label { "feishu_commit_failed" };
+        constexpr auto temporary_lost_label { "temporary_lost" };
         {
             action_throttler.register_action(control_state_label, 1);
             action_throttler.register_action(identifier_failed_label, 3);
             action_throttler.register_action(visualization_pnp_label, 3);
             action_throttler.register_action(fire_control_label);
             action_throttler.register_action(feishu_commit_label);
+            action_throttler.register_action(temporary_lost_label);
         }
 
         ///
@@ -212,6 +214,7 @@ auto main() -> int {
                 auto snapshot       = std::optional<predictor::Snapshot> { std::nullopt };
                 auto tracked_target = DeviceId::UNKNOWN;
                 auto tracker_state  = TrackerState::Lost;
+                auto temporary_lost = false;
                 {
                     auto now       = Clock::now();
                     auto result    = tracker.decide(armors_3d, now);
@@ -225,6 +228,15 @@ auto main() -> int {
                         commit_state(state);
                         continue;
                     }
+                    temporary_lost = (tracker_state == TrackerState::TemporaryLost);
+                    // if (temporary_lost) {
+                    //     action_throttler.dispatch(temporary_lost_label, [&] {
+                    //         rclcpp_node.warn("Tracker temporary lost: keep predicting gimbal,
+                    //         disable shooting");
+                    //     });
+                    // } else {
+                    //     action_throttler.reset(temporary_lost_label);
+                    // }
                 }
 
                 /// 4. Fire Control
@@ -253,7 +265,7 @@ auto main() -> int {
 
                 /// 5. Transmit State
                 ///
-                state.shoot_permitted = control_cmd->shoot_permitted;
+                state.shoot_permitted = temporary_lost ? false : control_cmd->shoot_permitted;
                 state.yaw             = control_cmd->yaw;
                 state.pitch           = control_cmd->pitch;
                 commit_state(state);

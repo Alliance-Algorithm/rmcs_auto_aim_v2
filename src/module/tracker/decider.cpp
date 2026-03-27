@@ -1,5 +1,6 @@
 #include "decider.hpp"
 
+#include <unordered_map>
 #include <unordered_set>
 
 #include "module/predictor/robot_state.hpp"
@@ -14,12 +15,15 @@ struct Decider::Impl {
     struct Config : util::Serializable {
         std::size_t max_temporary_loss_frames { 5 };
         double max_temporary_loss_duration_ms { 120.0 };
+        std::size_t tracking_confirm_frames { 3 };
 
         constexpr static std::tuple metas {
             &Config::max_temporary_loss_frames,
             "max_temporary_loss_frames",
             &Config::max_temporary_loss_duration_ms,
             "max_temporary_loss_duration_ms",
+            &Config::tracking_confirm_frames,
+            "tracking_confirm_frames",
         };
     };
 
@@ -34,6 +38,9 @@ struct Decider::Impl {
         }
         if (config.max_temporary_loss_duration_ms <= 0.) {
             return std::unexpected { "tracker.max_temporary_loss_duration_ms must be > 0" };
+        }
+        if (config.tracking_confirm_frames == 0) {
+            return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
         }
 
         auto temporary_loss_duration =
@@ -58,7 +65,6 @@ struct Decider::Impl {
         // 将检测到的装甲板按 DeviceId 分发给对应的 RobotState
         for (const auto& armor : armors) {
             auto id = armor.genre;
-            observed_ids.insert(id);
 
             // 发现新 ID，创建新的追踪器
             if (!trackers.contains(id)) {
@@ -66,16 +72,35 @@ struct Decider::Impl {
                 trackers[id]->initialize(armor, t);
             }
 
-            // RobotState 内部会调用 match() 自动处理多装甲板逻辑
-            trackers[id]->update(armor);
-            last_seen_time[id]             = t;
-            consecutive_missing_frames[id] = 0;
+            // 只有融合成功的观测才用于更新可见性和丢失计数。
+            auto fused = trackers[id]->update(armor);
+            if (fused) {
+                observed_ids.insert(id);
+                last_seen_time[id]             = t;
+                consecutive_missing_frames[id] = 0;
+            }
         }
 
         for (const auto& [id, tracker] : trackers) {
-            std::ignore = tracker;
+            if (observed_ids.contains(id) && tracker->is_converged()) {
+                ++consecutive_stable_frames[id];
+                temporary_lost_armed[id] = false;
+                if (consecutive_stable_frames[id] >= config.tracking_confirm_frames) {
+                    tracking_ready[id] = true;
+                }
+                continue;
+            }
+
+            consecutive_stable_frames[id] = 0;
             if (!observed_ids.contains(id)) {
+                if (tracking_ready[id]) {
+                    temporary_lost_armed[id] = true;
+                }
                 ++consecutive_missing_frames[id];
+                tracking_ready[id] = false;
+            } else {
+                tracking_ready[id]        = false;
+                temporary_lost_armed[id] = false;
             }
         }
 
@@ -85,6 +110,9 @@ struct Decider::Impl {
                 if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
                 last_seen_time.erase(item.first);
                 consecutive_missing_frames.erase(item.first);
+                consecutive_stable_frames.erase(item.first);
+                tracking_ready.erase(item.first);
+                temporary_lost_armed.erase(item.first);
             }
 
             return expired;
@@ -99,8 +127,14 @@ struct Decider::Impl {
             primary_target_id = fresh_target_id;
 
             auto& target_tracker = trackers[primary_target_id];
+            auto stable_frames   = consecutive_stable_frames[primary_target_id];
+            auto state           = State::Detecting;
+            if (target_tracker->is_converged() && stable_frames >= config.tracking_confirm_frames) {
+                state = State::Tracking;
+            }
+
             return {
-                .state     = target_tracker->is_converged() ? State::Tracking : State::Detecting,
+                .state     = state,
                 .target_id = primary_target_id,
                 .snapshot  = target_tracker->get_snapshot(),
             };
@@ -147,6 +181,9 @@ struct Decider::Impl {
         if (!target_tracker->is_converged()) {
             return false;
         }
+        if (!temporary_lost_armed.contains(device_id) || !temporary_lost_armed.at(device_id)) {
+            return false;
+        }
 
         auto max_duration =
             std::chrono::duration<double, std::milli> { config.max_temporary_loss_duration_ms };
@@ -179,6 +216,9 @@ struct Decider::Impl {
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
     std::unordered_map<DeviceId, Clock::time_point> last_seen_time;
     std::unordered_map<DeviceId, std::size_t> consecutive_missing_frames;
+    std::unordered_map<DeviceId, std::size_t> consecutive_stable_frames;
+    std::unordered_map<DeviceId, bool> tracking_ready;
+    std::unordered_map<DeviceId, bool> temporary_lost_armed;
 
     Config config {};
     PriorityMode priority_mode;

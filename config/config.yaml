@@ -41,7 +41,7 @@ identifier:
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
   model_location: "tongji-yolov5.xml"
-  infer_device: "AUTO"
+  infer_device: "GPU"
   use_roi_segment: false
   roi_rows: 640
   roi_cols: 640
@@ -54,8 +54,9 @@ identifier:
 tracker:
   # blue or red
   enemy_color: blue
-  max_temporary_loss_frames: 5
-  max_temporary_loss_duration_ms: 120.0 #ms
+  max_temporary_loss_frames: 12
+  max_temporary_loss_duration_ms: 150.0 #ms
+  tracking_confirm_frames: 2
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
@@ -76,10 +77,10 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 fire_control:
-  initial_bullet_speed: 25 # m/s
-  shoot_delay: 0.1 # s
-  yaw_offset: 0.0 # degree
-  pitch_offset: 0.8 # degree
+  initial_bullet_speed: 10.7 # m/s
+  shoot_delay: 0.2 # s
+  yaw_offset: 1.0 # degree
+  pitch_offset: -1.0 # degree
 
   coming_angle: 70.0      # degree
   leaving_angle: 20.0     # degree

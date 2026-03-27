@@ -18,8 +18,7 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
     double pitch = std::atan2(input.target_h, input.target_d);
 
     for (int i = 0; i < kMaxIterateCount; ++i) {
-        auto [actual_h, t] =
-            Estimate(input.v0, pitch, input.target_d, kAirResistanceCoefficient);
+        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, kAirResistanceCoefficient);
 
         auto h_error = input.target_h - actual_h;
         if (std::abs(h_error) < kHeightErrorThreold) {
