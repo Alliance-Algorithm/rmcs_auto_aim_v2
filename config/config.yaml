@@ -1,6 +1,6 @@
 use_visualization: true
 use_painted_image: true
-is_local_runtime: true
+is_local_runtime: false
 
 capturer:
   show_loss_framerate: false
@@ -54,7 +54,7 @@ identifier:
 tracker:
   # blue or red
   enemy_color: blue
-  max_temporary_loss_frames: 12
+  max_temporary_loss_frames: 8
   max_temporary_loss_duration_ms: 150.0 #ms
   tracking_confirm_frames: 2
 
@@ -77,10 +77,10 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 fire_control:
-  initial_bullet_speed: 10.7 # m/s
+  initial_bullet_speed: 11.6 # m/s
   shoot_delay: 0.2 # s
   yaw_offset: 1.0 # degree
-  pitch_offset: -1.0 # degree
+  pitch_offset: -3.0 # degree
 
   coming_angle: 70.0      # degree
   leaving_angle: 20.0     # degree

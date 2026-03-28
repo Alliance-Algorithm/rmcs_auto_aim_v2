@@ -61,7 +61,9 @@ struct RobotState::Impl {
         }
 
         auto match_result = match(armor);
-        if (!match_result.is_valid) return false;
+        if (!match_result.is_valid) {
+            return false;
+        }
 
         update_count++;
 

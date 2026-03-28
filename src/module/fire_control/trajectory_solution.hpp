@@ -30,6 +30,6 @@ private:
     const double kEstimateTimeOutThreold { 4.0 };
     const double kMinVelocityX { 0.1 };
     const double kGravity { 9.81 };
-    const double kAirResistanceCoefficient { 0.01 };
+    const double kAirResistanceCoefficient { 0.003 };
 };
 }

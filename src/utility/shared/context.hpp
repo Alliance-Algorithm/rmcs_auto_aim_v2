@@ -3,6 +3,8 @@
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
+#include <cmath>
+#include <limits>
 
 namespace rmcs::util {
 
@@ -25,8 +27,8 @@ struct AutoAimState {
     bool gimbal_takeover { false };
     bool shoot_permitted = { false };
 
-    double yaw { 0. };
-    double pitch { 0. };
+    double yaw { std::numeric_limits<double>::quiet_NaN() };
+    double pitch { std::numeric_limits<double>::quiet_NaN() };
 
     DeviceId target { DeviceId::UNKNOWN };
 
@@ -35,8 +37,8 @@ struct AutoAimState {
 
         gimbal_takeover = false;
         shoot_permitted = false;
-        yaw             = 0.;
-        pitch           = 0.;
+        yaw             = std::numeric_limits<double>::quiet_NaN();
+        pitch           = std::numeric_limits<double>::quiet_NaN();
         target          = DeviceId::UNKNOWN;
     }
 
@@ -56,22 +58,20 @@ struct ControlState {
     Clock::time_point timestamp {};
     ShootMode shoot_mode { ShootMode::BATTLE };
 
-    double yaw { 0. };
-    double pitch { 0. };
+    double yaw { std::numeric_limits<double>::quiet_NaN() };
+    double pitch { std::numeric_limits<double>::quiet_NaN() };
 
     DeviceIds invincible_devices { DeviceIds::None() };
 
     Transform odom_to_camera_transform {};
-    Translation odom_to_muzzle_translation {};
 
     auto set_identity() noexcept -> void {
-        timestamp                  = Clock::now();
-        shoot_mode                 = ShootMode::STOPPING;
-        yaw                        = 0.0;
-        pitch                      = 0.0;
-        invincible_devices         = DeviceIds::None();
-        odom_to_camera_transform   = {};
-        odom_to_muzzle_translation = {};
+        timestamp                = Clock::now();
+        shoot_mode               = ShootMode::STOPPING;
+        yaw                      = std::numeric_limits<double>::quiet_NaN();
+        pitch                    = std::numeric_limits<double>::quiet_NaN();
+        invincible_devices       = DeviceIds::None();
+        odom_to_camera_transform = {};
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

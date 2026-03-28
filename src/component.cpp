@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
@@ -74,8 +75,8 @@ private:
 
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
-    double current_gimbal_yaw { 0. };
-    double current_gimbal_pitch { 0. };
+    double current_gimbal_yaw { std::numeric_limits<double>::quiet_NaN() };
+    double current_gimbal_pitch { std::numeric_limits<double>::quiet_NaN() };
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
@@ -129,14 +130,10 @@ private:
         auto odom_to_camera_transform =
             fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(
                 *rmcs_tf);
-        auto odom_to_muzzle_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
-                *rmcs_tf);
 
         control_state.odom_to_camera_transform.position = odom_to_camera_transform.translation();
         control_state.odom_to_camera_transform.orientation =
             Eigen::Quaterniond(odom_to_camera_transform.rotation());
-        control_state.odom_to_muzzle_translation = odom_to_muzzle_transform.translation();
 
         visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
             control_state.odom_to_camera_transform.orientation);
@@ -169,10 +166,10 @@ private:
 
     auto update_gimbal_direction() -> void {
         auto odom_to_muzzle_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
+            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::PitchLink>(
                 *rmcs_tf);
 
-        auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.rotation() };
+        auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.toRotationMatrix() };
 
         auto current_muzzle_direction = quat * Eigen::Vector3d::UnitX();
 

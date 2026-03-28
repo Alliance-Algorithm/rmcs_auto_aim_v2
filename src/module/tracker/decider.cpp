@@ -1,5 +1,6 @@
 #include "decider.hpp"
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -127,26 +128,37 @@ struct Decider::Impl {
             primary_target_id = fresh_target_id;
 
             auto& target_tracker = trackers[primary_target_id];
-            auto stable_frames   = consecutive_stable_frames[primary_target_id];
             auto state           = State::Detecting;
-            if (target_tracker->is_converged() && stable_frames >= config.tracking_confirm_frames) {
+            if (tracking_ready[primary_target_id]) {
                 state = State::Tracking;
             }
 
-            return {
+            auto output = Output {
                 .state     = state,
                 .target_id = primary_target_id,
                 .snapshot  = target_tracker->get_snapshot(),
             };
+            return output;
         }
 
         if (is_temporary_lost(primary_target_id, t)) {
             auto& target_tracker = trackers[primary_target_id];
-            return {
+            auto output = Output {
                 .state     = State::TemporaryLost,
                 .target_id = primary_target_id,
                 .snapshot  = target_tracker->get_snapshot(),
             };
+            return output;
+        }
+
+        if (should_hold_detecting(primary_target_id, t)) {
+            auto& target_tracker = trackers[primary_target_id];
+            auto output = Output {
+                .state     = State::Detecting,
+                .target_id = primary_target_id,
+                .snapshot  = target_tracker->get_snapshot(),
+            };
+            return output;
         }
 
         primary_target_id = DeviceId::UNKNOWN;
@@ -171,9 +183,7 @@ struct Decider::Impl {
     }
 
     auto is_temporary_lost(DeviceId device_id, Clock::time_point now) const -> bool {
-        if (device_id == DeviceId::UNKNOWN || !trackers.contains(device_id)
-            || !last_seen_time.contains(device_id)
-            || !consecutive_missing_frames.contains(device_id)) {
+        if (!is_within_loss_window(device_id, now, config.max_temporary_loss_frames)) {
             return false;
         }
 
@@ -185,9 +195,30 @@ struct Decider::Impl {
             return false;
         }
 
+        return true;
+    }
+
+    auto should_hold_detecting(DeviceId device_id, Clock::time_point now) const -> bool {
+        auto max_detecting_loss_frames = std::max(std::size_t { 1 }, config.tracking_confirm_frames);
+        if (!is_within_loss_window(device_id, now, max_detecting_loss_frames)) {
+            return false;
+        }
+
+        const auto& target_tracker = trackers.at(device_id);
+        return !target_tracker->is_converged();
+    }
+
+    auto is_within_loss_window(
+        DeviceId device_id, Clock::time_point now, std::size_t max_missing_frames) const -> bool {
+        if (device_id == DeviceId::UNKNOWN || !trackers.contains(device_id)
+            || !last_seen_time.contains(device_id)
+            || !consecutive_missing_frames.contains(device_id)) {
+            return false;
+        }
+
         auto max_duration =
             std::chrono::duration<double, std::milli> { config.max_temporary_loss_duration_ms };
-        return consecutive_missing_frames.at(device_id) <= config.max_temporary_loss_frames
+        return consecutive_missing_frames.at(device_id) <= max_missing_frames
             && util::delta_time(now, last_seen_time.at(device_id)) <= max_duration;
     }
 
@@ -205,6 +236,9 @@ struct Decider::Impl {
         // 距离加权：优先锁定近处的目标 (简单的 1/dist)
         double dist = tracker.distance();
         score += 5.0 / (dist + 1.0);
+
+        // 优先延续已经收敛的目标，避免频繁切到未收敛目标导致停留 Detecting。
+        if (tracker.is_converged()) score += 4.0;
 
         // 粘滞性：如果已经是主目标，额外加分防止“摇头”
         if (device == primary_target_id) score += 2.0;
