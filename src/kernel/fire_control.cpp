@@ -1,5 +1,6 @@
 #include "fire_control.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <optional>
@@ -8,7 +9,6 @@
 #include "module/fire_control/shoot_evaluator.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
-#include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
 
@@ -49,8 +49,6 @@ struct FireControl::Impl {
     AimPointChooser aim_point_chooser;
     ShootEvaluator shoot_evaluator;
 
-    rmcs::Printer log { "FireControl" };
-
     const double kMinValidBulletSpeed { 10. };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
@@ -85,29 +83,66 @@ struct FireControl::Impl {
             return std::unexpected { std::format(
                 "shoot_evaluator init failed: {}", evaluate_result.error()) };
         }
-
         return {};
     }
 
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreshold { 0.001 };
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation,
-        bool control, double current_yaw) -> std::optional<Result> {
+    auto make_result(const Armor3D& armor, bool control, double current_yaw)
+        -> std::optional<Result> {
+        auto armor_position_in_world = Eigen::Vector3d {};
+        armor.translation.copy_to(armor_position_in_world);
+
+        auto target_d = std::sqrt(armor_position_in_world.x() * armor_position_in_world.x()
+            + armor_position_in_world.y() * armor_position_in_world.y());
+        auto target_h = armor_position_in_world.z();
+        if (!(target_d > 0.0)) {
+            return std::nullopt;
+        }
+
+        auto solution           = TrajectorySolution {};
+        solution.input.v0       = config.initial_bullet_speed;
+        solution.input.target_d = target_d;
+        solution.input.target_h = target_h;
+
+        auto trajectory_result = solution.solve();
+        if (!trajectory_result) {
+            return std::nullopt;
+        }
+
+        auto final_yaw = std::atan2(armor_position_in_world.y(), armor_position_in_world.x());
+        final_yaw += config.yaw_offset;
+
+        auto command = ShootEvaluator::Command {
+            .control          = control,
+            .auto_aim_enabled = control,
+            .aim_point_valid  = true,
+            .yaw              = final_yaw,
+            .distance         = target_d,
+        };
+        auto shoot_permitted = shoot_evaluator.evaluate(command, current_yaw);
+        const auto final_pitch = trajectory_result->pitch + config.pitch_offset;
+
+        return Result {
+            .pitch            = final_pitch,
+            .yaw              = final_yaw,
+            .horizon_distance = target_d,
+            .shoot_permitted  = shoot_permitted,
+        };
+    }
+
+    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
+        -> std::optional<Result> {
+        auto state = snapshot.ekf_x();
+
         // 以整车位置来初步迭代飞行时间
-        auto state                    = snapshot.ekf_x();
         auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
 
         const double bullet_speed = config.initial_bullet_speed;
         auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
 
-        auto best_armor_opt     = std::optional<Armor3D> {};
-        auto trajectory_result  = TrajectorySolution::Output {};
-        auto horizon_distance   = 0.0;
-        auto has_valid_solution = false;
-        int choose_armor_fail_count { 0 };
-        int invalid_input_fail_count { 0 };
-        int trajectory_fail_count { 0 };
+        auto best_armor_opt = std::optional<Armor3D> {};
 
         for (int i = 0; i < kMaxIterateCount; ++i) {
             // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
@@ -122,105 +157,39 @@ struct FireControl::Impl {
             auto chosen_armor_opt =
                 aim_point_chooser.choose_armor(predicted_armors, predicted_ekf_x);
             if (!chosen_armor_opt) {
-                ++choose_armor_fail_count;
-                if (predicted_armors.empty()) {
-                    log.warn("solve failed: no predicted armors (iter={}, predict_time={:.4f}s, "
-                             "fly_time={:.4f}s, delay={:.4f}s)",
-                        i, total_predict_time, current_fly_time, config.shoot_delay);
-                } else {
-                    auto center_yaw       = std::atan2(predicted_ekf_x[2], predicted_ekf_x[0]);
-                    auto angular_velocity = predicted_ekf_x[7];
-                    log.warn("solve failed: choose_armor rejected all candidates (iter={}, "
-                             "predicted_armors={}, center_yaw={:.3f}rad, "
-                             "angular_velocity={:.3f}rad/s)",
-                        i, predicted_armors.size(), center_yaw, angular_velocity);
-                }
                 continue;
             }
             best_armor_opt = chosen_armor_opt;
 
-            auto const& armor_translation = best_armor_opt->translation;
-
             auto armor_position_in_world = Eigen::Vector3d {};
-            armor_translation.copy_to(armor_position_in_world);
+            best_armor_opt->translation.copy_to(armor_position_in_world);
 
-            auto _odom_to_muzzle_translation = Eigen::Vector3d {};
-            odom_to_muzzle_translation.copy_to(_odom_to_muzzle_translation);
-
-            auto bullet_in_muzzle = armor_position_in_world - _odom_to_muzzle_translation;
-
-            auto target_d = std::sqrt(bullet_in_muzzle.x() * bullet_in_muzzle.x()
-                + bullet_in_muzzle.y() * bullet_in_muzzle.y());
-            auto target_h = bullet_in_muzzle.z();
+            auto target_d = std::sqrt(armor_position_in_world.x() * armor_position_in_world.x()
+                + armor_position_in_world.y() * armor_position_in_world.y());
             if (!(target_d > 0.0)) {
-                ++invalid_input_fail_count;
-                log.warn("solve failed: invalid trajectory input (iter={}, target_d={:.6f}, "
-                         "target_h={:.6f}, bullet_in_muzzle=[{:.3f}, {:.3f}, {:.3f}])",
-                    i, target_d, target_h, bullet_in_muzzle.x(), bullet_in_muzzle.y(),
-                    bullet_in_muzzle.z());
                 continue;
             }
 
             auto solution           = TrajectorySolution {};
             solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
-            solution.input.target_h = target_h;
+            solution.input.target_h = armor_position_in_world.z();
 
             auto result = solution.solve();
-
             if (!result) {
-                ++trajectory_fail_count;
-                log.warn("solve failed: trajectory solver did not converge (iter={}, v0={:.3f}, "
-                         "target_d={:.3f}, target_h={:.3f})",
-                    i, solution.input.v0, solution.input.target_d, solution.input.target_h);
                 continue;
             }
 
-            has_valid_solution = true;
-            auto time_error    = std::abs(result->fly_time - current_fly_time);
-            current_fly_time   = result->fly_time;
-            trajectory_result  = *result;
-            horizon_distance   = target_d;
-
+            auto time_error  = std::abs(result->fly_time - current_fly_time);
+            current_fly_time = result->fly_time;
             if (time_error < kMaxFlyTimeThreshold) break;
         }
 
-        if (!has_valid_solution || !best_armor_opt) {
-            log.warn("solve failed: exhausted {} iterations (choose_armor_fail={}, "
-                     "invalid_input_fail={}, trajectory_fail={})",
-                kMaxIterateCount, choose_armor_fail_count, invalid_input_fail_count,
-                trajectory_fail_count);
+        if (!best_armor_opt) {
             return std::nullopt;
         }
 
-        auto best_armor_position_in_world = Eigen::Vector3d {};
-        best_armor_opt->translation.copy_to(best_armor_position_in_world);
-
-        auto odom_to_muzzle = Eigen::Vector3d {};
-        odom_to_muzzle_translation.copy_to(odom_to_muzzle);
-
-        // Keep yaw/pitch in the same reference: both are solved from target position relative to
-        // muzzle in odom frame.
-        auto target_in_muzzle = best_armor_position_in_world - odom_to_muzzle;
-        auto final_yaw =
-            std::atan2(best_armor_position_in_world.y(), best_armor_position_in_world.x());
-        final_yaw += config.yaw_offset;
-
-        auto command = ShootEvaluator::Command {
-            .control          = control,
-            .auto_aim_enabled = control,
-            .aim_point_valid  = true,
-            .yaw              = final_yaw,
-            .distance         = horizon_distance,
-        };
-        auto shoot_permitted = shoot_evaluator.evaluate(command, current_yaw);
-
-        return Result {
-            .pitch            = trajectory_result.pitch + config.pitch_offset,
-            .yaw              = final_yaw,
-            .horizon_distance = horizon_distance,
-            .shoot_permitted  = shoot_permitted,
-        };
+        return make_result(*best_armor_opt, control, current_yaw);
     }
 };
 
@@ -232,8 +201,7 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
     return pimpl->initialize(yaml);
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot,
-    Translation const& odom_to_muzzle_translation, bool control, double current_yaw)
+auto FireControl::solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
     -> std::optional<Result> {
-    return pimpl->solve(snapshot, odom_to_muzzle_translation, control, current_yaw);
+    return pimpl->solve(snapshot, control, current_yaw);
 }

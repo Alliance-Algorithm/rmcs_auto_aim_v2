@@ -17,7 +17,7 @@ namespace {
 auto make_decider_config() -> YAML::Node {
     return YAML::Load(R"(
 max_temporary_loss_frames: 5
-max_temporary_loss_duration_ms: 200.0
+max_detecting_loss_frames: 3
 tracking_confirm_frames: 3
 )");
 }
@@ -64,25 +64,30 @@ TEST(tracker_decider, reacquire_requires_confirm_frames) {
         t += 8ms;
         output = decider.update(observed, t);
     }
-    EXPECT_EQ(output.state, State::Tracking);
+    EXPECT_TRUE(output.allow_takeover);
+    EXPECT_TRUE(output.tracking_confirmed);
 
     for (int i = 0; i < 2; ++i) {
         t += 8ms;
         output = decider.update(empty, t);
     }
-    EXPECT_EQ(output.state, State::TemporaryLost);
+    EXPECT_TRUE(output.allow_takeover);
+    EXPECT_FALSE(output.tracking_confirmed);
 
     t += 8ms;
     output = decider.update(observed, t);
-    EXPECT_EQ(output.state, State::Detecting);
+    EXPECT_FALSE(output.allow_takeover);
+    EXPECT_FALSE(output.tracking_confirmed);
 
     t += 8ms;
     output = decider.update(observed, t);
-    EXPECT_EQ(output.state, State::Detecting);
+    EXPECT_FALSE(output.allow_takeover);
+    EXPECT_FALSE(output.tracking_confirmed);
 
     t += 8ms;
     output = decider.update(observed, t);
-    EXPECT_EQ(output.state, State::Tracking);
+    EXPECT_TRUE(output.allow_takeover);
+    EXPECT_TRUE(output.tracking_confirmed);
 }
 
 TEST(tracker_decider, invalid_observation_is_not_treated_as_seen) {
@@ -101,15 +106,20 @@ TEST(tracker_decider, invalid_observation_is_not_treated_as_seen) {
         t += 8ms;
         output = decider.update(seen, t);
     }
-    ASSERT_EQ(output.state, State::Tracking);
+    ASSERT_TRUE(output.allow_takeover);
+    ASSERT_TRUE(output.tracking_confirmed);
 
     t += 8ms;
     output = decider.update(unseen, t);
-    EXPECT_EQ(output.state, State::TemporaryLost);
+    EXPECT_TRUE(output.allow_takeover);
+    EXPECT_FALSE(output.tracking_confirmed);
 
     for (int i = 0; i < 5; ++i) {
         t += 8ms;
         output = decider.update(unseen, t);
     }
-    EXPECT_EQ(output.state, State::Lost);
+    EXPECT_EQ(output.target_id, DeviceId::UNKNOWN);
+    EXPECT_FALSE(output.snapshot.has_value());
+    EXPECT_FALSE(output.allow_takeover);
+    EXPECT_FALSE(output.tracking_confirmed);
 }

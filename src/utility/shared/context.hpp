@@ -32,7 +32,7 @@ struct AutoAimState {
 
     DeviceId target { DeviceId::UNKNOWN };
 
-    auto set_identity() noexcept -> void {
+    auto reset() noexcept -> void {
         timestamp = Clock::now();
 
         gimbal_takeover = false;
@@ -42,14 +42,30 @@ struct AutoAimState {
         target          = DeviceId::UNKNOWN;
     }
 
-    auto set_safe_state(double current_yaw, double current_pitch) noexcept -> void {
+    auto set_hold_state(double current_yaw, double current_pitch, DeviceId current_target) noexcept
+        -> void {
         timestamp = Clock::now();
 
-        gimbal_takeover = false;
+        gimbal_takeover = true;
         shoot_permitted = false;
         yaw             = current_yaw;
         pitch           = current_pitch;
-        target          = DeviceId::UNKNOWN;
+        target          = current_target;
+    }
+
+    auto set_tracking_state(double target_yaw, double target_pitch, DeviceId tracked_target,
+        bool allow_shoot) noexcept -> void {
+        timestamp = Clock::now();
+
+        gimbal_takeover = true;
+        shoot_permitted = allow_shoot;
+        yaw             = target_yaw;
+        pitch           = target_pitch;
+        target          = tracked_target;
+    }
+
+    [[nodiscard]] auto has_control_direction() const noexcept -> bool {
+        return gimbal_takeover && std::isfinite(yaw) && std::isfinite(pitch);
     }
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
@@ -65,7 +81,7 @@ struct ControlState {
 
     Transform odom_to_camera_transform {};
 
-    auto set_identity() noexcept -> void {
+    auto reset() noexcept -> void {
         timestamp                = Clock::now();
         shoot_mode               = ShootMode::STOPPING;
         yaw                      = std::numeric_limits<double>::quiet_NaN();

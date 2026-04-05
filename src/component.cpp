@@ -44,34 +44,17 @@ public:
     }
 
     auto update() -> void override {
-        using namespace rmcs_description;
-
         if (!rmcs_tf.ready()) [[unlikely]] {
-            action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
-            control_state.set_identity();
-            reset_control_commands();
+            handle_tf_not_ready();
             return;
         }
-        {
-            update_gimbal_direction();
-            update_control_state();
 
-            auto success = feishu.commit(control_state);
-            if (!success) {
-                action_throttler.dispatch("commit_control_state_failed",
-                    [&] { rclcpp.info("commit control state failed!"); });
-            } else {
-                action_throttler.reset("commit_control_state_failed");
-            }
-        }
-        {
-            refresh_auto_aim_state();
-            apply_auto_aim_state(current_auto_aim_state());
-        }
+        publish_control_state();
+        forward_auto_aim_outputs();
     }
 
 private:
-    static constexpr auto auto_aim_state_timeout_ { std::chrono::milliseconds { 100 } };
+    static constexpr auto auto_aim_state_timeout { std::chrono::milliseconds { 100 } };
 
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
@@ -93,35 +76,71 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-    auto refresh_auto_aim_state() -> void {
-        if (!feishu.updated()) return;
-
-        auto_aim_state           = feishu.fetch();
-        auto_aim_state_received_ = true;
-    }
-
-    auto has_valid_auto_aim_state() const -> bool {
+    auto has_fresh_auto_aim_state() const -> bool {
         return auto_aim_state_received_
-            && Clock::now() - auto_aim_state.timestamp <= auto_aim_state_timeout_;
+            && Clock::now() - auto_aim_state.timestamp <= auto_aim_state_timeout;
     }
 
-    auto current_auto_aim_state() const -> AutoAimState {
-        auto state = auto_aim_state;
-        if (has_valid_auto_aim_state()) {
-            return state;
-        }
-
-        state.gimbal_takeover = false;
-        state.shoot_permitted = false;
-        state.yaw             = current_gimbal_yaw;
-        state.pitch           = current_gimbal_pitch;
+    static auto make_invalid_auto_aim_state() -> AutoAimState {
+        auto state = AutoAimState {};
+        state.reset();
         return state;
     }
 
-    auto apply_auto_aim_state(const AutoAimState& state) -> void {
-        *gimbal_takeover = state.gimbal_takeover;
-        *shoot_permitted = state.shoot_permitted;
-        update_target_direction(state);
+    auto resolve_auto_aim_state() -> AutoAimState {
+        if (feishu.updated()) {
+            auto_aim_state           = feishu.fetch();
+            auto_aim_state_received_ = true;
+        }
+
+        if (has_fresh_auto_aim_state()) {
+            return auto_aim_state;
+        }
+
+        return make_invalid_auto_aim_state();
+    }
+
+    auto publish_auto_aim_outputs(const AutoAimState& state) -> void {
+        *gimbal_takeover  = state.gimbal_takeover;
+        *shoot_permitted  = state.shoot_permitted;
+        *target_direction = compute_target_direction(state);
+    }
+
+    static auto compute_target_direction(const AutoAimState& state) -> Eigen::Vector3d {
+        if (!state.has_control_direction()) {
+            return Eigen::Vector3d::Zero();
+        }
+
+        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
+
+        // clang-format off
+        return Eigen::Vector3d {
+            std::cos(pitch) * std::cos(yaw),
+            std::cos(pitch) * std::sin(yaw), 
+            std::sin(pitch)
+        };
+        // clang-format on
+    }
+
+    auto forward_auto_aim_outputs() -> void { publish_auto_aim_outputs(resolve_auto_aim_state()); }
+
+    auto handle_tf_not_ready() -> void {
+        action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
+        control_state.reset();
+        publish_auto_aim_outputs(make_invalid_auto_aim_state());
+    }
+
+    auto publish_control_state() -> void {
+        update_gimbal_direction();
+        update_control_state();
+
+        auto success = feishu.commit(control_state);
+        if (!success) {
+            action_throttler.dispatch("commit_control_state_failed",
+                [&] { rclcpp.info("commit control state failed!"); });
+        } else {
+            action_throttler.reset("commit_control_state_failed");
+        }
     }
 
     auto update_control_state() -> void {
@@ -146,36 +165,20 @@ private:
         control_state.pitch = current_gimbal_pitch;
     }
 
-    auto update_target_direction(const AutoAimState& state) -> void {
-        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
-
-        // clang-format off
-        *target_direction = Eigen::Vector3d {
-            std::cos(pitch) * std::cos(yaw),
-            std::cos(pitch) * std::sin(yaw), 
-            std::sin(pitch)
-        };
-        // clang-format on
-    }
-
-    auto reset_control_commands() -> void {
-        *gimbal_takeover  = false;
-        *shoot_permitted  = false;
-        *target_direction = Eigen::Vector3d::Zero();
-    }
-
     auto update_gimbal_direction() -> void {
-        auto odom_to_muzzle_transform =
+        using namespace rmcs_description;
+
+        auto odom_to_pitch_transform =
             fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::PitchLink>(
                 *rmcs_tf);
 
-        auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.toRotationMatrix() };
+        auto quat = Eigen::Quaterniond { odom_to_pitch_transform.toRotationMatrix() };
 
-        auto current_muzzle_direction = quat * Eigen::Vector3d::UnitX();
+        auto current_pitch_direction = quat * Eigen::Vector3d::UnitX();
 
-        current_gimbal_yaw = std::atan2(current_muzzle_direction.y(), current_muzzle_direction.x());
-        current_gimbal_pitch = std::atan2(current_muzzle_direction.z(),
-            std::hypot(current_muzzle_direction.x(), current_muzzle_direction.y()));
+        current_gimbal_yaw   = std::atan2(current_pitch_direction.y(), current_pitch_direction.x());
+        current_gimbal_pitch = std::atan2(current_pitch_direction.z(),
+            std::hypot(current_pitch_direction.x(), current_pitch_direction.y()));
     }
 };
 

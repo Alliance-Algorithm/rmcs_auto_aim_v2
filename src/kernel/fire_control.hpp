@@ -5,7 +5,6 @@
 
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
-#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::kernel {
@@ -25,7 +24,7 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation,
-        bool control, double current_yaw) -> std::optional<Result>;
+    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
+        -> std::optional<Result>;
 };
 }

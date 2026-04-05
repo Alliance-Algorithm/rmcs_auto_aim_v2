@@ -45,7 +45,6 @@ struct EKFParameters {
     }
 
     static auto radius(DeviceId const& device) -> double {
-
         switch (device) {
         case DeviceId::OUTPOST:
             return kOutpostRadius;
