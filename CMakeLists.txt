@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 project(rmcs_auto_aim_v2)
 
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
@@ -134,4 +135,8 @@ pluginlib_export_plugin_description_file(
 )
 
 find_package(ament_cmake REQUIRED)
+if(BUILD_TESTING)
+    add_subdirectory(test)
+endif()
+
 ament_package()
