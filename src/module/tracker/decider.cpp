@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "module/predictor/robot_state.hpp"
 #include "utility/serializable.hpp"
@@ -71,20 +72,28 @@ struct Decider::Impl {
         }
 
         auto observed_ids = std::unordered_set<DeviceId> {};
+        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> {};
 
-        // 将检测到的装甲板按 DeviceId 分发给对应的 RobotState
         for (const auto& armor : armors) {
-            auto id = armor.genre;
-            auto& target_memory = target_memories[id];
+            grouped_armors[armor.genre].emplace_back(armor);
+        }
 
-            // 发现新 ID，创建新的追踪器
+        for (auto& [id, grouped] : grouped_armors) {
+            auto& target_memory = target_memories[id];
             if (!trackers.contains(id)) {
                 trackers[id] = std::make_unique<RobotState>();
-                trackers[id]->initialize(armor, t);
+                trackers[id]->initialize(grouped.front(), t);
             }
 
-            // 只有融合成功的观测才用于更新可见性和丢失计数。
-            auto fused = trackers[id]->update(armor);
+            bool fused = false;
+            if (id == DeviceId::OUTPOST) {
+                fused = trackers[id]->update(std::span<Armor3D const> { grouped.data(), grouped.size() });
+            } else {
+                for (auto const& armor : grouped) {
+                    fused = trackers[id]->update(armor) || fused;
+                }
+            }
+
             if (fused) {
                 observed_ids.insert(id);
                 target_memory.last_seen_time          = t;

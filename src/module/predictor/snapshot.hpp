@@ -16,7 +16,7 @@ public:
     using Clock = util::Clock;
 
     Snapshot(EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
-        Clock::time_point stamp) noexcept;
+        Clock::time_point stamp, int outpost_order_idx = 0) noexcept;
     Snapshot(Snapshot const&);
     Snapshot(Snapshot&&) noexcept;
     Snapshot& operator=(Snapshot const&);

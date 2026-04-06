@@ -185,9 +185,7 @@ struct FireControl::Impl {
             if (time_error < kMaxFlyTimeThreshold) break;
         }
 
-        if (!best_armor_opt) {
-            return std::nullopt;
-        }
+        if (!best_armor_opt) return std::nullopt;
 
         return make_result(*best_armor_opt, control, current_yaw);
     }

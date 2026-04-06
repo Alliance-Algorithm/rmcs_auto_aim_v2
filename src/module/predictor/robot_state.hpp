@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <span>
 
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
@@ -24,6 +25,7 @@ public:
 
     auto match(Armor3D const& armor) const -> MatchResult;
     auto update(Armor3D const& armor) -> bool;
+    auto update(std::span<Armor3D const> armors) -> bool;
 
     auto is_converged() const -> bool;
 

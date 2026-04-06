@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "utility/math/angle.hpp"
@@ -14,6 +16,26 @@ namespace rmcs::predictor {
 struct EKFParameters {
     using EKF = util::EKF<11, 4>;
 
+    static constexpr auto outpost_height_order(int order_idx) -> std::array<int, kOutpostArmorCount> {
+        auto normalized = std::clamp(order_idx, 0, kOutpostHeightOrderCount - 1);
+        return kOutpostHeightOrders[normalized];
+    }
+
+    static constexpr auto outpost_height_rank(int order_idx, int id) -> int {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return outpost_height_order(order_idx)[normalized_id];
+    }
+
+    static auto outpost_phase(EKF::XVec const& x, int id) -> double {
+        return util::normalize_angle(x[6] + id * 2 * std::numbers::pi / kOutpostArmorCount);
+    }
+
+    static auto armor_yaw(DeviceId const& device, EKF::XVec const& x, int id, int armor_num) -> double {
+        if (device == DeviceId::OUTPOST) return outpost_phase(x, id);
+        auto angle = x[6];
+        return util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
+    }
+
     static auto x(Armor3D const& armor) -> EKF::XVec {
         const auto r = radius(armor.genre);
 
@@ -25,16 +47,24 @@ struct EKFParameters {
         const double yaw    = ypr[0];
         const auto center_x = trans_x + r * std::cos(yaw);
         const auto center_y = trans_y + r * std::sin(yaw);
-        const auto center_z = trans_z;
+        if (armor.genre == DeviceId::OUTPOST) {
+            // Observation ids are per-frame detection order, not persistent physical armor ids.
+            // Anchor the ring phase directly to the observed armor and let slot association happen in the tracker.
+            const auto theta = util::normalize_angle(yaw);
+            auto x = EKF::XVec { center_x, 0, center_y, 0, trans_z, 0, theta,
+                kOutpostAngularSpeed, kOutpostRadius, kOutpostArmorHeightStep, 0 };
+            return x;
+        }
 
-        auto x = EKF::XVec { center_x, 0, center_y, 0, center_z, 0, yaw, 0, r, 0, 0 };
+        const auto center_z = trans_z;
+        auto x              = EKF::XVec { center_x, 0, center_y, 0, center_z, 0, yaw, 0, r, 0, 0 };
         return x;
     }
 
     static auto P_initial_dig(DeviceId const& device) -> EKF::PDig {
         auto P_dig = EKF::PDig {};
         if (device == DeviceId::OUTPOST) {
-            P_dig << 1, 64, 1, 64, 1, 81, 0.4, 100, 1e-4, 0, 0;
+            P_dig << 1, 64, 1, 64, 1, 81, 0.4, 1e-4, 1e-6, 1e-6, 1e-6;
         } else if (device == DeviceId::BASE) {
             P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 0, 0;
         } else {
@@ -132,7 +162,18 @@ struct EKFParameters {
     }
 
     // 计算出装甲板中心的坐标（考虑长短轴）
-    static auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num) -> Eigen::Vector3d {
+    static auto h_armor_xyz(
+        DeviceId const& device, EKF::XVec const& x, int id, int armor_num, int order_idx = 0)
+        -> Eigen::Vector3d {
+        if (device == DeviceId::OUTPOST) {
+            const auto phase = outpost_phase(x, id);
+            const auto r     = x[8];
+            const auto pos_x = x[0] - r * std::cos(phase);
+            const auto pos_y = x[2] - r * std::sin(phase);
+            const auto pos_z = x[4] + outpost_height_rank(order_idx, id) * x[9];
+            return Eigen::Vector3d { pos_x, pos_y, pos_z };
+        }
+
         // x vx y vy z vz a w r l h
         // x, y, z：装甲板旋转中心在世界坐标系下的位置
         // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
@@ -157,21 +198,28 @@ struct EKFParameters {
         return result;
     }
 
-    static auto h(EKF::XVec const& x, int id, int armor_num) -> EKF::ZVec {
-        const auto xyz = h_armor_xyz(x, id, armor_num);
+    static auto h(DeviceId const& device, EKF::XVec const& x, int id, int armor_num,
+        int order_idx = 0) -> EKF::ZVec {
+        const auto xyz = h_armor_xyz(device, x, id, armor_num, order_idx);
         const auto ypd = util::xyz2ypd(xyz);
-        auto angle     = x(6);
-        const auto yaw = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
+        const auto yaw = armor_yaw(device, x, id, armor_num);
 
         const auto result = EKF::ZVec { ypd[0], ypd[1], ypd[2], yaw };
         return result;
     };
 
-    static auto f(double dt) -> auto {
-        return [dt](EKF::XVec const& x) {
+    static auto f(DeviceId const& device, double dt) -> auto {
+        return [device, dt](EKF::XVec const& x) {
             EKF::XVec x_prior = F(dt) * x;
-            const auto yaw    = x_prior[6];
-            x_prior[6]        = util::normalize_angle(yaw);
+            x_prior[6]        = util::normalize_angle(x_prior[6]);
+            if (device == DeviceId::OUTPOST) {
+                x_prior[4]  = x[4];
+                x_prior[5]  = 0.;
+                x_prior[7]  = x[7];
+                x_prior[8]  = x[8];
+                x_prior[9]  = x[9];
+                x_prior[10] = 0.;
+            }
             return x_prior;
         };
     }
@@ -198,7 +246,39 @@ struct EKFParameters {
         return R;
     }
 
-    static auto H(EKF::XVec const& x, int id, int armor_num) -> EKF::HMat {
+    static auto H(DeviceId const& device, EKF::XVec const& x, int id, int armor_num,
+        int order_idx = 0) -> EKF::HMat {
+        if (device == DeviceId::OUTPOST) {
+            const auto phase     = outpost_phase(x, id);
+            const auto cos_phase = std::cos(phase);
+            const auto sin_phase = std::sin(phase);
+            const auto r         = x[8];
+            const auto rank      = static_cast<double>(outpost_height_rank(order_idx, id));
+
+            auto H_armor_xyza = Eigen::Matrix<double, 4, 11> {};
+            // clang-format off
+            H_armor_xyza <<
+                1, 0, 0, 0, 0, 0,  r * sin_phase, 0, -cos_phase, 0, 0,
+                0, 0, 1, 0, 0, 0, -r * cos_phase, 0, -sin_phase, 0, 0,
+                0, 0, 0, 0, 1, 0,              0, 0,          0, rank, 0,
+                0, 0, 0, 0, 0, 0,              1, 0,          0,    0, 0;
+            // clang-format on
+
+            auto xyz         = h_armor_xyz(device, x, id, armor_num, order_idx);
+            auto H_armor_ypd = util::xyz2ypd_jacobian(xyz);
+
+            Eigen::Matrix<double, 4, 4> H_armor_ypda;
+            // clang-format off
+            H_armor_ypda <<
+                H_armor_ypd(0, 0), H_armor_ypd(0, 1), H_armor_ypd(0, 2), 0,
+                H_armor_ypd(1, 0), H_armor_ypd(1, 1), H_armor_ypd(1, 2), 0,
+                H_armor_ypd(2, 0), H_armor_ypd(2, 1), H_armor_ypd(2, 2), 0,
+                                0,                 0,                 0, 1;
+            // clang-format on
+
+            return H_armor_ypda * H_armor_xyza;
+        }
+
         // x vx y vy z vz a w r l h
         // x, y, z：装甲板旋转中心在世界坐标系下的位置
         // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
@@ -236,7 +316,7 @@ struct EKFParameters {
             0, 0, 0, 0, 0, 0,     1, 0,     0,     0,     0;
         // clang-format on
 
-        auto xyz         = h_armor_xyz(x, id, armor_num);
+        auto xyz         = h_armor_xyz(device, x, id, armor_num, order_idx);
         auto H_armor_ypd = util::xyz2ypd_jacobian(xyz);
 
         Eigen::Matrix<double, 4, 4> H_armor_ypda;

@@ -14,17 +14,20 @@ struct Snapshot::Impl {
     CampColor color;
     int armor_num;
     TimePoint stamp;
+    int outpost_order_idx;
 
-    Impl(EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp) noexcept
+    Impl(EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp,
+        int outpost_order_idx) noexcept
         : ekf_x_ { std::move(ekf_x) }
         , device { device }
         , color { color }
         , armor_num { armor_num }
-        , stamp { stamp } { }
+        , stamp { stamp }
+        , outpost_order_idx { outpost_order_idx } { }
 
     auto predict_at(TimePoint t) const -> EKF::XVec {
         double dt = util::delta_time(t, stamp).count();
-        return EKFParameters::f(dt)(ekf_x_);
+        return EKFParameters::f(device, dt)(ekf_x_);
     }
 
     auto ekf_x() const -> EKF::XVec { return ekf_x_; }
@@ -32,21 +35,21 @@ struct Snapshot::Impl {
 
     auto predicted_armors(TimePoint t) const -> std::vector<Armor3D> {
         auto const& ekf_x = predict_at(t);
-        auto _angle       = ekf_x[6];
 
         auto armors = std::vector<Armor3D> {};
         armors.reserve(armor_num);
 
         for (int id = 0; id < armor_num; ++id) {
-            auto angle    = util::normalize_angle(_angle + id * 2 * std::numbers::pi / armor_num);
-            auto position = EKFParameters::h_armor_xyz(ekf_x, id, armor_num);
+            auto angle    = EKFParameters::armor_yaw(device, ekf_x, id, armor_num);
+            auto position =
+                EKFParameters::h_armor_xyz(device, ekf_x, id, armor_num, outpost_order_idx);
 
             auto armor        = Armor3D {};
             armor.genre       = device;
             armor.color       = camp_color2armor_color(color);
             armor.id          = id;
             armor.translation = position;
-            armor.orientation = util::euler_to_quaternion(angle, 15. / 180 * std::numbers::pi, 0);
+            armor.orientation = util::euler_to_quaternion(angle, kPredictedArmorPitch, 0);
             armors.emplace_back(armor);
         }
         return armors;
@@ -54,8 +57,10 @@ struct Snapshot::Impl {
 };
 
 Snapshot::Snapshot(
-    EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp) noexcept
-    : pimpl { std::make_unique<Impl>(std::move(ekf_x), device, color, armor_num, stamp) } { }
+    EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp,
+    int outpost_order_idx) noexcept
+    : pimpl { std::make_unique<Impl>(
+          std::move(ekf_x), device, color, armor_num, stamp, outpost_order_idx) } { }
 
 Snapshot::Snapshot(Snapshot const& other)
     : pimpl { std::make_unique<Impl>(*other.pimpl) } { }
