@@ -40,7 +40,7 @@ struct Snapshot::Impl {
         armors.reserve(armor_num);
 
         for (int id = 0; id < armor_num; ++id) {
-            auto angle    = EKFParameters::armor_yaw(device, ekf_x, id, armor_num);
+            auto angle = EKFParameters::armor_yaw(device, ekf_x, id);
             auto position =
                 EKFParameters::h_armor_xyz(device, ekf_x, id, armor_num, outpost_order_idx);
 
@@ -49,16 +49,25 @@ struct Snapshot::Impl {
             armor.color       = camp_color2armor_color(color);
             armor.id          = id;
             armor.translation = position;
-            armor.orientation = util::euler_to_quaternion(angle, kPredictedArmorPitch, 0);
+            armor.orientation = util::euler_to_quaternion(angle, predicted_armor_pitch(device), 0);
             armors.emplace_back(armor);
         }
         return armors;
     }
+
+private:
+    static auto predicted_armor_pitch(DeviceId device) -> double {
+        switch (device) {
+        case DeviceId::OUTPOST:
+            return kPredictedOutpostArmorPitch;
+        default:
+            return kPredictedOtherArmorPitch;
+        }
+    }
 };
 
-Snapshot::Snapshot(
-    EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num, TimePoint stamp,
-    int outpost_order_idx) noexcept
+Snapshot::Snapshot(EKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
+    TimePoint stamp, int outpost_order_idx) noexcept
     : pimpl { std::make_unique<Impl>(
           std::move(ekf_x), device, color, armor_num, stamp, outpost_order_idx) } { }
 
