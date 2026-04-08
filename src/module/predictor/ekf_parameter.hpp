@@ -140,17 +140,59 @@ public:
         return F;
     }
 
+    static auto F_outpost(double dt) -> EKF::AMat {
+        auto F = EKF::AMat {};
+        // clang-format off
+        F <<
+            1, dt,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  1, dt,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+            0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0;
+        // clang-format on
+        return F;
+    }
+
+    static auto Q_outpost(double dt) -> EKF::QMat {
+        constexpr double linear_acc_var = 10.0;
+        constexpr double z_mid_rw_var   = 1e-3;
+        constexpr double angle_rw_var   = 1e-3;
+        const auto a                    = dt * dt * dt * dt / 4.;
+        const auto b                    = dt * dt * dt / 2;
+        const auto c                    = dt * dt;
+
+        auto Q = EKF::QMat {};
+        // clang-format off
+        Q <<
+            a * linear_acc_var, b * linear_acc_var,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+            b * linear_acc_var, c * linear_acc_var,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0, a * linear_acc_var, b * linear_acc_var,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0, b * linear_acc_var, c * linear_acc_var,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0, z_mid_rw_var * dt, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0, angle_rw_var * dt, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0,              0, 0, 0, 0, 0,
+                             0,                  0,                  0,                  0,              0, 0,              0, 0, 0, 0, 0;
+        // clang-format on
+        return Q;
+    }
+
     // Piecewise White Noise Model
     // https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/07-Kalman-Filter-Math.ipynb
     static auto Q(DeviceId const& device, double dt) -> EKF::QMat {
+        if (device == DeviceId::OUTPOST) return Q_outpost(dt);
+
         double acc_var, angular_acc_var;
-        if (device == DeviceId::OUTPOST) {
-            acc_var         = 10;
-            angular_acc_var = 0.1;
-        } else {
-            acc_var         = 100;
-            angular_acc_var = 400;
-        }
+        acc_var         = 100;
+        angular_acc_var = 400;
 
         const auto a = dt * dt * dt * dt / 4.;
         const auto b = dt * dt * dt / 2;
@@ -214,18 +256,31 @@ public:
         return result;
     };
 
+    static auto f_outpost(double dt, int spin_sign) -> auto {
+        return [dt, spin_sign](EKF::XVec const& x) {
+            EKF::XVec x_prior = x;
+            auto const angular_speed =
+                spin_sign >= 0 ? kOutpostAngularSpeed : -kOutpostAngularSpeed;
+
+            x_prior[0]  = x[0] + x[1] * dt;
+            x_prior[1]  = x[1];
+            x_prior[2]  = x[2] + x[3] * dt;
+            x_prior[3]  = x[3];
+            x_prior[4]  = x[4];
+            x_prior[5]  = 0.0;
+            x_prior[6]  = util::normalize_angle(x[6] + angular_speed * dt);
+            x_prior[7]  = angular_speed;
+            x_prior[8]  = kOutpostRadius;
+            x_prior[9]  = kOutpostArmorHeightStep;
+            x_prior[10] = 0.0;
+            return x_prior;
+        };
+    }
+
     static auto f(DeviceId const& device, double dt) -> auto {
         return [device, dt](EKF::XVec const& x) {
             EKF::XVec x_prior = F(dt) * x;
             x_prior[6]        = util::normalize_angle(x_prior[6]);
-            if (device == DeviceId::OUTPOST) {
-                x_prior[4]  = x[4];
-                x_prior[5]  = 0.;
-                x_prior[7]  = x[7];
-                x_prior[8]  = x[8];
-                x_prior[9]  = x[9];
-                x_prior[10] = 0.;
-            }
             return x_prior;
         };
     }

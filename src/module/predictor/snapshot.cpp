@@ -27,6 +27,10 @@ struct Snapshot::Impl {
 
     auto predict_at(TimePoint t) const -> EKF::XVec {
         double dt = util::delta_time(t, stamp).count();
+        if (device == DeviceId::OUTPOST) {
+            auto spin_sign = ekf_x_[7] >= 0.0 ? +1 : -1;
+            return EKFParameters::f_outpost(dt, spin_sign)(ekf_x_);
+        }
         return EKFParameters::f(device, dt)(ekf_x_);
     }
 

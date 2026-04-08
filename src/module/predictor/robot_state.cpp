@@ -2,8 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <optional>
-#include <numeric>
 #include <vector>
 
 #include "module/predictor/ekf_parameter.hpp"
@@ -56,13 +54,21 @@ struct RobotState::Impl {
                 return;
             }
 
-            auto dt_s           = dt.count();
-            if (device == DeviceId::OUTPOST) outpost_state.record_predict_context(ekf.x, dt_s);
-            ekf.predict(
-                EKFParameters::f(device, dt_s),
-                [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
-                EKFParameters::Q(device, dt_s));
-            if (device == DeviceId::OUTPOST) outpost_state.correct(ekf.x);
+            auto dt_s = dt.count();
+            if (device == DeviceId::OUTPOST) {
+                auto spin_sign = outpost_state.current_spin_sign();
+                outpost_state.record_predict_context(ekf.x, dt_s);
+                ekf.predict(
+                    EKFParameters::f_outpost(dt_s, spin_sign),
+                    [dt_s](EKF::XVec const&) { return EKFParameters::F_outpost(dt_s); },
+                    EKFParameters::Q_outpost(dt_s));
+                outpost_state.correct(ekf.x);
+            } else {
+                ekf.predict(
+                    EKFParameters::f(device, dt_s),
+                    [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
+                    EKFParameters::Q(device, dt_s));
+            }
         }
 
         time_stamp = t;
@@ -117,61 +123,7 @@ struct RobotState::Impl {
         }
 
         if (!initialized) initialize(used_armors.front(), time_stamp);
-
-        auto forced_spin_sign = outpost_state.spin_locked()
-            ? std::optional<int> { outpost_state.current_spin_sign() }
-            : std::nullopt;
-        auto frame_match = outpost_state.match_frame(
-            used_armors, OutpostState::MatchContext { ekf.x, ekf.P(), armor_num }, forced_spin_sign);
-        if (!frame_match.valid) return false;
-
-        update_count++;
-
-        auto const allow_order_recalibration = used_armors.size() >= 2;
-        ekf.x = outpost_state.build_hypothesis_state(ekf.x, frame_match.spin_sign);
-        if (allow_order_recalibration && should_reseed_outpost_z_mid(used_armors.size()))
-            ekf.x[4] = frame_match.z_mid;
-        OutpostState::apply_constraints(ekf.x, frame_match.spin_sign);
-
-        auto observation_order = std::vector<std::size_t>(used_armors.size());
-        std::iota(observation_order.begin(), observation_order.end(), std::size_t { 0 });
-        std::sort(observation_order.begin(), observation_order.end(),
-            [&](std::size_t lhs, std::size_t rhs) {
-                return frame_match.slots_by_observation[lhs]
-                    < frame_match.slots_by_observation[rhs];
-            });
-
-        for (auto obs_index : observation_order) {
-            auto const& armor = used_armors[obs_index];
-            auto slot_idx     = frame_match.slots_by_observation[obs_index];
-
-            auto const [pos_x, pos_y, pos_z] = armor.translation;
-            auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
-            auto const ypd                   = util::xyz2ypd(xyz);
-
-            auto const [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
-            auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
-            auto const ypr         = util::eulers(orientation);
-
-            auto z = EKF::ZVec {};
-            z << ypd[0], ypd[1], ypd[2], ypr[0];
-
-            ekf.update(
-                z,
-                [slot_idx, order_idx = frame_match.order_idx, this](EKF::XVec const& x) {
-                    return EKFParameters::h(device, x, slot_idx, armor_num, order_idx);
-                },
-                [slot_idx, order_idx = frame_match.order_idx, this](EKF::XVec const& x) {
-                    return EKFParameters::H(device, x, slot_idx, armor_num, order_idx);
-                },
-                EKFParameters::R(xyz, ypr, ypd), EKFParameters::x_add, EKFParameters::z_subtract);
-
-            OutpostState::apply_constraints(ekf.x, frame_match.spin_sign);
-        }
-
-        outpost_state.apply_frame_match(frame_match, allow_order_recalibration);
-        correct();
-        return true;
+        return outpost_state.update(ekf, used_armors, armor_num, update_count);
     }
 
     auto is_converged() const -> bool {
@@ -203,10 +155,6 @@ struct RobotState::Impl {
     const double angle_error_threshold { 0.65 };
     OutpostState outpost_state;
 
-    auto should_reseed_outpost_z_mid(std::size_t observation_count) const -> bool {
-        return outpost_state.should_reseed_z_mid(observation_count);
-    }
-
     auto correct() -> void {
         if (device == DeviceId::OUTPOST) outpost_state.correct(ekf.x);
     }
@@ -226,13 +174,9 @@ struct RobotState::Impl {
     auto match(Armor3D const& armor) const -> MatchResult {
         if (!initialized) return { -1, 1e10, false };
         if (device == DeviceId::OUTPOST) {
-            auto forced_spin_sign = outpost_state.spin_locked()
-                ? std::optional<int> { outpost_state.current_spin_sign() }
-                : std::nullopt;
-            auto frame_match = outpost_state.match_frame(std::span<Armor3D const> { &armor, 1 },
-                OutpostState::MatchContext { ekf.x, ekf.P(), armor_num }, forced_spin_sign);
-            if (!frame_match.valid) return { -1, 1e10, false };
-            return { frame_match.slots_by_observation.front(), frame_match.cost, true };
+            auto match_result = outpost_state.match_armor(
+                armor, OutpostState::MatchContext { ekf.x, ekf.P(), armor_num });
+            return { match_result.armor_id, match_result.error, match_result.is_valid };
         }
 
         auto armors_xyza = calculate_armors(ekf.x);
