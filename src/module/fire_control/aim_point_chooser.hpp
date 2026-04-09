@@ -5,15 +5,11 @@
 #include <span>
 #include <yaml-cpp/yaml.h>
 
-#include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 namespace rmcs::fire_control {
 class AimPointChooser {
-private:
-    using EKF = util::EKF<11, 4>;
-
 public:
     struct Config {
         double coming_angle;               // rad
@@ -24,8 +20,8 @@ public:
     };
     auto initialize(Config const& config) noexcept -> void;
 
-    auto choose_armor(std::span<Armor3D const> armors, EKF::XVec const& ekf_x)
-        -> std::optional<Armor3D>;
+    auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
+        double angular_velocity) -> std::optional<Armor3D>;
 
     RMCS_PIMPL_DEFINITION(AimPointChooser)
 };

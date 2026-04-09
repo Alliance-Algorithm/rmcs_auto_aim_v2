@@ -121,7 +121,7 @@ struct FireControl::Impl {
             .yaw              = final_yaw,
             .distance         = target_d,
         };
-        auto shoot_permitted = shoot_evaluator.evaluate(command, current_yaw);
+        auto shoot_permitted   = shoot_evaluator.evaluate(command, current_yaw);
         const auto final_pitch = trajectory_result->pitch + config.pitch_offset;
 
         return Result {
@@ -134,10 +134,10 @@ struct FireControl::Impl {
 
     auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
         -> std::optional<Result> {
-        auto state = snapshot.ekf_x();
+        auto target_kinematics = snapshot.kinematics();
 
         // 以整车位置来初步迭代飞行时间
-        auto target_position_in_world = Eigen::Vector3d { state[0], state[2], state[4] };
+        auto target_position_in_world = target_kinematics.center_position;
 
         const double bullet_speed = config.initial_bullet_speed;
         auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
@@ -151,11 +151,11 @@ struct FireControl::Impl {
                 + std::chrono::duration_cast<Clock::duration>(
                     std::chrono::duration<double>(total_predict_time));
 
-            auto predicted_armors = snapshot.predicted_armors(t_target);
-            auto predicted_ekf_x  = snapshot.predict_at(t_target);
+            auto predicted_armors     = snapshot.predicted_armors(t_target);
+            auto predicted_kinematics = snapshot.kinematics_at(t_target);
 
-            auto chosen_armor_opt =
-                aim_point_chooser.choose_armor(predicted_armors, predicted_ekf_x);
+            auto chosen_armor_opt = aim_point_chooser.choose_armor(predicted_armors,
+                predicted_kinematics.center_position, predicted_kinematics.angular_velocity);
             if (!chosen_armor_opt) {
                 continue;
             }

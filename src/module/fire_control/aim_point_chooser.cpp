@@ -26,16 +26,14 @@ struct AimPointChooser::Impl {
         angular_velocity_threshold = config.angular_velocity_threshold;
     }
 
-    auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector<double, 11> const& ekf_x)
-        -> std::optional<Armor3D> {
+    auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
+        double angular_velocity) -> std::optional<Armor3D> {
         if (armors.empty()) {
             last_chosen_id = -1;
             return std::nullopt;
         }
 
-        const auto car_y = ekf_x[2], car_x = ekf_x[0];
-        const auto center_yaw       = std::atan2(car_y, car_x);
-        const auto angular_velocity = ekf_x[7];
+        const auto center_yaw = std::atan2(center_position.y(), center_position.x());
 
         struct ArmorCandidate {
             int index;
@@ -129,6 +127,6 @@ auto AimPointChooser::initialize(Config const& config) noexcept -> void {
 }
 
 auto AimPointChooser::choose_armor(std::span<Armor3D const> armors,
-    Eigen::Vector<double, 11> const& ekf_x) -> std::optional<Armor3D> {
-    return pimpl->choose_armor(armors, ekf_x);
+    Eigen::Vector3d const& center_position, double angular_velocity) -> std::optional<Armor3D> {
+    return pimpl->choose_armor(armors, center_position, angular_velocity);
 }

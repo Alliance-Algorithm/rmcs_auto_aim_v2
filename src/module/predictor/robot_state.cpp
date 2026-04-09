@@ -25,17 +25,17 @@ struct RobotState::Impl {
         , initialized { false } { }
 
     auto initialize(Armor3D const& armor, Clock::time_point t) -> void {
-        device    = armor.genre;
-        color     = armor_color2camp_color(armor.color);
-        armor_num = EKFParameters::armor_num(armor.genre);
+        device     = armor.genre;
+        color      = armor_color2camp_color(armor.color);
+        armor_num  = EKFParameters::armor_num(armor.genre);
         time_stamp = t;
         if (device == DeviceId::OUTPOST) {
-            outpost_ekf = OutpostEKF {
-                OutpostEKFParameters::x(armor), OutpostEKFParameters::P_initial_dig().asDiagonal()
-            };
+            outpost_ekf = OutpostEKF { OutpostEKFParameters::x(armor),
+                OutpostEKFParameters::P_initial_dig().asDiagonal() };
             outpost_state.initialize(outpost_ekf.x);
         } else {
-            ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
+            ekf =
+                EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
             outpost_state.reset();
         }
 
@@ -43,12 +43,14 @@ struct RobotState::Impl {
     }
 
     auto get_snapshot() const -> Snapshot {
-        auto outpost_order_idx =
-            device == DeviceId::OUTPOST ? outpost_state.current_order_idx() : 0;
-        auto ekf_x = device == DeviceId::OUTPOST
-            ? OutpostEKFParameters::legacy_x(outpost_ekf.x, outpost_state.current_spin_sign())
-            : ekf.x;
-        return { ekf_x, device, color, armor_num, time_stamp, outpost_order_idx };
+        if (device == DeviceId::OUTPOST) {
+            auto outpost_order_idx = outpost_state.current_order_idx();
+            auto outpost_spin_sign = outpost_state.current_spin_sign();
+            return { outpost_ekf.x, color, armor_num, time_stamp, outpost_spin_sign,
+                outpost_order_idx };
+        }
+
+        return { ekf.x, device, color, armor_num, time_stamp };
     }
 
     auto distance() const -> double {
@@ -92,9 +94,9 @@ struct RobotState::Impl {
         if (!initialized) {
             initialize(armor, time_stamp);
             if (device == DeviceId::OUTPOST)
-                return outpost_state.update(
-                    outpost_ekf, std::span<Armor3D const> { &armor, static_cast<std::size_t>(1) },
-                    armor_num, update_count);
+                return outpost_state.update(outpost_ekf,
+                    std::span<Armor3D const> { &armor, static_cast<std::size_t>(1) }, armor_num,
+                    update_count);
             return true;
         }
 
@@ -186,8 +188,8 @@ struct RobotState::Impl {
         auto armors = std::vector<Eigen::Vector4d> {};
         for (int i = 0; i < armor_num; i++) {
             auto angle = EKFParameters::armor_yaw(device, x, i);
-            auto xyz  = EKFParameters::h_armor_xyz(device, x, i, armor_num);
-            auto xyza = Eigen::Vector4d { xyz[0], xyz[1], xyz[2], angle };
+            auto xyz   = EKFParameters::h_armor_xyz(device, x, i, armor_num);
+            auto xyza  = Eigen::Vector4d { xyz[0], xyz[1], xyz[2], angle };
             armors.emplace_back(xyza);
         }
         return armors;
