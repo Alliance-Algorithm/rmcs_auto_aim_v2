@@ -1,6 +1,7 @@
 #include "snapshot.hpp"
 
 #include "module/predictor/ekf_parameter.hpp"
+#include "module/predictor/outpost_ekf_parameter.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/time.hpp"
@@ -29,9 +30,11 @@ struct Snapshot::Impl {
         double dt = util::delta_time(t, stamp).count();
         if (device == DeviceId::OUTPOST) {
             auto spin_sign = ekf_x_[7] >= 0.0 ? +1 : -1;
-            return EKFParameters::f_outpost(dt, spin_sign)(ekf_x_);
+            auto compact_x = OutpostEKFParameters::compact_x(ekf_x_);
+            auto predicted = OutpostEKFParameters::f(dt, spin_sign)(compact_x);
+            return OutpostEKFParameters::legacy_x(predicted, spin_sign);
         }
-        return EKFParameters::f(device, dt)(ekf_x_);
+        return EKFParameters::f(dt)(ekf_x_);
     }
 
     auto ekf_x() const -> EKF::XVec { return ekf_x_; }
@@ -43,10 +46,29 @@ struct Snapshot::Impl {
         auto armors = std::vector<Armor3D> {};
         armors.reserve(armor_num);
 
+        if (device == DeviceId::OUTPOST) {
+            auto compact_x = OutpostEKFParameters::compact_x(ekf_x);
+            for (int id = 0; id < armor_num; ++id) {
+                auto angle =
+                    OutpostEKFParameters::armor_yaw(compact_x, id);
+                auto position =
+                    OutpostEKFParameters::h_armor_xyz(compact_x, id, outpost_order_idx);
+
+                auto armor        = Armor3D {};
+                armor.genre       = device;
+                armor.color       = camp_color2armor_color(color);
+                armor.id          = id;
+                armor.translation = position;
+                armor.orientation =
+                    util::euler_to_quaternion(angle, predicted_armor_pitch(device), 0);
+                armors.emplace_back(armor);
+            }
+            return armors;
+        }
+
         for (int id = 0; id < armor_num; ++id) {
             auto angle = EKFParameters::armor_yaw(device, ekf_x, id);
-            auto position =
-                EKFParameters::h_armor_xyz(device, ekf_x, id, armor_num, outpost_order_idx);
+            auto position = EKFParameters::h_armor_xyz(device, ekf_x, id, armor_num);
 
             auto armor        = Armor3D {};
             armor.genre       = device;
