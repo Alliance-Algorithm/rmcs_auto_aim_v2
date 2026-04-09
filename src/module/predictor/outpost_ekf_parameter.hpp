@@ -14,8 +14,7 @@
 namespace rmcs::predictor {
 
 struct OutpostEKFParameters {
-    using EKF       = util::EKF<6, 4>;
-    using LegacyEKF = util::EKF<11, 4>;
+    using EKF = util::EKF<6, 4>;
 
     static constexpr int kOutpostArmorCount       = 3;
     static constexpr int kOutpostHeightOrderCount = 6;

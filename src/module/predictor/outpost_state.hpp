@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstddef>
-#include <optional>
 #include <span>
 #include <vector>
 
@@ -15,9 +13,16 @@ public:
     using EKF = OutpostEKFParameters::EKF;
 
     struct MatchContext {
-        EKF::XVec const& x;
-        EKF::PMat const& P;
-        int armor_num;
+        EKF::XVec x;
+        EKF::PMat P;
+        EKF::XVec negative_spin_x;
+        EKF::XVec positive_spin_x;
+    };
+
+    struct MatchResult {
+        int armor_id;
+        double error;
+        bool is_valid;
     };
 
     struct FrameMatch {
@@ -29,33 +34,15 @@ public:
         std::vector<int> slots_by_observation;
     };
 
-    struct MatchResult {
-        int armor_id;
-        double error;
-        bool is_valid;
-    };
-
     auto reset() -> void;
-    auto initialize(EKF::XVec& x) -> void;
 
     auto current_order_idx() const -> int;
     auto current_spin_sign() const -> int;
     auto spin_locked() const -> bool;
 
-    auto record_predict_context(EKF::XVec const& x, double dt_s) -> void;
-    auto correct(EKF::XVec& x) const -> void;
-
-    auto build_hypothesis_state(EKF::XVec const& fallback_x, int spin_sign) const -> EKF::XVec;
-
     auto match_armor(Armor3D const& armor, MatchContext const& context) const -> MatchResult;
-    auto match_frame(std::span<Armor3D const> armors, MatchContext const& context,
-        std::optional<int> forced_spin_sign = std::nullopt) const -> FrameMatch;
-    auto update(EKF& ekf, std::span<Armor3D const> armors, int armor_num, int& update_count)
-        -> bool;
-    auto apply_frame_match(FrameMatch const& frame_match, bool allow_order_recalibration) -> void;
-
-    auto is_converged(EKF::XVec const& x, EKF::PMat const& P, int update_count) const -> bool;
-
-    static auto apply_constraints(EKF::XVec& x) -> void;
+    auto match_frame(std::span<Armor3D const> armors, MatchContext const& context) const
+        -> FrameMatch;
+    auto apply_frame_match(FrameMatch const& frame_match) -> void;
 };
 }

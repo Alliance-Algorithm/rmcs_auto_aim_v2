@@ -85,14 +85,8 @@ struct Decider::Impl {
                 trackers[id]->initialize(grouped.front(), t);
             }
 
-            bool fused = false;
-            if (id == DeviceId::OUTPOST) {
-                fused = trackers[id]->update(std::span<Armor3D const> { grouped.data(), grouped.size() });
-            } else {
-                for (auto const& armor : grouped) {
-                    fused = trackers[id]->update(armor) || fused;
-                }
-            }
+            auto grouped_span = std::span<Armor3D const> { grouped.data(), grouped.size() };
+            bool fused        = trackers[id]->update(grouped_span);
 
             if (fused) {
                 observed_ids.insert(id);

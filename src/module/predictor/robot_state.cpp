@@ -1,237 +1,118 @@
 #include "robot_state.hpp"
 
-#include <algorithm>
-#include <cmath>
-#include <vector>
+#include <variant>
 
-#include "module/predictor/ekf_parameter.hpp"
-#include "module/predictor/outpost_ekf_parameter.hpp"
-#include "module/predictor/outpost_state.hpp"
-#include "utility/time.hpp"
+#include "module/predictor/outpost_robot_state.hpp"
+#include "module/predictor/regular_robot_state.hpp"
 
 using namespace rmcs::predictor;
 
-struct RobotState::Impl {
-    using EKF        = util::EKF<11, 4>;
-    using OutpostEKF = OutpostEKFParameters::EKF;
+namespace {
 
-    explicit Impl()
-        : device { DeviceId::UNKNOWN }
-        , color { CampColor::UNKNOWN }
-        , armor_num { 0 }
-        , ekf { EKF {} }
-        , outpost_ekf { OutpostEKF {} }
-        , time_stamp { Clock::now() }
-        , initialized { false } { }
+template <class... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
+
+template <class... Ts>
+Overloaded(Ts...) -> Overloaded<Ts...>;
+
+auto invalid_match_result() -> RobotState::MatchResult { return { -1, 1e10, false }; }
+
+auto empty_snapshot(RobotState::Clock::time_point stamp) -> Snapshot {
+    return { Snapshot::NormalEKF::XVec::Zero(),
+        rmcs::DeviceId::UNKNOWN,
+        rmcs::CampColor::UNKNOWN,
+        0,
+        stamp };
+}
+
+} // namespace
+
+struct RobotState::Impl {
+    using Backend = std::variant<std::monostate, RegularRobotState, OutpostRobotState>;
+
+    Backend backend {};
+    Clock::time_point pending_time_stamp { Clock::now() };
+
+    auto emplace_backend(DeviceId device, Clock::time_point stamp) -> void {
+        if (device == DeviceId::OUTPOST)
+            backend.template emplace<OutpostRobotState>(stamp);
+        else
+            backend.template emplace<RegularRobotState>(stamp);
+    }
+
+    auto reset_backend(Armor3D const& armor, Clock::time_point stamp) -> void {
+        emplace_backend(armor.genre, stamp);
+        pending_time_stamp = stamp;
+    }
+
+    auto ensure_backend(Armor3D const& armor) -> void {
+        if (!std::holds_alternative<std::monostate>(backend)) return;
+        emplace_backend(armor.genre, pending_time_stamp);
+    }
+
+    template <class Fn, class EmptyFn>
+    decltype(auto) dispatch(Fn&& fn, EmptyFn&& empty_fn) {
+        return std::visit(
+            Overloaded {
+                [&](std::monostate&) -> decltype(auto) { return empty_fn(); },
+                [&](auto& state) -> decltype(auto) { return fn(state); },
+            },
+            backend);
+    }
+
+    template <class Fn, class EmptyFn>
+    decltype(auto) dispatch(Fn&& fn, EmptyFn&& empty_fn) const {
+        return std::visit(
+            Overloaded {
+                [&](std::monostate const&) -> decltype(auto) { return empty_fn(); },
+                [&](auto const& state) -> decltype(auto) { return fn(state); },
+            },
+            backend);
+    }
 
     auto initialize(Armor3D const& armor, Clock::time_point t) -> void {
-        device     = armor.genre;
-        color      = armor_color2camp_color(armor.color);
-        armor_num  = EKFParameters::armor_num(armor.genre);
-        time_stamp = t;
-        if (device == DeviceId::OUTPOST) {
-            outpost_ekf = OutpostEKF { OutpostEKFParameters::x(armor),
-                OutpostEKFParameters::P_initial_dig().asDiagonal() };
-            outpost_state.initialize(outpost_ekf.x);
-        } else {
-            ekf =
-                EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
-            outpost_state.reset();
-        }
-
-        initialized = true;
-    }
-
-    auto get_snapshot() const -> Snapshot {
-        if (device == DeviceId::OUTPOST) {
-            auto outpost_order_idx = outpost_state.current_order_idx();
-            auto outpost_spin_sign = outpost_state.current_spin_sign();
-            return { outpost_ekf.x, color, armor_num, time_stamp, outpost_spin_sign,
-                outpost_order_idx };
-        }
-
-        return { ekf.x, device, color, armor_num, time_stamp };
-    }
-
-    auto distance() const -> double {
-        auto x = device == DeviceId::OUTPOST ? outpost_ekf.x[0] : ekf.x[0];
-        auto y = device == DeviceId::OUTPOST ? outpost_ekf.x[2] : ekf.x[2];
-        return std::sqrt(x * x + y * y);
+        reset_backend(armor, t);
+        dispatch([&](auto& state) { state.initialize(armor, t); }, [] {});
     }
 
     auto predict(Clock::time_point t) -> void {
-        if (initialized) {
-            auto dt = util::delta_time(t, time_stamp);
-            if (dt > reset_interval) {
-                initialized  = false;
-                update_count = 0;
-                time_stamp   = t;
-                outpost_state.reset();
-                return;
-            }
+        pending_time_stamp = t;
+        dispatch([&](auto& state) { state.predict(t); }, [] {});
+    }
 
-            auto dt_s = dt.count();
-            if (device == DeviceId::OUTPOST) {
-                auto spin_sign = outpost_state.current_spin_sign();
-                outpost_state.record_predict_context(outpost_ekf.x, dt_s);
-                outpost_ekf.predict(
-                    OutpostEKFParameters::f(dt_s, spin_sign),
-                    [dt_s](OutpostEKF::XVec const&) { return OutpostEKFParameters::F(dt_s); },
-                    OutpostEKFParameters::Q(dt_s));
-                outpost_state.correct(outpost_ekf.x);
-            } else {
-                ekf.predict(
-                    EKFParameters::f(dt_s),
-                    [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
-                    EKFParameters::Q(dt_s));
-            }
-        }
-
-        time_stamp = t;
+    auto match(Armor3D const& armor) const -> MatchResult {
+        return dispatch(
+            [&](auto const& state) {
+                auto result = state.match(armor);
+                return MatchResult { result.armor_id, result.error, result.is_valid };
+            },
+            [] { return invalid_match_result(); });
     }
 
     auto update(Armor3D const& armor) -> bool {
-        if (!initialized) {
-            initialize(armor, time_stamp);
-            if (device == DeviceId::OUTPOST)
-                return outpost_state.update(outpost_ekf,
-                    std::span<Armor3D const> { &armor, static_cast<std::size_t>(1) }, armor_num,
-                    update_count);
-            return true;
-        }
-
-        if (device == DeviceId::OUTPOST)
-            return update(std::span<Armor3D const> { &armor, static_cast<std::size_t>(1) });
-
-        auto match_result = match(armor);
-        if (!match_result.is_valid) return false;
-
-        update_count++;
-
-        auto const [pos_x, pos_y, pos_z] = armor.translation;
-        auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
-        auto const ypd                   = util::xyz2ypd(xyz);
-
-        auto const [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
-        auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
-        auto const ypr         = util::eulers(orientation);
-
-        auto z = EKF::ZVec {};
-        z << ypd[0], ypd[1], ypd[2], ypr[0];
-
-        ekf.update(
-            z,
-            [id = match_result.armor_id, this](
-                EKF::XVec const& x) { return EKFParameters::h(device, x, id, armor_num); },
-            [id = match_result.armor_id, this](
-                EKF::XVec const& x) { return EKFParameters::H(device, x, id, armor_num); },
-            EKFParameters::R(xyz, ypr, ypd), EKFParameters::x_add, EKFParameters::z_subtract);
-
-        correct();
-        return true;
+        ensure_backend(armor);
+        return dispatch([&](auto& state) { return state.update(armor); }, [] { return false; });
     }
 
     auto update(std::span<Armor3D const> armors) -> bool {
         if (armors.empty()) return false;
-        auto used_armors = armors.first(
-            std::min<std::size_t>(armors.size(), OutpostEKFParameters::kOutpostArmorCount));
-        auto const incoming_outpost = used_armors.front().genre == DeviceId::OUTPOST;
-        if ((device == DeviceId::OUTPOST || incoming_outpost) && !initialized)
-            initialize(used_armors.front(), time_stamp);
-
-        if (device != DeviceId::OUTPOST) {
-            bool fused = false;
-            for (auto const& armor : used_armors)
-                fused = update(armor) || fused;
-            return fused;
-        }
-
-        return outpost_state.update(outpost_ekf, used_armors, armor_num, update_count);
+        ensure_backend(armors.front());
+        return dispatch([&](auto& state) { return state.update(armors); }, [] { return false; });
     }
 
     auto is_converged() const -> bool {
-        if (device == DeviceId::OUTPOST)
-            return outpost_state.is_converged(outpost_ekf.x, outpost_ekf.P(), update_count);
-
-        auto const r = ekf.x[8];
-        auto const l = ekf.x[8] + ekf.x[9];
-
-        auto const r_ok = (r > 0.05) && (r < 0.5);
-        auto const l_ok = (l > 0.05) && (l < 0.5);
-
-        int min_updates = 3;
-        if (r_ok && l_ok && update_count > min_updates) return true;
-
-        return false;
+        return dispatch([](auto const& state) { return state.is_converged(); }, [] { return false; });
     }
 
-    DeviceId device;
-    CampColor color;
-    int armor_num;
-
-    EKF ekf;
-    OutpostEKF outpost_ekf;
-    Clock::time_point time_stamp;
-
-    bool initialized;
-    int update_count { 0 };
-    const std::chrono::duration<double> reset_interval { 1.0 };
-
-    const double angle_error_threshold { 0.65 };
-    OutpostState outpost_state;
-
-    auto correct() -> void {
-        if (device == DeviceId::OUTPOST) outpost_state.correct(outpost_ekf.x);
+    auto get_snapshot() const -> Snapshot {
+        return dispatch([](auto const& state) { return state.get_snapshot(); },
+            [&] { return empty_snapshot(pending_time_stamp); });
     }
 
-    auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> {};
-        for (int i = 0; i < armor_num; i++) {
-            auto angle = EKFParameters::armor_yaw(device, x, i);
-            auto xyz   = EKFParameters::h_armor_xyz(device, x, i, armor_num);
-            auto xyza  = Eigen::Vector4d { xyz[0], xyz[1], xyz[2], angle };
-            armors.emplace_back(xyza);
-        }
-        return armors;
-    }
-
-    auto match(Armor3D const& armor) const -> MatchResult {
-        if (!initialized) return { -1, 1e10, false };
-        if (device == DeviceId::OUTPOST) {
-            auto match_result = outpost_state.match_armor(
-                armor, OutpostState::MatchContext { outpost_ekf.x, outpost_ekf.P(), armor_num });
-            return { match_result.armor_id, match_result.error, match_result.is_valid };
-        }
-
-        auto armors_xyza = calculate_armors(ekf.x);
-
-        auto const [pos_x, pos_y, pos_z] = armor.translation;
-        const auto xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
-        const auto orientation  = Eigen::Quaterniond { armor.orientation.w, armor.orientation.x,
-            armor.orientation.y, armor.orientation.z };
-        const auto ypr_in_world = util::eulers(orientation);
-        const auto ypd_in_world = util::xyz2ypd(xyz);
-
-        auto it =
-            std::ranges::min_element(armors_xyza, [&](auto const& a_xyza, auto const& b_xyza) {
-                auto get_error = [&](auto const& pred) {
-                    auto ypd_pred = util::xyz2ypd(pred.template head<3>());
-                    return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
-                        + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
-                };
-
-                return get_error(a_xyza) < get_error(b_xyza);
-            });
-
-        int best_id = static_cast<int>(std::distance(armors_xyza.begin(), it));
-
-        auto min_error = [&](const auto& pred) {
-            auto ypd_pred = util::xyz2ypd(pred.template head<3>());
-            return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
-                + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
-        }(*it);
-
-        return { best_id, min_error, (min_error < angle_error_threshold) };
+    auto distance() const -> double {
+        return dispatch([](auto const& state) { return state.distance(); }, [] { return 0.0; });
     }
 };
 
