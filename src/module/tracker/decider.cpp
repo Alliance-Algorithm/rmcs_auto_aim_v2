@@ -14,12 +14,13 @@ using namespace rmcs::predictor;
 using namespace std::chrono_literals;
 
 struct Decider::Impl {
-    static constexpr auto kDefaultCleanupInterval = 500ms;
+    static constexpr auto kDefaultCleanupInterval = 1s;
+    static constexpr auto kOutpostCleanupInterval = 2s;
 
-    static constexpr double kPriorityScoreBase = 10.0;
-    static constexpr double kDistanceScoreWeight = 5.0;
-    static constexpr double kDistanceScoreBias = 1.0;
-    static constexpr double kConvergedScoreBonus = 4.0;
+    static constexpr double kPriorityScoreBase       = 10.0;
+    static constexpr double kDistanceScoreWeight     = 5.0;
+    static constexpr double kDistanceScoreBias       = 1.0;
+    static constexpr double kConvergedScoreBonus     = 4.0;
     static constexpr double kPrimaryTargetScoreBonus = 2.0;
 
     struct TargetMemory {
@@ -31,14 +32,14 @@ struct Decider::Impl {
 
     struct Config : util::Serializable {
         std::size_t max_temporary_loss_frames { 5 };
-        std::size_t max_detecting_loss_frames { 3 };
+        std::size_t max_unconfirmed_loss_frames { 3 };
         std::size_t tracking_confirm_frames { 3 };
 
         constexpr static std::tuple metas {
             &Config::max_temporary_loss_frames,
             "max_temporary_loss_frames",
-            &Config::max_detecting_loss_frames,
-            "max_detecting_loss_frames",
+            &Config::max_unconfirmed_loss_frames,
+            "max_unconfirmed_loss_frames",
             &Config::tracking_confirm_frames,
             "tracking_confirm_frames",
         };
@@ -53,8 +54,8 @@ struct Decider::Impl {
         if (config.max_temporary_loss_frames == 0) {
             return std::unexpected { "tracker.max_temporary_loss_frames must be > 0" };
         }
-        if (config.max_detecting_loss_frames == 0) {
-            return std::unexpected { "tracker.max_detecting_loss_frames must be > 0" };
+        if (config.max_unconfirmed_loss_frames == 0) {
+            return std::unexpected { "tracker.max_unconfirmed_loss_frames must be > 0" };
         }
         if (config.tracking_confirm_frames == 0) {
             return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
@@ -65,13 +66,22 @@ struct Decider::Impl {
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
+    static auto cleanup_interval_for(DeviceId device_id) -> std::chrono::duration<double> {
+        switch (device_id) {
+        case DeviceId::OUTPOST:
+            return kOutpostCleanupInterval;
+        default:
+            return kDefaultCleanupInterval;
+        }
+    }
+
     auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
             tracker->predict(t);
         }
 
-        auto observed_ids = std::unordered_set<DeviceId> {};
+        auto observed_ids   = std::unordered_set<DeviceId> {};
         auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> {};
 
         for (const auto& armor : armors) {
@@ -90,13 +100,17 @@ struct Decider::Impl {
 
             if (fused) {
                 observed_ids.insert(id);
-                target_memory.last_seen_time          = t;
+                target_memory.last_seen_time             = t;
                 target_memory.consecutive_missing_frames = 0;
             }
         }
 
+        // 状态机：
+        // 1. unconfirmed: 已有 tracker，但还没稳定到可接管；
+        // 2. confirmed: 连续稳定若干帧后允许控制接管；
+        // 3. temporary lost: confirmed 目标短暂丢失时，保留控制输出窗口。
         for (const auto& [id, tracker] : trackers) {
-            auto& target_memory = target_memories[id];
+            auto& target_memory         = target_memories[id];
             auto was_tracking_confirmed = tracking_confirmed(id);
 
             if (observed_ids.contains(id) && tracker->is_converged()) {
@@ -118,7 +132,8 @@ struct Decider::Impl {
 
         std::erase_if(trackers, [&](const auto& item) {
             auto memory_it = target_memories.find(item.first);
-            bool expired = memory_it == target_memories.end() || !memory_it->second.last_seen_time
+            auto cleanup_interval = cleanup_interval_for(item.first);
+            bool expired   = memory_it == target_memories.end() || !memory_it->second.last_seen_time
                 || util::delta_time(t, *memory_it->second.last_seen_time) > cleanup_interval;
             if (expired) {
                 if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
@@ -196,7 +211,7 @@ struct Decider::Impl {
             return std::nullopt;
         }
 
-        if (is_within_loss_window(device_id, config.max_detecting_loss_frames)) {
+        if (is_within_loss_window(device_id, config.max_unconfirmed_loss_frames)) {
             return make_output(device_id, false, false);
         }
 
@@ -243,8 +258,6 @@ struct Decider::Impl {
 
     Config config {};
     PriorityMode priority_mode;
-
-    std::chrono::duration<double> cleanup_interval { kDefaultCleanupInterval };
 
     const PriorityMode mode1 = {
         { DeviceId::HERO, 2 },

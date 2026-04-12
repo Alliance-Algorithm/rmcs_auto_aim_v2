@@ -1,5 +1,6 @@
 #include "snapshot.hpp"
 
+#include <algorithm>
 #include <type_traits>
 #include <variant>
 
@@ -20,9 +21,15 @@ struct NormalSnapshotState {
 struct OutpostSnapshotState {
     Snapshot::OutpostEKF::XVec x;
     int spin_sign;
-    int order_idx;
+    OutpostArmorLayout layout;
 };
+
+auto normalize_spin_sign(int spin_sign) -> int {
+    if (spin_sign > 0) return +1;
+    if (spin_sign < 0) return -1;
+    return 0;
 }
+} // namespace
 
 struct Snapshot::Impl {
     using InternalState = std::variant<NormalSnapshotState, OutpostSnapshotState>;
@@ -41,26 +48,41 @@ struct Snapshot::Impl {
         , armor_num { armor_num }
         , stamp { stamp } { }
 
-    static auto normalized_spin_sign(int spin_sign) -> int { return spin_sign >= 0 ? +1 : -1; }
-
     static auto to_public_state(InternalState const& state) -> Snapshot::State {
         return std::visit(
             [](auto const& typed_state) -> Snapshot::State { return typed_state.x; }, state);
     }
 
-    static auto kinematics_of(InternalState const& state) -> Snapshot::Kinematics {
+    static auto average_outpost_height_offset(OutpostArmorLayout const& layout, int armor_num)
+        -> double {
+        auto clamped_armor_num = std::clamp(armor_num, 0, OutpostEKFParameters::kOutpostArmorCount);
+        if (clamped_armor_num == 0) return 0.0;
+
+        double sum = 0.0;
+        int count  = 0;
+        for (int id = 0; id < clamped_armor_num; ++id) {
+            if (!layout.slots[id].assigned) continue;
+            sum += layout.slots[id].height_offset;
+            count++;
+        }
+        if (count == 0) return 0.0;
+        return sum / static_cast<double>(count);
+    }
+
+    auto kinematics_of(InternalState const& state) const -> Snapshot::Kinematics {
         return std::visit(
-            [](auto const& typed_state) -> Snapshot::Kinematics {
+            [this](auto const& typed_state) -> Snapshot::Kinematics {
                 using TypedState = std::decay_t<decltype(typed_state)>;
                 if constexpr (std::is_same_v<TypedState, NormalSnapshotState>) {
                     return { Eigen::Vector3d {
                                  typed_state.x[0], typed_state.x[2], typed_state.x[4] },
                         typed_state.x[7] };
                 } else {
-                    auto angular_velocity =
-                        typed_state.spin_sign >= 0 ? kOutpostAngularSpeed : -kOutpostAngularSpeed;
-                    return { Eigen::Vector3d {
-                                 typed_state.x[0], typed_state.x[2], typed_state.x[4] },
+                    auto const center_z = typed_state.x[4]
+                        + average_outpost_height_offset(typed_state.layout, armor_num);
+                    auto const angular_velocity =
+                        static_cast<double>(typed_state.spin_sign) * kOutpostAngularSpeed;
+                    return { Eigen::Vector3d { typed_state.x[0], typed_state.x[2], center_z },
                         angular_velocity };
                 }
             },
@@ -78,7 +100,7 @@ struct Snapshot::Impl {
                     return OutpostSnapshotState {
                         OutpostEKFParameters::f(dt, typed_state.spin_sign)(typed_state.x),
                         typed_state.spin_sign,
-                        typed_state.order_idx,
+                        typed_state.layout,
                     };
                 }
             },
@@ -115,9 +137,11 @@ struct Snapshot::Impl {
                         armor.orientation =
                             util::euler_to_quaternion(angle, predicted_armor_pitch(device), 0);
                     } else {
-                        auto angle    = OutpostEKFParameters::armor_yaw(typed_state.x, id);
+                        if (!typed_state.layout.slots[id].assigned) continue;
+                        auto angle =
+                            OutpostEKFParameters::armor_yaw(typed_state.x, typed_state.layout, id);
                         auto position = OutpostEKFParameters::h_armor_xyz(
-                            typed_state.x, id, typed_state.order_idx);
+                            typed_state.x, typed_state.layout, id);
                         armor.translation = position;
                         armor.orientation =
                             util::euler_to_quaternion(angle, predicted_armor_pitch(device), 0);
@@ -146,11 +170,10 @@ Snapshot::Snapshot(NormalEKF::XVec ekf_x, DeviceId device, CampColor color, int 
     : pimpl { std::make_unique<Impl>(
           NormalSnapshotState { std::move(ekf_x) }, device, color, armor_num, stamp) } { }
 
-Snapshot::Snapshot(OutpostEKF::XVec ekf_x, CampColor color, int armor_num, TimePoint stamp,
-    int outpost_spin_sign, int outpost_order_idx) noexcept
-    : pimpl { std::make_unique<Impl>(
-          OutpostSnapshotState {
-              std::move(ekf_x), Impl::normalized_spin_sign(outpost_spin_sign), outpost_order_idx },
+Snapshot::Snapshot(Snapshot::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
+    TimePoint stamp, int outpost_spin_sign, OutpostArmorLayout outpost_layout) noexcept
+    : pimpl { std::make_unique<Impl>(OutpostSnapshotState { std::move(ekf_x),
+                                         normalize_spin_sign(outpost_spin_sign), outpost_layout },
           DeviceId::OUTPOST, color, armor_num, stamp) } { }
 
 Snapshot::Snapshot(Snapshot const& other)

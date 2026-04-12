@@ -20,11 +20,8 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 auto invalid_match_result() -> RobotState::MatchResult { return { -1, 1e10, false }; }
 
 auto empty_snapshot(RobotState::Clock::time_point stamp) -> Snapshot {
-    return { Snapshot::NormalEKF::XVec::Zero(),
-        rmcs::DeviceId::UNKNOWN,
-        rmcs::CampColor::UNKNOWN,
-        0,
-        stamp };
+    return { Snapshot::NormalEKF::XVec::Zero(), rmcs::DeviceId::UNKNOWN, rmcs::CampColor::UNKNOWN,
+        0, stamp };
 }
 
 } // namespace
@@ -36,10 +33,8 @@ struct RobotState::Impl {
     Clock::time_point pending_time_stamp { Clock::now() };
 
     auto emplace_backend(DeviceId device, Clock::time_point stamp) -> void {
-        if (device == DeviceId::OUTPOST)
-            backend.template emplace<OutpostRobotState>(stamp);
-        else
-            backend.template emplace<RegularRobotState>(stamp);
+        if (device == DeviceId::OUTPOST) backend.template emplace<OutpostRobotState>(stamp);
+        else backend.template emplace<RegularRobotState>(stamp);
     }
 
     auto reset_backend(Armor3D const& armor, Clock::time_point stamp) -> void {
@@ -54,21 +49,19 @@ struct RobotState::Impl {
 
     template <class Fn, class EmptyFn>
     decltype(auto) dispatch(Fn&& fn, EmptyFn&& empty_fn) {
-        return std::visit(
-            Overloaded {
-                [&](std::monostate&) -> decltype(auto) { return empty_fn(); },
-                [&](auto& state) -> decltype(auto) { return fn(state); },
-            },
+        return std::visit(Overloaded {
+                              [&](std::monostate&) -> decltype(auto) { return empty_fn(); },
+                              [&](auto& state) -> decltype(auto) { return fn(state); },
+                          },
             backend);
     }
 
     template <class Fn, class EmptyFn>
     decltype(auto) dispatch(Fn&& fn, EmptyFn&& empty_fn) const {
-        return std::visit(
-            Overloaded {
-                [&](std::monostate const&) -> decltype(auto) { return empty_fn(); },
-                [&](auto const& state) -> decltype(auto) { return fn(state); },
-            },
+        return std::visit(Overloaded {
+                              [&](std::monostate const&) -> decltype(auto) { return empty_fn(); },
+                              [&](auto const& state) -> decltype(auto) { return fn(state); },
+                          },
             backend);
     }
 
@@ -103,7 +96,8 @@ struct RobotState::Impl {
     }
 
     auto is_converged() const -> bool {
-        return dispatch([](auto const& state) { return state.is_converged(); }, [] { return false; });
+        return dispatch(
+            [](auto const& state) { return state.is_converged(); }, [] { return false; });
     }
 
     auto get_snapshot() const -> Snapshot {

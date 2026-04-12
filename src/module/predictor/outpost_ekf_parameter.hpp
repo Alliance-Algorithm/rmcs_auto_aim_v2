@@ -13,40 +13,27 @@
 
 namespace rmcs::predictor {
 
+struct OutpostArmorSlot {
+    double phase_offset { 0.0 };
+    double height_offset { 0.0 };
+    bool assigned { false };
+};
+
+struct OutpostArmorLayout {
+    std::array<OutpostArmorSlot, 3> slots {};
+};
+
 struct OutpostEKFParameters {
     using EKF = util::EKF<6, 4>;
 
-    static constexpr int kOutpostArmorCount       = 3;
-    static constexpr int kOutpostHeightOrderCount = 6;
-
-private:
-    static constexpr std::array<std::array<int, kOutpostArmorCount>, kOutpostHeightOrderCount>
-        kOutpostHeightOrders { {
-            { -1, 0, +1 },
-            { 0, +1, -1 },
-            { +1, -1, 0 },
-            { -1, +1, 0 },
-            { +1, 0, -1 },
-            { 0, -1, +1 },
-        } };
-
-    static constexpr auto outpost_height_order(int order_idx)
-        -> std::array<int, kOutpostArmorCount> {
-        auto normalized = std::clamp(order_idx, 0, kOutpostHeightOrderCount - 1);
-        return kOutpostHeightOrders[normalized];
-    }
-
-public:
-    static constexpr auto outpost_height_rank(int order_idx, int id) -> int {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return outpost_height_order(order_idx)[normalized_id];
-    }
+    static constexpr int kOutpostArmorCount = 3;
+    static constexpr double kPhaseStep      = 2.0 * std::numbers::pi / kOutpostArmorCount;
 
     // x vx y vy z a
     // x, y：前哨站旋转中心在世界坐标系下的位置
     // vx, vy：前哨站旋转中心在世界坐标系下的线速度
-    // z：高度居中的那块装甲板在世界坐标系下的 z 坐标
-    // a: angle，0 号槽位装甲板的 yaw 角，其余槽位在此基础上相差 2pi / 3
+    // z：参考装甲板(id 0)在世界坐标系下的 z 坐标
+    // a：参考装甲板(id 0)的 yaw 角
     static auto x(Armor3D const& armor) -> EKF::XVec {
         const auto [trans_x, trans_y, trans_z]      = armor.translation;
         const auto [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
@@ -68,30 +55,54 @@ public:
         return P_dig;
     }
 
-    static auto armor_yaw(EKF::XVec const& x, int id) -> double {
-        return util::normalize_angle(x[5] + id * 2.0 * std::numbers::pi / kOutpostArmorCount);
+    static auto armor_yaw(EKF::XVec const& x, double phase_offset) -> double {
+        return util::normalize_angle(x[5] + phase_offset);
     }
 
-    static auto h_armor_z(EKF::XVec const& x, int id, int order_idx) -> double {
-        return x[4] + outpost_height_rank(order_idx, id) * kOutpostArmorHeightStep;
+    static auto armor_yaw(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> double {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return armor_yaw(x, layout.slots[normalized_id].phase_offset);
     }
 
-    static auto h_armor_xyz(EKF::XVec const& x, int id, int order_idx) -> Eigen::Vector3d {
-        const auto phase = armor_yaw(x, id);
+    static auto h_armor_z(EKF::XVec const& x, double height_offset) -> double {
+        return x[4] + height_offset;
+    }
+
+    static auto h_armor_z(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> double {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return h_armor_z(x, layout.slots[normalized_id].height_offset);
+    }
+
+    static auto h_armor_xyz(EKF::XVec const& x, double phase_offset, double height_offset)
+        -> Eigen::Vector3d {
+        const auto phase = armor_yaw(x, phase_offset);
         const auto pos_x = x[0] - kOutpostRadius * std::cos(phase);
         const auto pos_y = x[2] - kOutpostRadius * std::sin(phase);
-        const auto pos_z = h_armor_z(x, id, order_idx);
+        const auto pos_z = h_armor_z(x, height_offset);
         return { pos_x, pos_y, pos_z };
     }
 
-    static auto h(EKF::XVec const& x, int id, int order_idx) -> EKF::ZVec {
-        const auto xyz = h_armor_xyz(x, id, order_idx);
+    static auto h_armor_xyz(EKF::XVec const& x, OutpostArmorLayout const& layout, int id)
+        -> Eigen::Vector3d {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return h_armor_xyz(
+            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
+    }
+
+    static auto h(EKF::XVec const& x, double phase_offset, double height_offset) -> EKF::ZVec {
+        const auto xyz = h_armor_xyz(x, phase_offset, height_offset);
         const auto ypd = util::xyz2ypd(xyz);
-        const auto yaw = armor_yaw(x, id);
+        const auto yaw = armor_yaw(x, phase_offset);
 
         auto z = EKF::ZVec {};
         z << ypd[0], ypd[1], ypd[2], yaw;
         return z;
+    }
+
+    static auto h(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> EKF::ZVec {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return h(
+            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
     }
 
     static auto x_add(EKF::XVec const& a, EKF::XVec const& b) -> EKF::XVec {
@@ -125,12 +136,12 @@ public:
     static auto Q(double dt) -> EKF::QMat {
         // 平面匀速模型中的未建模线加速度噪声，作用在 x/vx 与 y/vy
         constexpr double linear_acc_var = 10.0;
-        // 中间高度装甲板 z 的随机游走噪声
-        constexpr double z_mid_rw_var = 1e-3;
-        // 基准装甲板 yaw 角的随机游走噪声，用于补偿固定角速度模型误差
+        // 参考装甲板 z 的随机游走噪声
+        constexpr double z_ref_rw_var = 1e-3;
+        // 参考装甲板 yaw 角的随机游走噪声，用于补偿固定角速度模型误差
         constexpr double angle_rw_var = 1e-3;
         const auto v1                 = linear_acc_var;
-        const auto v2                 = z_mid_rw_var;
+        const auto v2                 = z_ref_rw_var;
         const auto v3                 = angle_rw_var;
 
         const auto a = dt * dt * dt * dt / 4.0;
@@ -151,9 +162,10 @@ public:
 
     static auto f(double dt, int spin_sign) -> auto {
         return [dt, spin_sign](EKF::XVec const& x) {
-            EKF::XVec x_prior = x;
-            const auto angular_speed =
-                spin_sign >= 0 ? kOutpostAngularSpeed : -kOutpostAngularSpeed;
+            EKF::XVec x_prior        = x;
+            const auto angular_speed = spin_sign > 0 ? kOutpostAngularSpeed
+                : spin_sign < 0                      ? -kOutpostAngularSpeed
+                                                     : 0.0;
 
             x_prior[0] = x[0] + x[1] * dt;
             x_prior[1] = x[1];
@@ -180,8 +192,8 @@ public:
         return R_dig.asDiagonal();
     }
 
-    static auto H(EKF::XVec const& x, int id, int order_idx) -> EKF::HMat {
-        const auto phase     = armor_yaw(x, id);
+    static auto H(EKF::XVec const& x, double phase_offset, double height_offset) -> EKF::HMat {
+        const auto phase     = armor_yaw(x, phase_offset);
         const auto cos_phase = std::cos(phase);
         const auto sin_phase = std::sin(phase);
         const auto dx_da     = kOutpostRadius * sin_phase;
@@ -196,7 +208,7 @@ public:
             0, 0, 0, 0, 0,     1;
         // clang-format on
 
-        const auto xyz         = h_armor_xyz(x, id, order_idx);
+        const auto xyz         = h_armor_xyz(x, phase_offset, height_offset);
         const auto H_armor_ypd = util::xyz2ypd_jacobian(xyz);
 
         Eigen::Matrix<double, 4, 4> H_armor_ypda;
@@ -209,6 +221,12 @@ public:
         // clang-format on
 
         return H_armor_ypda * H_armor_xyza;
+    }
+
+    static auto H(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> EKF::HMat {
+        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
+        return H(
+            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
     }
 };
 
