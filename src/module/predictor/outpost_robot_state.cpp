@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <format>
 #include <limits>
 #include <optional>
 #include <span>
@@ -71,6 +70,11 @@ struct OutpostRobotState::Impl {
         bool extends_layout { false };
     };
 
+    struct BestMatch {
+        OutpostObservation observation;
+        AssociationDecision decision;
+    };
+
     explicit Impl(Clock::time_point stamp) noexcept
         : time_stamp { stamp } { }
 
@@ -89,9 +93,6 @@ struct OutpostRobotState::Impl {
     }
 
     auto initialize(Armor3D const& armor, Clock::time_point t) -> void {
-        reset_runtime_state(t);
-        if (armor.genre != DeviceId::OUTPOST) return;
-
         color      = armor_color2camp_color(armor.color);
         ekf        = EKF { OutpostEKFParameters::x(armor),
             OutpostEKFParameters::P_initial_dig().asDiagonal() };
@@ -100,10 +101,13 @@ struct OutpostRobotState::Impl {
         layout                   = OutpostArmorLayout {};
         layout.slots[0].assigned = true;
 
-        current_armor_id = 0;
-        initialized      = true;
-
-        log_state_summary("initialize", std::nullopt, nullptr, true);
+        spin_sign            = 0;
+        spin_candidate       = 0;
+        spin_candidate_count = 0;
+        spin_locked          = false;
+        update_count         = 0;
+        current_armor_id     = 0;
+        initialized          = true;
     }
 
     auto predict(Clock::time_point t) -> void {
@@ -132,7 +136,6 @@ struct OutpostRobotState::Impl {
     // }
 
     auto update(Armor3D const& armor) -> bool {
-        if (armor.genre != DeviceId::OUTPOST) return false;
         if (!initialized) {
             initialize(armor, time_stamp);
             return true;
@@ -147,26 +150,25 @@ struct OutpostRobotState::Impl {
     }
 
     auto update(std::span<Armor3D const> armors) -> bool {
-        auto best_armor    = static_cast<Armor3D const*>(nullptr);
-        auto best_decision = AssociationDecision {};
+        auto best_match = std::optional<BestMatch> {};
 
         for (auto const& armor : armors) {
-            if (armor.genre != DeviceId::OUTPOST) continue;
             if (!initialized) {
                 initialize(armor, time_stamp);
                 return true;
             }
 
-            auto const observation = make_observation(armor);
-            auto const decision    = decide_association(observation);
-            if (!decision.is_valid || decision.error >= best_decision.error) continue;
-            best_armor    = &armor;
-            best_decision = decision;
+            auto observation = make_observation(armor);
+            auto decision    = decide_association(observation);
+            if (!decision.is_valid) continue;
+            if (best_match.has_value() && decision.error >= best_match->decision.error) continue;
+
+            best_match = BestMatch { std::move(observation), decision };
         }
 
-        if (best_armor == nullptr) return false;
+        if (!best_match.has_value()) return false;
 
-        apply_association(best_decision, make_observation(*best_armor));
+        apply_association(best_match->decision, best_match->observation);
         return true;
     }
 
@@ -200,10 +202,6 @@ private:
     auto assigned_count() const -> int {
         return static_cast<int>(
             std::ranges::count(layout.slots, true, &OutpostArmorSlot::assigned));
-    }
-
-    auto has_current_armor() const -> bool {
-        return current_armor_id != kUnknownArmorId && layout.slots[current_armor_id].assigned;
     }
 
     auto current_spin_sign() const -> int {
@@ -260,14 +258,13 @@ private:
         auto const predicted_xyz =
             OutpostEKFParameters::h_armor_xyz(ekf.x, phase_offset, height_offset);
         auto const predicted_ypd = util::xyz2ypd(predicted_xyz);
-        auto const predicted_yaw = OutpostEKFParameters::armor_yaw(ekf.x, phase_offset);
 
-        auto const yaw_error = std::abs(util::normalize_angle(observation.ypr[0] - predicted_yaw));
         auto const azimuth_error =
             std::abs(util::normalize_angle(observation.ypd[0] - predicted_ypd[0]));
         auto const z_error = std::abs(observation.xyz[2] - predicted_xyz[2]);
 
-        if (yaw_error > yaw_gate || azimuth_error > azimuth_gate || z_error > z_gate) {
+        // 这里没有加yaw约束，一是因为yaw的抖动太大，二是因为大部分图像中一帧只有一块装甲板
+        if (azimuth_error > azimuth_gate || z_error > z_gate) {
             return {};
         }
 
@@ -295,7 +292,9 @@ private:
     }
 
     auto decide_association(OutpostObservation const& observation) const -> AssociationDecision {
-        if (!initialized || !has_current_armor()) return {};
+        if (!initialized
+            || !(current_armor_id != kUnknownArmorId && layout.slots[current_armor_id].assigned))
+            return {};
 
         auto best_decision = AssociationDecision {};
 
@@ -356,48 +355,6 @@ private:
         spin_locked = true;
     }
 
-    auto format_layout_summary(OutpostArmorLayout const& layout_to_format) const -> std::string {
-        auto summary = std::string {};
-        for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {
-            auto const& slot = layout_to_format.slots[id];
-            auto const predicted_z =
-                slot.assigned ? OutpostEKFParameters::h_armor_z(ekf.x, layout_to_format, id) : 0.0;
-            summary += std::format("slot{}{{assigned={},dz={:.3f},z={:.3f},phase={:.3f}}}", id,
-                slot.assigned, slot.height_offset, predicted_z, slot.phase_offset);
-            if (id + 1 < OutpostEKFParameters::kOutpostArmorCount) summary += " ";
-        }
-        return summary;
-    }
-
-    auto log_state_summary(std::string_view stage,
-        std::optional<AssociationDecision> const& decision, OutpostObservation const* observation,
-        bool force) -> void {
-        auto const next_tick = diagnostic_tick + 1;
-        auto should_log      = force || (next_tick % diagnostic_log_stride == 0);
-
-        if (decision.has_value() && observation != nullptr
-            && decision->armor_id != kUnknownArmorId) {
-            auto const predicted_z =
-                OutpostEKFParameters::h_armor_z(ekf.x, layout, decision->armor_id);
-            auto const z_residual = observation->xyz[2] - predicted_z;
-            should_log            = should_log || decision->extends_layout
-                || std::abs(z_residual) > diagnostic_z_residual_alert;
-
-            if (should_log) {
-                log.info("[{}] event={} armor_id={} spin={} locked={} x4={:.3f} obs_z={:.3f} "
-                         "pred_z={:.3f} residual_z={:.3f} layout={}",
-                    stage, event_name(decision->event), decision->armor_id, current_spin_sign(),
-                    spin_locked, ekf.x[4], observation->xyz[2], predicted_z, z_residual,
-                    format_layout_summary(layout));
-            }
-        } else if (should_log) {
-            log.info("[{}] spin={} locked={} x4={:.3f} layout={}", stage, current_spin_sign(),
-                spin_locked, ekf.x[4], format_layout_summary(layout));
-        }
-
-        diagnostic_tick = next_tick;
-    }
-
     auto apply_association(
         AssociationDecision const& decision, OutpostObservation const& observation) -> void {
         auto next_layout = layout;
@@ -421,8 +378,6 @@ private:
             update_spin_estimate(decision.inferred_spin_sign);
         }
         update_count++;
-
-        log_state_summary("apply_association", decision, &observation, decision.extends_layout);
     }
 
     CampColor color { CampColor::UNKNOWN };
@@ -439,9 +394,8 @@ private:
     bool spin_locked { false };
 
     int update_count { 0 };
-    std::size_t diagnostic_tick { 0 };
 
-    const std::chrono::duration<double> reset_interval { 1.0 };
+    const std::chrono::duration<double> reset_interval { 1.5 };
 
     // 先用相位与高度做离散事件约束，再用观测残差与马氏距离筛掉假匹配。
     const double yaw_gate { util::deg2rad(40.0) };
@@ -452,10 +406,8 @@ private:
     const double mahalanobis_gate { 25.0 };
     const double layout_extension_penalty { 0.25 };
     const double continuity_bonus { 0.10 };
-    const double diagnostic_z_residual_alert { 0.03 };
     const int spin_confirm_switches { 2 };
     const int min_converged_updates { 6 };
-    const std::size_t diagnostic_log_stride { 20 };
 
     Printer log { "OutpostRobotState" };
 };

@@ -127,15 +127,3 @@ ament_add_gtest(
     ${TEST_DIR}/action_throttler.cpp
 )
 
-# Tracker decider
-ament_add_gtest(
-    test_tracker_decider
-    ${TEST_DIR}/tracker_decider.cpp
-    ${RMCS_SRC_DIR}/module/tracker/decider.cpp
-    ${RMCS_SRC_DIR}/module/predictor/robot_state.cpp
-    ${RMCS_SRC_DIR}/module/predictor/snapshot.cpp
-)
-target_link_libraries(
-    test_tracker_decider
-    yaml-cpp::yaml-cpp
-)

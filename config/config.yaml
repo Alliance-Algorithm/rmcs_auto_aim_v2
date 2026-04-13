@@ -24,7 +24,7 @@ capturer:
     fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/translation.mp4"
+    location: "/workspaces/alliance/test_videos/outpost.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -55,7 +55,7 @@ tracker:
   # blue or red
   enemy_color: red
   max_temporary_loss_frames: 4
-  max_detecting_loss_frames: 2
+  max_unconfirmed_loss_frames: 2
   tracking_confirm_frames: 2
 
 pose_estimator:
