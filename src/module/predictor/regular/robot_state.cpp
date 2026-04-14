@@ -52,6 +52,9 @@ struct RegularRobotState::Impl {
         bool fused = false;
         for (auto const& armor : armors)
             fused = update_single(armor) || fused;
+
+        if (fused) ++update_count;
+
         return fused;
     }
 
@@ -121,8 +124,6 @@ private:
 
         auto match_result = match(armor);
         if (!match_result.is_valid) return false;
-
-        update_count++;
 
         auto const [pos_x, pos_y, pos_z] = armor.translation;
         auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
