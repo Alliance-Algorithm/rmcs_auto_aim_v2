@@ -14,9 +14,8 @@ using namespace rmcs::predictor;
 using namespace std::chrono_literals;
 
 struct Decider::Impl {
-    static constexpr auto kDefaultCleanupInterval = 1s;
-    static constexpr auto kOutpostCleanupInterval = 2s;
-
+    static constexpr auto kDefaultCleanupInterval    = 1s;
+    static constexpr auto kOutpostCleanupInterval    = 1.5s;
     static constexpr double kPriorityScoreBase       = 10.0;
     static constexpr double kDistanceScoreWeight     = 5.0;
     static constexpr double kDistanceScoreBias       = 1.0;
@@ -131,9 +130,9 @@ struct Decider::Impl {
         }
 
         std::erase_if(trackers, [&](const auto& item) {
-            auto memory_it = target_memories.find(item.first);
+            auto memory_it        = target_memories.find(item.first);
             auto cleanup_interval = cleanup_interval_for(item.first);
-            bool expired   = memory_it == target_memories.end() || !memory_it->second.last_seen_time
+            bool expired = memory_it == target_memories.end() || !memory_it->second.last_seen_time
                 || util::delta_time(t, *memory_it->second.last_seen_time) > cleanup_interval;
             if (expired) {
                 if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;

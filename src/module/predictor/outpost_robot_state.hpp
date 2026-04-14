@@ -15,18 +15,11 @@ public:
     using Clock = util::Clock;
     using EKF   = OutpostEKFParameters::EKF;
 
-    struct MatchResult {
-        int armor_id;
-        double error;
-        bool is_valid;
-    };
-
     explicit OutpostRobotState(Clock::time_point stamp) noexcept;
 
     auto initialize(Armor3D const& armor, Clock::time_point t) -> void;
     auto predict(Clock::time_point t) -> void;
 
-    auto match(Armor3D const& armor) const -> MatchResult;
     auto update(Armor3D const& armor) -> bool;
     auto update(std::span<Armor3D const> armors) -> bool;
 

@@ -128,13 +128,6 @@ struct OutpostRobotState::Impl {
         time_stamp = t;
     }
 
-    // auto match(Armor3D const& armor) const -> MatchResult {
-    //     if (!initialized || armor.genre != DeviceId::OUTPOST) return { -1, 1e10, false };
-    //
-    //     auto const decision = decide_association(make_observation(armor));
-    //     return { decision.armor_id, decision.error, decision.is_valid };
-    // }
-
     auto update(Armor3D const& armor) -> bool {
         if (!initialized) {
             initialize(armor, time_stamp);
@@ -262,7 +255,6 @@ private:
         auto const azimuth_error =
             std::abs(util::normalize_angle(observation.ypd[0] - predicted_ypd[0]));
         auto const z_error = std::abs(observation.xyz[2] - predicted_xyz[2]);
-
         // 这里没有加yaw约束，一是因为yaw的抖动太大，二是因为大部分图像中一帧只有一块装甲板
         if (azimuth_error > azimuth_gate || z_error > z_gate) {
             return {};
@@ -427,10 +419,6 @@ auto OutpostRobotState::initialize(Armor3D const& armor, Clock::time_point t) ->
 }
 
 auto OutpostRobotState::predict(Clock::time_point t) -> void { return pimpl->predict(t); }
-
-auto OutpostRobotState::match(Armor3D const& armor) const -> MatchResult {
-    // return pimpl->match(armor);
-}
 
 auto OutpostRobotState::update(Armor3D const& armor) -> bool { return pimpl->update(armor); }
 
