@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 
+#include "module/predictor/regular/snapshot.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::predictor;
@@ -70,7 +71,7 @@ struct RegularRobotState::Impl {
     }
 
     auto get_snapshot() const -> Snapshot {
-        return { ekf.x, device, color, armor_num, time_stamp };
+        return detail::make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
     }
 
     auto distance() const -> double {

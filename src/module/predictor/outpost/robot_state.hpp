@@ -20,7 +20,6 @@ public:
     auto initialize(Armor3D const& armor, Clock::time_point t) -> void;
     auto predict(Clock::time_point t) -> void;
 
-    auto update(Armor3D const& armor) -> bool;
     auto update(std::span<Armor3D const> armors) -> bool;
 
     auto is_converged() const -> bool;
@@ -28,9 +27,6 @@ public:
     auto distance() const -> double;
 
     RMCS_PIMPL_DEFINITION(OutpostRobotState)
-public:
-    OutpostRobotState(OutpostRobotState&&) noexcept;
-    auto operator=(OutpostRobotState&&) noexcept -> OutpostRobotState&;
 };
 
 } // namespace rmcs::predictor

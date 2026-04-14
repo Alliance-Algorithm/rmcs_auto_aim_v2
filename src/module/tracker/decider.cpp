@@ -151,7 +151,7 @@ struct Decider::Impl {
         }
 
         if (auto output = hold_output(primary_target_id)) {
-            return *output;
+            return std::move(*output);
         }
 
         primary_target_id = DeviceId::UNKNOWN;

@@ -1,26 +1,25 @@
 #include "robot_state.hpp"
 
-#include "module/predictor/backend/state_backend.hpp"
+#include "module/predictor/backend/robot_state_backend.hpp"
 
 using namespace rmcs::predictor;
 
 namespace {
 
 auto empty_snapshot(RobotState::Clock::time_point stamp) -> Snapshot {
-    return { Snapshot::NormalEKF::XVec::Zero(), rmcs::DeviceId::UNKNOWN, rmcs::CampColor::UNKNOWN,
-        0, stamp };
+    return Snapshot::empty(stamp);
 }
 
 } // namespace
 
 struct RobotState::Impl {
-    std::unique_ptr<detail::IRobotStateBackend> backend {};
+    std::unique_ptr<IRobotStateBackend> backend {};
     Clock::time_point pending_time_stamp { Clock::now() };
 
     [[nodiscard]] static auto make_backend(DeviceId device, Clock::time_point stamp)
-        -> std::unique_ptr<detail::IRobotStateBackend> {
-        auto const kind = detail::classify_robot_state_backend(device);
-        return detail::make_robot_state_backend(kind, stamp);
+        -> std::unique_ptr<IRobotStateBackend> {
+        auto const kind = classify_robot_state_backend(device);
+        return make_robot_state_backend(kind, stamp);
     }
 
     auto reset_backend(Armor3D const& armor, Clock::time_point stamp) -> void {

@@ -5,7 +5,7 @@
 
 #include "module/predictor/snapshot.hpp"
 
-namespace rmcs::predictor::detail {
+namespace rmcs::predictor {
 
 enum class RobotStateBackendKind : std::uint8_t {
     Regular,
@@ -23,9 +23,9 @@ public:
 
     virtual auto update(std::span<Armor3D const> armors) -> bool = 0;
 
-    [[nodiscard]] virtual auto is_converged() const -> bool = 0;
+    [[nodiscard]] virtual auto is_converged() const -> bool     = 0;
     [[nodiscard]] virtual auto get_snapshot() const -> Snapshot = 0;
-    [[nodiscard]] virtual auto distance() const -> double = 0;
+    [[nodiscard]] virtual auto distance() const -> double       = 0;
 };
 
 [[nodiscard]] constexpr auto classify_robot_state_backend(DeviceId device) noexcept
@@ -38,8 +38,7 @@ public:
     }
 }
 
-[[nodiscard]] auto make_robot_state_backend(
-    RobotStateBackendKind kind, IRobotStateBackend::Clock::time_point stamp)
-    -> std::unique_ptr<IRobotStateBackend>;
+[[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind,
+    IRobotStateBackend::Clock::time_point stamp) -> std::unique_ptr<IRobotStateBackend>;
 
 } // namespace rmcs::predictor::detail
