@@ -3,7 +3,7 @@
 #include <chrono>
 #include <span>
 
-#include "module/predictor/ekf_parameter.hpp"
+#include "module/predictor/regular/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/pimpl.hpp"
 

@@ -5,7 +5,7 @@
 #include <variant>
 #include <vector>
 
-#include "module/predictor/outpost_ekf_parameter.hpp"
+#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "utility/clock.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"

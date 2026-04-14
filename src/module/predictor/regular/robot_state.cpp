@@ -1,4 +1,4 @@
-#include "regular_robot_state.hpp"
+#include "robot_state.hpp"
 
 #include <algorithm>
 #include <cmath>

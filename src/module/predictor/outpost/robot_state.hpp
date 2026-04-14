@@ -3,7 +3,7 @@
 #include <chrono>
 #include <span>
 
-#include "module/predictor/outpost_ekf_parameter.hpp"
+#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"

@@ -1,6 +1,6 @@
 #include "robot_state.hpp"
 
-#include "module/predictor/detail/robot_state_backend.hpp"
+#include "module/predictor/backend/state_backend.hpp"
 
 using namespace rmcs::predictor;
 

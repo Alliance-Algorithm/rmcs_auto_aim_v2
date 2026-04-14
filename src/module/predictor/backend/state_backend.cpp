@@ -1,10 +1,10 @@
-#include "module/predictor/detail/robot_state_backend.hpp"
+#include "module/predictor/backend/state_backend.hpp"
 
 #include <memory>
 #include <utility>
 
-#include "module/predictor/outpost_robot_state.hpp"
-#include "module/predictor/regular_robot_state.hpp"
+#include "module/predictor/outpost/robot_state.hpp"
+#include "module/predictor/regular/robot_state.hpp"
 
 namespace rmcs::predictor::detail {
 

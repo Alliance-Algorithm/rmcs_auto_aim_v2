@@ -4,8 +4,8 @@
 #include <type_traits>
 #include <variant>
 
-#include "module/predictor/ekf_parameter.hpp"
-#include "module/predictor/outpost_ekf_parameter.hpp"
+#include "module/predictor/outpost/ekf_parameter.hpp"
+#include "module/predictor/regular/ekf_parameter.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/time.hpp"

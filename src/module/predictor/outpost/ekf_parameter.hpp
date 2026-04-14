@@ -1,10 +1,10 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <numbers>
 
+#include "module/predictor/outpost/armor_layout.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
@@ -12,16 +12,6 @@
 #include "utility/robot/constant.hpp"
 
 namespace rmcs::predictor {
-
-struct OutpostArmorSlot {
-    double phase_offset { 0.0 };
-    double height_offset { 0.0 };
-    bool assigned { false };
-};
-
-struct OutpostArmorLayout {
-    std::array<OutpostArmorSlot, 3> slots {};
-};
 
 struct OutpostEKFParameters {
     using EKF = util::EKF<6, 4>;
