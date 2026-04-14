@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <numbers>
 
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"

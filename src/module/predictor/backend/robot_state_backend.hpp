@@ -41,4 +41,4 @@ public:
 [[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind,
     IRobotStateBackend::Clock::time_point stamp) -> std::unique_ptr<IRobotStateBackend>;
 
-} // namespace rmcs::predictor::detail
+} // namespace rmcs::predictor

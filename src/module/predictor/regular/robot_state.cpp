@@ -25,9 +25,7 @@ struct RegularRobotState::Impl {
         armor_num    = EKFParameters::armor_num(armor.genre);
         time_stamp   = t;
         update_count = 0;
-        ekf = EKF {
-            EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal()
-        };
+        ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
         initialized = true;
     }
 
@@ -42,8 +40,8 @@ struct RegularRobotState::Impl {
             }
 
             auto dt_s = dt.count();
-            ekf.predict(EKFParameters::f(dt_s),
-                [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
+            ekf.predict(
+                EKFParameters::f(dt_s), [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
                 EKFParameters::Q(dt_s));
         }
 
@@ -67,14 +65,16 @@ struct RegularRobotState::Impl {
         auto const l_ok = (l > 0.05) && (l < 0.5);
 
         int min_updates = 3;
-        return r_ok && l_ok && update_count > min_updates;
+        return r_ok && l_ok && update_count >= min_updates;
     }
 
     auto get_snapshot() const -> Snapshot {
+        if (!initialized) return Snapshot::empty(time_stamp);
         return detail::make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
     }
 
     auto distance() const -> double {
+        if (!initialized) return std::numeric_limits<double>::infinity();
         return std::sqrt(ekf.x[0] * ekf.x[0] + ekf.x[2] * ekf.x[2]);
     }
 
@@ -177,8 +177,8 @@ RegularRobotState::RegularRobotState() noexcept
 RegularRobotState::RegularRobotState(Clock::time_point stamp) noexcept
     : pimpl { std::make_unique<Impl>(stamp) } { }
 
-RegularRobotState::~RegularRobotState() noexcept = default;
-RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept = default;
+RegularRobotState::~RegularRobotState() noexcept                                      = default;
+RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept                    = default;
 auto RegularRobotState::operator=(RegularRobotState&&) noexcept -> RegularRobotState& = default;
 
 auto RegularRobotState::initialize(Armor3D const& armor, Clock::time_point t) -> void {

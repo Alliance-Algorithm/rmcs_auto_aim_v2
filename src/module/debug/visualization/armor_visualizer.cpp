@@ -14,6 +14,18 @@ using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 namespace {
 
+auto make_unique_marker_id(rmcs::DeviceId device, int armor_index) -> int {
+    constexpr auto kArmorIndexBitWidth = 16;
+    constexpr auto kArmorIndexLimit    = 1 << kArmorIndexBitWidth;
+
+    if (armor_index < 0 || armor_index >= kArmorIndexLimit) {
+        rmcs::util::panic(std::format("Armor marker index out of range: {}", armor_index));
+    }
+
+    auto const device_index = static_cast<int>(rmcs::to_index(device));
+    return (device_index << kArmorIndexBitWidth) | armor_index;
+}
+
 auto set_marker_scale(Marker& marker, rmcs::DeviceId device, bool is_arrow) -> void {
     if (is_arrow) {
         marker.scale.x = 0.2;
@@ -116,11 +128,12 @@ struct ArmorVisualizer::Impl final {
 
         for (auto const& armor : armors) {
             auto const camp = armor_color2camp_color(armor.color);
-            current_ids.emplace(armor.id);
+            auto const marker_id = make_unique_marker_id(armor.genre, armor.id);
+            current_ids.emplace(marker_id);
 
-            visual_marker.markers.emplace_back(make_marker(link_name, name, armor.id, Marker::CUBE,
+            visual_marker.markers.emplace_back(make_marker(link_name, name, marker_id, Marker::CUBE,
                 Marker::ADD, armor.genre, camp, &armor, current_time));
-            visual_marker.markers.emplace_back(make_marker(link_name, arrow_name, armor.id,
+            visual_marker.markers.emplace_back(make_marker(link_name, arrow_name, marker_id,
                 Marker::ARROW, Marker::ADD, armor.genre, camp, &armor, current_time));
         }
 

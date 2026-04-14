@@ -1,5 +1,7 @@
 #include "aim_point_chooser.hpp"
 
+#include <cmath>
+
 #include "utility/math/conversion.hpp"
 
 using namespace rmcs::fire_control;
