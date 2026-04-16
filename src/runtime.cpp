@@ -15,8 +15,8 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
-#include <csignal>
 #include <experimental/scope>
+#include <rclcpp/utilities.hpp>
 #include <string>
 #include <yaml-cpp/yaml.h>
 
@@ -26,8 +26,6 @@ using namespace rmcs::kernel;
 
 auto main() -> int {
     using namespace std::chrono_literals;
-
-    std::signal(SIGINT, [](int) { util::set_running(false); });
 
     auto node = RclcppNode { "AutoAim" };
     node.set_pub_topic_prefix("/rmcs/auto_aim/");

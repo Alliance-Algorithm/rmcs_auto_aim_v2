@@ -4,6 +4,7 @@
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace rmcs {
@@ -72,6 +73,12 @@ struct AutoAimState {
     }
 };
 static_assert(context_trait<AutoAimState>);
+
+struct CameraTriggerEvent {
+    std::uint64_t seq {};
+    Clock::time_point timestamp {};
+};
+static_assert(std::is_trivially_copyable_v<CameraTriggerEvent>);
 
 struct ControlState {
     static constexpr auto kLabel  = "/shm_control_state";
