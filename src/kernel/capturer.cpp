@@ -1,4 +1,5 @@
 #include "capturer.hpp"
+#include "kernel/feishu.hpp"
 #include "module/capturer/common.hpp"
 #include "module/capturer/hikcamera.hpp"
 #include "module/capturer/local_video.hpp"
@@ -23,9 +24,13 @@ struct Capturer::Impl {
     FramerateCounter loss_image_framerate {};
 
     std::chrono::milliseconds reconnect_wait_interval { 500 };
+    std::chrono::milliseconds trigger_sync_max_age { 50 };
 
     util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
+    Channel<util::CameraTriggerEvent> camera_trigger_channel;
+    bool enable_trigger_sync { false };
+    std::uint64_t last_bound_trigger_seq_ { 0 };
 
     auto initialize(const YAML::Node& yaml) noexcept -> Result try {
         auto source = yaml["source"].as<std::string>();
@@ -60,6 +65,9 @@ struct Capturer::Impl {
         if (!instantitation_result.has_value()) {
             return std::unexpected { instantitation_result.error() };
         }
+
+        auto trigger_sync_config = yaml["enable_trigger_sync"].as<bool>();
+        enable_trigger_sync      = (source == "hikcamera" && trigger_sync_config);
 
         auto show_loss_framerate          = yaml["show_loss_framerate"].as<bool>();
         auto show_loss_framerate_interval = yaml["show_loss_framerate_interval"].as<int>();
@@ -97,7 +105,37 @@ struct Capturer::Impl {
         log.info("[Capturer runtime thread] starts");
 
         // Success context
+        auto missing_trigger_limit  = util::TimesLimit { 3 };
+        auto bind_trigger_timestamp = [&](std::unique_ptr<Image>& image) {
+            if (!enable_trigger_sync) {
+                return;
+            }
+
+            auto capture_timestamp = image->get_timestamp();
+            if (auto trigger = camera_trigger_channel.fetch_latest_matching(
+                    [&](const util::CameraTriggerEvent& candidate) {
+                        return candidate.seq > last_bound_trigger_seq_
+                            && candidate.timestamp <= capture_timestamp
+                            && capture_timestamp - candidate.timestamp <= trigger_sync_max_age;
+                    })) {
+                image->set_timestamp(trigger->timestamp);
+                last_bound_trigger_seq_ = trigger->seq;
+                missing_trigger_limit.reset();
+                missing_trigger_limit.enable();
+                return;
+            }
+
+            if (missing_trigger_limit.tick()) {
+                log.warn("No camera trigger event is available for the captured image");
+            } else if (missing_trigger_limit.enabled()) {
+                missing_trigger_limit.disable();
+                log.warn(
+                    "{} times, stop printing trigger-sync warnings", missing_trigger_limit.count);
+            }
+        };
+
         auto success_callback = [&](std::unique_ptr<Image> image) {
+            bind_trigger_timestamp(image);
             auto newest = image.release();
             if (!capture_queue.push(newest)) {
 

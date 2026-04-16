@@ -1,6 +1,7 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
+#include "utility/clock.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
@@ -15,13 +16,17 @@ namespace rmcs {
 
 using namespace rmcs::util;
 using namespace kernel;
+using Clock = util::Clock;
 
 class AutoAimComponent final : public rmcs_executor::Component {
 public:
     explicit AutoAimComponent() noexcept
         : rclcpp { get_component_name() } {
 
+        register_input("/predefined/timestamp", predefined_timestamp_);
         register_input("/tf", rmcs_tf);
+        register_input("/camera/trigger/seq", camera_trigger_seq_);
+        register_input("/camera/trigger/timestamp", camera_trigger_timestamp_);
 
         register_output("/gimbal/auto_aim/auto_aim_enabled", gimbal_takeover, false);
         register_output(
@@ -41,6 +46,8 @@ public:
 
         action_throttler.register_action("tf_not_ready");
         action_throttler.register_action("commit_control_state_failed");
+        action_throttler.register_action("commit_camera_trigger_failed");
+        action_throttler.register_action("camera_trigger_gap_detected");
     }
 
     auto update() -> void override {
@@ -56,7 +63,11 @@ public:
 private:
     static constexpr auto auto_aim_state_timeout { std::chrono::milliseconds { 100 } };
 
+    InputInterface<Clock::time_point> predefined_timestamp_;
     InputInterface<rmcs_description::Tf> rmcs_tf;
+
+    InputInterface<std::uint64_t> camera_trigger_seq_;
+    InputInterface<Clock::time_point> camera_trigger_timestamp_;
 
     double current_gimbal_yaw { std::numeric_limits<double>::quiet_NaN() };
     double current_gimbal_pitch { std::numeric_limits<double>::quiet_NaN() };
@@ -65,9 +76,11 @@ private:
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
     Feishu<RuntimeRole::Control> feishu;
+    Channel<CameraTriggerEvent> camera_trigger_channel;
     ControlState control_state;
     AutoAimState auto_aim_state;
     bool auto_aim_state_received_ { false };
+    std::uint64_t last_committed_camera_trigger_seq_ { 0 };
 
     OutputInterface<bool> gimbal_takeover;
     OutputInterface<bool> shoot_permitted;
@@ -133,6 +146,7 @@ private:
     auto publish_control_state() -> void {
         update_gimbal_direction();
         update_control_state();
+        publish_camera_trigger_event();
 
         auto success = feishu.commit(control_state);
         if (!success) {
@@ -143,8 +157,38 @@ private:
         }
     }
 
+    auto publish_camera_trigger_event() -> void {
+        auto trigger_seq = *camera_trigger_seq_;
+        if (trigger_seq == 0 || trigger_seq == last_committed_camera_trigger_seq_) {
+            return;
+        }
+
+        if (last_committed_camera_trigger_seq_ != 0
+            && trigger_seq > last_committed_camera_trigger_seq_ + 1) {
+            action_throttler.dispatch("camera_trigger_gap_detected", [&] {
+                rclcpp.warn("Camera trigger gap detected: last={}, current={}",
+                    last_committed_camera_trigger_seq_, trigger_seq);
+            });
+        } else {
+            action_throttler.reset("camera_trigger_gap_detected");
+        }
+
+        auto success = camera_trigger_channel.commit(CameraTriggerEvent {
+            .seq       = trigger_seq,
+            .timestamp = *camera_trigger_timestamp_,
+        });
+        if (!success) {
+            action_throttler.dispatch("commit_camera_trigger_failed",
+                [&] { rclcpp.info("commit camera trigger event failed!"); });
+            return;
+        }
+
+        last_committed_camera_trigger_seq_ = trigger_seq;
+        action_throttler.reset("commit_camera_trigger_failed");
+    }
+
     auto update_control_state() -> void {
-        control_state.timestamp = Clock::now();
+        control_state.timestamp = *predefined_timestamp_;
 
         auto odom_to_camera_transform =
             fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(

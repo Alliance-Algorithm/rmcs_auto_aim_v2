@@ -121,6 +121,12 @@ ament_add_gtest(
     ${TEST_DIR}/feishu_test.cpp
 )
 
+# Timestamp alignment
+ament_add_gtest(
+    test_timestamp_alignment
+    ${TEST_DIR}/timestamp_alignment.cpp
+)
+
 # Action throttler
 ament_add_gtest(
     test_action_throttler

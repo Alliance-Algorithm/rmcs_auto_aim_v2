@@ -14,8 +14,8 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
-#include <csignal>
 #include <experimental/scope>
+#include <rclcpp/utilities.hpp>
 #include <string>
 #include <string_view>
 #include <yaml-cpp/yaml.h>
@@ -27,10 +27,10 @@ using namespace rmcs::kernel;
 auto main() -> int {
     using namespace std::chrono_literals;
 
-    std::signal(SIGINT, [](int) { util::set_running(false); });
-
     auto rclcpp_node = util::RclcppNode { "AutoAim" };
     rclcpp_node.set_pub_topic_prefix("/rmcs/auto_aim/");
+
+    rclcpp::on_shutdown([] { util::set_running(false); });
 
     {
         /// Runtime
@@ -112,18 +112,20 @@ auto main() -> int {
         ///
         /// Steps
         ///
-        const auto fetch_control_state = [&] -> ControlState {
+        const auto fetch_control_state = [&](Clock::time_point image_timestamp) -> ControlState {
             if (is_local_runtime) {
                 auto state = ControlState {};
                 state.reset();
                 return state;
             }
-            if (!feishu.updated()) {
-                action_throttler.dispatch(control_state_label,
-                    [&] { rclcpp_node.warn("Control state 尚未更新，使用上一次缓存值."); });
-            } else {
+
+            if (auto state = feishu.fetch_latest_before(image_timestamp)) {
                 action_throttler.reset(control_state_label);
+                return *state;
             }
+
+            action_throttler.dispatch(control_state_label,
+                [&] { rclcpp_node.warn("Control state history 不可用，使用当前最新缓存值."); });
             return feishu.fetch();
         };
 
@@ -141,7 +143,7 @@ auto main() -> int {
         };
 
         for (;;) {
-            if (!util::get_running()) [[unlikely]]
+            if (!util::get_running() || !rclcpp::ok()) [[unlikely]]
                 break;
 
             rclcpp_node.spin_once();
@@ -154,7 +156,7 @@ auto main() -> int {
                 } };
                 std::ignore = stream_guard;
 
-                auto control_state = fetch_control_state();
+                auto control_state = fetch_control_state(image->get_timestamp());
                 auto next_state    = AutoAimState {};
                 next_state.reset();
 

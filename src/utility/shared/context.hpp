@@ -4,6 +4,7 @@
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace rmcs::util {
@@ -69,6 +70,12 @@ struct AutoAimState {
     }
 };
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
+
+struct CameraTriggerEvent {
+    std::uint64_t seq {};
+    Clock::time_point timestamp {};
+};
+static_assert(std::is_trivially_copyable_v<CameraTriggerEvent>);
 
 struct ControlState {
     Clock::time_point timestamp {};
