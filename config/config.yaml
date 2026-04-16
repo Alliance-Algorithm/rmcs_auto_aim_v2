@@ -6,7 +6,7 @@ capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  enable_trigger_sync: false
+  enable_trigger_sync: true
   # hikcamera or local_video
   source: "hikcamera"
   hikcamera:
@@ -22,7 +22,7 @@ capturer:
     invert_image: false
     software_sync: false
     trigger_mode: false
-    fixed_framerate: false
+    fixed_framerate: true
   local_video:
     # 替换为你具体的路径
     location: "/workspaces/alliance/test_videos/outpost.mp4"
