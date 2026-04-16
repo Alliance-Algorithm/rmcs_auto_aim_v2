@@ -1,8 +1,8 @@
 #pragma once
 #include <array>
 #include <atomic>
-#include <cstddef>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -10,6 +10,65 @@
 #include <unistd.h>
 
 namespace rmcs::shm {
+
+namespace detail {
+
+    template <typename Context, std::size_t Len>
+    class MappedContext final {
+    public:
+        MappedContext()                                        = default;
+        MappedContext(const MappedContext&)                    = delete;
+        auto operator=(const MappedContext&) -> MappedContext& = delete;
+
+        ~MappedContext() noexcept {
+            if (context_ != nullptr) {
+                munmap(static_cast<void*>(context_), Len);
+            }
+            if (shm_fd_ != -1) {
+                close(shm_fd_);
+            }
+        }
+
+        auto open_sender(const char* id) noexcept -> bool {
+            return open(id, O_CREAT | O_RDWR, true);
+        }
+
+        auto open_receiver(const char* id) noexcept -> bool { return open(id, O_RDWR, false); }
+
+        auto opened() const noexcept -> bool { return context_ != nullptr; }
+
+        auto get() const noexcept -> Context* { return context_; }
+
+    private:
+        auto open(const char* id, int flags, bool resize) noexcept -> bool {
+            if (opened()) return true;
+
+            auto fd = shm_open(id, flags, 0666);
+            if (fd == -1) {
+                return false;
+            }
+
+            if (resize && ftruncate(fd, Len) == -1) {
+                close(fd);
+                return false;
+            }
+
+            auto* shm_ptr = mmap(nullptr, Len, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+            if (shm_ptr == MAP_FAILED) {
+                close(fd);
+                return false;
+            }
+
+            shm_fd_  = fd;
+            context_ = static_cast<Context*>(shm_ptr);
+            return true;
+        }
+
+        int shm_fd_ { -1 };
+        Context* context_ { nullptr };
+    };
+
+} // namespace detail
 
 template <typename T>
 struct alignas(64) SharedContext final {
@@ -26,50 +85,24 @@ struct Client {
     using Context = SharedContext<T>;
 
     static constexpr auto kContextLen = sizeof(Context);
-    static constexpr auto kDataLen    = sizeof(T);
 
     class Send final {
     public:
-        ~Send() noexcept {
-            if (context) {
-                munmap(static_cast<void*>(context), kContextLen);
-            }
-            if (shm_fd != -1) {
-                close(shm_fd);
-            }
-        }
-        auto open(const char* id) noexcept -> bool {
-            shm_fd = shm_open(id, O_CREAT | O_RDWR, 0666);
-            if (shm_fd == -1) {
-                return false;
-            }
-            if (ftruncate(shm_fd, kContextLen) == -1) {
-                close(shm_fd);
-                return false;
-            }
+        Send()                               = default;
+        Send(const Send&)                    = delete;
+        auto operator=(const Send&) -> Send& = delete;
 
-            auto* shm_ptr =
-                mmap(nullptr, kContextLen, PROT_WRITE | PROT_READ, MAP_SHARED, shm_fd, 0);
-            if (shm_ptr == MAP_FAILED) {
-                close(shm_fd);
-                return false;
-            }
-
-            context = static_cast<Context*>(shm_ptr);
-            return true;
-        }
-        auto opened() const noexcept { return context != nullptr; }
+        auto open(const char* id) noexcept -> bool { return context_.open_sender(id); }
+        auto opened() const noexcept { return context_.opened(); }
         auto send(const T& data) noexcept -> void {
-            if (!context) return;
-            context->version.fetch_add(1, std::memory_order::acq_rel);
-            context->data = data;
-            context->version.fetch_add(1, std::memory_order::acq_rel);
+            with_write([&](T& shared) { shared = data; });
         }
 
         template <typename F>
         auto with_write(F&& fn) noexcept -> void
             requires std::invocable<F, T&>
         {
+            auto* context = context_.get();
             if (!context) return;
 
             context->version.fetch_add(1, std::memory_order::acq_rel);
@@ -78,57 +111,26 @@ struct Client {
         }
 
     private:
-        int shm_fd { -1 };
-        Context* context { nullptr };
+        detail::MappedContext<Context, kContextLen> context_ {};
     };
 
     class Recv {
     public:
-        ~Recv() noexcept {
-            if (context) {
-                munmap(static_cast<void*>(context), kContextLen);
-            }
-            if (shm_fd != -1) {
-                close(shm_fd);
-            }
-        }
+        Recv()                               = default;
+        Recv(const Recv&)                    = delete;
+        auto operator=(const Recv&) -> Recv& = delete;
 
-        auto open(const char* id) noexcept -> bool {
-            shm_fd = shm_open(id, O_RDWR, 0666);
-            if (shm_fd == -1) {
-                return false;
-            }
-
-            auto* shm_ptr =
-                mmap(nullptr, kContextLen, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-            if (shm_ptr == MAP_FAILED) {
-                close(shm_fd);
-                return false;
-            }
-
-            context = static_cast<Context*>(shm_ptr);
-            return true;
-        }
-        auto opened() const noexcept { return context != nullptr; }
+        auto open(const char* id) noexcept -> bool { return context_.open_receiver(id); }
+        auto opened() const noexcept { return context_.opened(); }
         auto recv(T& out_data) const noexcept -> void {
-            if (!context) return;
-
-            auto version1 = std::uint64_t {};
-            auto version2 = std::uint64_t {};
-
-            do {
-                version1 = context->version.load(std::memory_order::acquire);
-                out_data = context->data;
-                version2 = context->version.load(std::memory_order::acquire);
-            } while ((version1 != version2) || (version1 & 1));
-
-            version = version2;
+            with_read([&](const T& shared) { out_data = shared; });
         }
 
         template <typename F>
         auto with_read(F&& fn) const noexcept -> void
             requires std::invocable<F, const T&>
         {
+            auto* context = context_.get();
             if (!context) return;
 
             auto snapshot = T {};
@@ -146,6 +148,7 @@ struct Client {
         }
 
         auto is_updated() const noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
 
             auto current = context->version.load(std::memory_order::acquire);
@@ -155,8 +158,7 @@ struct Client {
     private:
         mutable std::uint64_t version { 0 };
 
-        int shm_fd { -1 };
-        Context* context { nullptr };
+        detail::MappedContext<Context, kContextLen> context_ {};
     };
 };
 
@@ -180,40 +182,24 @@ struct HistoryClient {
 
     class Send final {
     public:
-        ~Send() noexcept {
-            if (context) {
-                munmap(static_cast<void*>(context), kContextLen);
-            }
-            if (shm_fd != -1) {
-                close(shm_fd);
-            }
-        }
+        Send()                               = default;
+        Send(const Send&)                    = delete;
+        auto operator=(const Send&) -> Send& = delete;
 
         auto open(const char* id) noexcept -> bool {
-            shm_fd = shm_open(id, O_CREAT | O_RDWR, 0666);
-            if (shm_fd == -1) {
-                return false;
-            }
-            if (ftruncate(shm_fd, kContextLen) == -1) {
-                close(shm_fd);
+            if (!context_.open_sender(id)) {
                 return false;
             }
 
-            auto* shm_ptr =
-                mmap(nullptr, kContextLen, PROT_WRITE | PROT_READ, MAP_SHARED, shm_fd, 0);
-            if (shm_ptr == MAP_FAILED) {
-                close(shm_fd);
-                return false;
-            }
-
-            context       = static_cast<Context*>(shm_ptr);
+            auto* context = context_.get();
             next_sequence = context->committed.load(std::memory_order::acquire);
             return true;
         }
 
-        auto opened() const noexcept { return context != nullptr; }
+        auto opened() const noexcept { return context_.opened(); }
 
         auto push(const T& data) noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
 
             const auto sequence = next_sequence++;
@@ -229,45 +215,32 @@ struct HistoryClient {
         }
 
     private:
-        int shm_fd { -1 };
-        Context* context { nullptr };
+        detail::MappedContext<Context, kContextLen> context_ {};
         std::uint64_t next_sequence { 0 };
     };
 
     class Recv final {
     public:
-        ~Recv() noexcept {
-            if (context) {
-                munmap(static_cast<void*>(context), kContextLen);
-            }
-            if (shm_fd != -1) {
-                close(shm_fd);
-            }
-        }
+        Recv()                               = default;
+        Recv(const Recv&)                    = delete;
+        auto operator=(const Recv&) -> Recv& = delete;
 
         auto open(const char* id) noexcept -> bool {
-            shm_fd = shm_open(id, O_RDWR, 0666);
-            if (shm_fd == -1) {
+            if (!context_.open_receiver(id)) {
                 return false;
             }
 
-            auto* shm_ptr =
-                mmap(nullptr, kContextLen, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-            if (shm_ptr == MAP_FAILED) {
-                close(shm_fd);
-                return false;
-            }
-
-            context               = static_cast<Context*>(shm_ptr);
+            auto* context         = context_.get();
             const auto committed  = context->committed.load(std::memory_order::acquire);
             observed_committed    = 0;
             next_sequence_to_pop_ = committed;
             return true;
         }
 
-        auto opened() const noexcept { return context != nullptr; }
+        auto opened() const noexcept { return context_.opened(); }
 
         auto is_updated() const noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
             return context->committed.load(std::memory_order::acquire) != observed_committed;
         }
@@ -278,6 +251,7 @@ struct HistoryClient {
 
         template <typename Predicate>
         auto find_latest(Predicate&& predicate, T& out_data) const noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
 
             const auto committed = context->committed.load(std::memory_order::acquire);
@@ -289,8 +263,8 @@ struct HistoryClient {
                     continue;
                 }
                 if (predicate(candidate)) {
-                    out_data            = candidate;
-                    observed_committed  = committed;
+                    out_data           = candidate;
+                    observed_committed = committed;
                     return true;
                 }
             }
@@ -300,6 +274,7 @@ struct HistoryClient {
         }
 
         auto pop_next(T& out_data) const noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
 
             const auto committed = context->committed.load(std::memory_order::acquire);
@@ -331,14 +306,15 @@ struct HistoryClient {
         }
 
         auto read_sequence(std::uint64_t sequence, T& out_data) const noexcept -> bool {
+            auto* context = context_.get();
             if (!context) return false;
 
             const auto& entry = context->entries[sequence % N];
 
-            auto version1         = std::uint64_t {};
-            auto version2         = std::uint64_t {};
-            auto stored_sequence  = std::uint64_t {};
-            auto candidate        = T {};
+            auto version1        = std::uint64_t {};
+            auto version2        = std::uint64_t {};
+            auto stored_sequence = std::uint64_t {};
+            auto candidate       = T {};
 
             do {
                 version1        = entry.version.load(std::memory_order::acquire);
@@ -358,8 +334,7 @@ struct HistoryClient {
         mutable std::uint64_t observed_committed { 0 };
         mutable std::uint64_t next_sequence_to_pop_ { 0 };
 
-        int shm_fd { -1 };
-        Context* context { nullptr };
+        detail::MappedContext<Context, kContextLen> context_ {};
     };
 };
 
