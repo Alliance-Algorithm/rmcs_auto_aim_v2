@@ -3,7 +3,6 @@
 #include "utility/shared/context.hpp"
 #include "utility/shared/interprocess.hpp"
 #include <optional>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -48,66 +47,34 @@ struct ChannelTraits<util::CameraTriggerEvent> {
         kCameraTriggerHistoryCapacity>::Recv;
 };
 
-namespace detail {
-
-    template <typename Client, typename T>
-    auto channel_write(Client& client, const T& data) noexcept -> bool {
-        if constexpr (requires { client.push(data); }) {
-            return client.push(data);
-        } else {
-            client.with_write([&](T& shared) { shared = data; });
-            return true;
-        }
-    }
-
-    template <typename Client, typename T>
-    auto channel_read_latest(Client& client, T& buffer) noexcept -> bool {
-        if constexpr (requires { client.latest(buffer); }) {
-            return client.latest(buffer);
-        } else {
-            client.with_read([&](const T& shared) { buffer = shared; });
-            return true;
-        }
-    }
-
-    template <typename Client, typename Predicate, typename T>
-    auto channel_read_latest_matching(Client& client, Predicate&& predicate, T& buffer) noexcept
-        -> bool {
-        if constexpr (requires {
-                          client.find_latest(std::forward<Predicate>(predicate), buffer);
-                      }) {
-            return client.find_latest(std::forward<Predicate>(predicate), buffer);
-        } else {
-            return false;
-        }
-    }
-
-    template <typename Client, typename T>
-    auto channel_pop_next(Client& client, T& buffer) noexcept -> bool {
-        if constexpr (requires { client.pop_next(buffer); }) {
-            return client.pop_next(buffer);
-        } else {
-            return false;
-        }
-    }
-
-} // namespace detail
-
 template <typename T>
 class Channel {
 public:
+    static_assert(shm_name<T> != nullptr, "Channel<T> requires shm_name<T> specialization");
+
     using SendClient = typename ChannelTraits<T>::SendClient;
     using RecvClient = typename ChannelTraits<T>::RecvClient;
 
     auto commit(const T& data) noexcept -> bool {
         if (!ensure_open(send_client_, shm_name<T>)) [[unlikely]]
             return false;
-        return detail::channel_write(send_client_, data);
+
+        if constexpr (requires { send_client_.push(data); }) {
+            return send_client_.push(data);
+        } else {
+            send_client_.with_write([&](T& shared) { shared = data; });
+            return true;
+        }
     }
 
     auto fetch() noexcept -> const T& {
         if (!ensure_open(recv_client_, shm_name<T>)) return recv_buffer_;
-        std::ignore = detail::channel_read_latest(recv_client_, recv_buffer_);
+
+        if constexpr (requires { recv_client_.latest(recv_buffer_); }) {
+            recv_client_.latest(recv_buffer_);
+        } else {
+            recv_client_.with_read([&](const T& shared) { recv_buffer_ = shared; });
+        }
         return recv_buffer_;
     }
 
@@ -122,23 +89,16 @@ public:
         }
 
         auto buffer = T {};
-        if (!detail::channel_read_latest_matching(
-                recv_client_, std::forward<Predicate>(predicate), buffer)) {
-            return std::nullopt;
-        }
-        recv_buffer_ = buffer;
-        return buffer;
-    }
-
-    auto pop_next() noexcept -> std::optional<T> {
-        if (!ensure_open(recv_client_, shm_name<T>)) {
+        if constexpr (requires {
+                          recv_client_.find_latest(std::forward<Predicate>(predicate), buffer);
+                      }) {
+            if (!recv_client_.find_latest(std::forward<Predicate>(predicate), buffer)) {
+                return std::nullopt;
+            }
+        } else {
             return std::nullopt;
         }
 
-        auto buffer = T {};
-        if (!detail::channel_pop_next(recv_client_, buffer)) {
-            return std::nullopt;
-        }
         recv_buffer_ = buffer;
         return buffer;
     }
@@ -157,6 +117,9 @@ private:
 template <RuntimeRole Role>
 class Feishu {
 public:
+    static_assert(Role == RuntimeRole::AutoAim || Role == RuntimeRole::Control,
+        "Feishu<Role> only supports AutoAim and Control");
+
     using AutoAimState = util::AutoAimState;
     using ControlState = util::ControlState;
 
