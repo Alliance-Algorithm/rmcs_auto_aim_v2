@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <numbers>
 
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
@@ -14,6 +15,24 @@ namespace rmcs::predictor {
 struct EKFParameters {
     using EKF = util::EKF<11, 4>;
 
+    static auto armor_yaw(DeviceId const& device, EKF::XVec const& x, int id) -> double {
+        return util::normalize_angle(x[6] + id * 2 * std::numbers::pi / armor_num(device));
+    }
+
+    static auto h_armor_z(DeviceId const& device, EKF::XVec const& x, int id) -> double {
+        auto num           = armor_num(device);
+        const auto use_l_h = (num == 4) && (id == 1 || id == 3);
+        return use_l_h ? (x[4] + x[10]) : x[4];
+    }
+
+    // x vx y vy z vz a w r l h
+    // x, y, z：装甲板旋转中心在世界坐标系下的位置
+    // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
+    // a: angle,装甲板相对于旋转中心的 yaw 角
+    // w: angular velocity 角速度
+    // r: 装甲板中心到旋转中心的半径
+    // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
+    // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
     static auto x(Armor3D const& armor) -> EKF::XVec {
         const auto r = radius(armor.genre);
 
@@ -25,17 +44,14 @@ struct EKFParameters {
         const double yaw    = ypr[0];
         const auto center_x = trans_x + r * std::cos(yaw);
         const auto center_y = trans_y + r * std::sin(yaw);
-        const auto center_z = trans_z;
 
-        auto x = EKF::XVec { center_x, 0, center_y, 0, center_z, 0, yaw, 0, r, 0, 0 };
+        auto x = EKF::XVec { center_x, 0, center_y, 0, trans_z, 0, yaw, 0, r, 0, 0 };
         return x;
     }
 
     static auto P_initial_dig(DeviceId const& device) -> EKF::PDig {
         auto P_dig = EKF::PDig {};
-        if (device == DeviceId::OUTPOST) {
-            P_dig << 1, 64, 1, 64, 1, 81, 0.4, 100, 1e-4, 0, 0;
-        } else if (device == DeviceId::BASE) {
+        if (device == DeviceId::BASE) {
             P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 0, 0;
         } else {
             P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1, 1, 1;
@@ -45,7 +61,6 @@ struct EKFParameters {
     }
 
     static auto radius(DeviceId const& device) -> double {
-
         switch (device) {
         case DeviceId::OUTPOST:
             return kOutpostRadius;
@@ -98,15 +113,10 @@ struct EKFParameters {
 
     // Piecewise White Noise Model
     // https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/07-Kalman-Filter-Math.ipynb
-    static auto Q(DeviceId const& device, double dt) -> EKF::QMat {
+    static auto Q(double dt) -> EKF::QMat {
         double acc_var, angular_acc_var;
-        if (device == DeviceId::OUTPOST) {
-            acc_var         = 10;
-            angular_acc_var = 0.1;
-        } else {
-            acc_var         = 100;
-            angular_acc_var = 400;
-        }
+        acc_var         = 100;
+        angular_acc_var = 400;
 
         const auto a = dt * dt * dt * dt / 4.;
         const auto b = dt * dt * dt / 2;
@@ -133,36 +143,27 @@ struct EKFParameters {
     }
 
     // 计算出装甲板中心的坐标（考虑长短轴）
-    static auto h_armor_xyz(EKF::XVec const& x, int id, int armor_num) -> Eigen::Vector3d {
-        // x vx y vy z vz a w r l h
-        // x, y, z：装甲板旋转中心在世界坐标系下的位置
-        // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
-        // a: angle,装甲板相对于旋转中心的 yaw 角
-        // w: angular velocity 角速度
-        // r: 装甲板中心到旋转中心的半径
-        // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
-        // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
-        auto angle = x[6];
-        angle      = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
+    static auto h_armor_xyz(DeviceId const& device, EKF::XVec const& x, int id, int armor_num)
+        -> Eigen::Vector3d {
+        const auto phase = armor_yaw(device, x, id);
+        auto radius      = x[8];
 
         const auto use_l_h = (armor_num == 4) && (id == 1 || id == 3);
-        const auto r_min = x[8], l = x[9];
-        const auto r = (use_l_h) ? (r_min + l) : r_min;
+        if (use_l_h) radius += x[9];
 
-        const auto center_x = x[0], center_y = x[2], z_min = x[4], h = x[10];
-        const auto pos_x = center_x - r * std::cos(angle);
-        const auto pos_y = center_y - r * std::sin(angle);
-        const auto pos_z = (use_l_h) ? (z_min + h) : z_min;
+        const auto center_x = x[0], center_y = x[2];
+        const auto pos_x = center_x - radius * std::cos(phase);
+        const auto pos_y = center_y - radius * std::sin(phase);
+        const auto pos_z = h_armor_z(device, x, id);
 
         const auto result = Eigen::Vector3d { pos_x, pos_y, pos_z };
         return result;
     }
 
-    static auto h(EKF::XVec const& x, int id, int armor_num) -> EKF::ZVec {
-        const auto xyz = h_armor_xyz(x, id, armor_num);
+    static auto h(DeviceId const& device, EKF::XVec const& x, int id, int armor_num) -> EKF::ZVec {
+        const auto xyz = h_armor_xyz(device, x, id, armor_num);
         const auto ypd = util::xyz2ypd(xyz);
-        auto angle     = x(6);
-        const auto yaw = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
+        const auto yaw = armor_yaw(device, x, id);
 
         const auto result = EKF::ZVec { ypd[0], ypd[1], ypd[2], yaw };
         return result;
@@ -171,8 +172,7 @@ struct EKFParameters {
     static auto f(double dt) -> auto {
         return [dt](EKF::XVec const& x) {
             EKF::XVec x_prior = F(dt) * x;
-            const auto yaw    = x_prior[6];
-            x_prior[6]        = util::normalize_angle(yaw);
+            x_prior[6]        = util::normalize_angle(x_prior[6]);
             return x_prior;
         };
     }
@@ -199,15 +199,7 @@ struct EKFParameters {
         return R;
     }
 
-    static auto H(EKF::XVec const& x, int id, int armor_num) -> EKF::HMat {
-        // x vx y vy z vz a w r l h
-        // x, y, z：装甲板旋转中心在世界坐标系下的位置
-        // vx, vy, vz：装甲板旋转中心在世界坐标系下的线速度
-        // a: angle,装甲板相对于旋转中心的 yaw 角
-        // w: angular velocity 角速度
-        // r: 装甲板中心到旋转中心的半径
-        // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
-        // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
+    static auto H(DeviceId const& device, EKF::XVec const& x, int id, int armor_num) -> EKF::HMat {
         auto angle           = x[6];
         angle                = util::normalize_angle(angle + id * 2 * std::numbers::pi / armor_num);
         const auto cos_angle = std::cos(angle);
@@ -237,7 +229,7 @@ struct EKFParameters {
             0, 0, 0, 0, 0, 0,     1, 0,     0,     0,     0;
         // clang-format on
 
-        auto xyz         = h_armor_xyz(x, id, armor_num);
+        auto xyz         = h_armor_xyz(device, x, id, armor_num);
         auto H_armor_ypd = util::xyz2ypd_jacobian(xyz);
 
         Eigen::Matrix<double, 4, 4> H_armor_ypda;

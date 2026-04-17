@@ -1,5 +1,11 @@
 #pragma once
 #include "utility/robot/armor.hpp"
+
+#include <array>
+#include <cstring>
+#include <span>
+#include <type_traits>
+
 #include <opencv2/core/types.hpp>
 
 namespace rmcs {
@@ -51,6 +57,7 @@ struct InferResultAdapter {
     // Util
     auto unsafe_from(std::span<const precision_type> raw) noexcept -> void {
         static_assert(std::is_trivially_copyable_v<data_type>);
+        static_assert(std::is_standard_layout_v<data_type>);
         if (raw.size() < length()) return;
         std::memcpy(&data, raw.data(), sizeof(data_type));
     }

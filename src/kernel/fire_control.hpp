@@ -5,7 +5,6 @@
 
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
-#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::kernel {
@@ -20,13 +19,12 @@ public:
         double pitch;
         double yaw;
         double horizon_distance;
+        bool shoot_permitted;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto set_bullet_speed(double speed) -> void;
-
-    auto solve(const predictor::Snapshot& snapshot, Translation const& odom_to_muzzle_translation)
+    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
         -> std::optional<Result>;
 };
 }

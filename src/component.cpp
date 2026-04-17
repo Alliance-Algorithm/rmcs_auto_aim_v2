@@ -5,7 +5,9 @@
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
+#include <chrono>
 #include <cmath>
+#include <limits>
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
@@ -20,12 +22,11 @@ public:
         : rclcpp { get_component_name() } {
 
         register_input("/tf", rmcs_tf);
-        register_input("/referee/shooter/initial_speed", bullet_speed);
 
-        register_output("/gimbal/auto_aim/controllable", gimbal_takeover, false);
+        register_output("/gimbal/auto_aim/auto_aim_enabled", gimbal_takeover, false);
         register_output(
             "/gimbal/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
-        register_output("/gimbal/auto_aim/shoot_permit", shoot_permitted, false);
+        register_output("/gimbal/auto_aim/shoot_enable", shoot_permitted, false);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
@@ -39,56 +40,26 @@ public:
         visual_odom_to_camera = std::make_unique<visual::Transform>(config);
 
         action_throttler.register_action("tf_not_ready");
-        action_throttler.register_action("bullet_speed_not_ready");
         action_throttler.register_action("commit_control_state_failed");
     }
 
     auto update() -> void override {
-        using namespace rmcs_description;
-
         if (!rmcs_tf.ready()) [[unlikely]] {
-            action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
-            control_state.set_identity();
-            reset_control_commands();
+            handle_tf_not_ready();
             return;
         }
-        if (!bullet_speed.ready()) [[unlikely]] {
-            action_throttler.dispatch(
-                "bullet_speed_not_ready", [&] { rclcpp.warn("bullet_speed is not ready"); });
-            control_state.set_identity();
-            reset_control_commands();
-            return;
-        }
-        // TODO:适时交出云台和发射机构控制权
-        {
-            update_gimbal_direction();
-            update_control_state();
 
-            auto success = feishu.commit(control_state);
-            if (!success) {
-                action_throttler.dispatch("commit_control_state_failed",
-                    [&] { rclcpp.info("commit control state failed!"); });
-            } else {
-                action_throttler.reset("commit_control_state_failed");
-            }
-        }
-        {
-            if (feishu.updated()) {
-                auto_aim_state = feishu.fetch();
-            }
-
-            *gimbal_takeover = auto_aim_state.gimbal_takeover;
-            *shoot_permitted = auto_aim_state.shoot_permitted;
-            update_target_direction();
-        }
+        publish_control_state();
+        forward_auto_aim_outputs();
     }
 
 private:
+    static constexpr auto auto_aim_state_timeout { std::chrono::milliseconds { 100 } };
+
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
-    double current_gimbal_yaw { 0. };
-    double current_gimbal_pitch { 0. };
-    InputInterface<float> bullet_speed;
+    double current_gimbal_yaw { std::numeric_limits<double>::quiet_NaN() };
+    double current_gimbal_pitch { std::numeric_limits<double>::quiet_NaN() };
 
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
@@ -96,6 +67,7 @@ private:
     Feishu<RuntimeRole::Control> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
+    bool auto_aim_state_received_ { false };
 
     OutputInterface<bool> gimbal_takeover;
     OutputInterface<bool> shoot_permitted;
@@ -104,7 +76,73 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-private:
+    auto has_fresh_auto_aim_state() const -> bool {
+        return auto_aim_state_received_
+            && Clock::now() - auto_aim_state.timestamp <= auto_aim_state_timeout;
+    }
+
+    static auto make_invalid_auto_aim_state() -> AutoAimState {
+        auto state = AutoAimState {};
+        state.reset();
+        return state;
+    }
+
+    auto resolve_auto_aim_state() -> AutoAimState {
+        if (feishu.updated()) {
+            auto_aim_state           = feishu.fetch();
+            auto_aim_state_received_ = true;
+        }
+
+        if (has_fresh_auto_aim_state()) {
+            return auto_aim_state;
+        }
+
+        return make_invalid_auto_aim_state();
+    }
+
+    auto publish_auto_aim_outputs(const AutoAimState& state) -> void {
+        *gimbal_takeover  = state.gimbal_takeover;
+        *shoot_permitted  = state.shoot_permitted;
+        *target_direction = compute_target_direction(state);
+    }
+
+    static auto compute_target_direction(const AutoAimState& state) -> Eigen::Vector3d {
+        if (!state.has_control_direction()) {
+            return Eigen::Vector3d::Zero();
+        }
+
+        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
+
+        // clang-format off
+        return Eigen::Vector3d {
+            std::cos(pitch) * std::cos(yaw),
+            std::cos(pitch) * std::sin(yaw), 
+            std::sin(pitch)
+        };
+        // clang-format on
+    }
+
+    auto forward_auto_aim_outputs() -> void { publish_auto_aim_outputs(resolve_auto_aim_state()); }
+
+    auto handle_tf_not_ready() -> void {
+        action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
+        control_state.reset();
+        publish_auto_aim_outputs(make_invalid_auto_aim_state());
+    }
+
+    auto publish_control_state() -> void {
+        update_gimbal_direction();
+        update_control_state();
+
+        auto success = feishu.commit(control_state);
+        if (!success) {
+            action_throttler.dispatch("commit_control_state_failed",
+                [&] { rclcpp.info("commit control state failed!"); });
+        } else {
+            action_throttler.reset("commit_control_state_failed");
+        }
+    }
+
     auto update_control_state() -> void {
         control_state.timestamp = Clock::now();
 
@@ -123,41 +161,24 @@ private:
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         control_state.invincible_devices = DeviceIds::None();
 
-        control_state.bullet_speed = *bullet_speed;
-        control_state.yaw          = current_gimbal_yaw;
-        control_state.pitch        = current_gimbal_pitch;
-    }
-
-    auto update_target_direction() -> void {
-        const auto& [yaw, pitch] = std::tie(auto_aim_state.yaw, auto_aim_state.pitch);
-
-        // clang-format off
-        *target_direction = Eigen::Vector3d {
-            std::cos(pitch) * std::cos(yaw),
-            std::cos(pitch) * std::sin(yaw), 
-            std::sin(pitch)
-        };
-        // clang-format on
-    }
-
-    auto reset_control_commands() -> void {
-        *gimbal_takeover  = false;
-        *shoot_permitted  = false;
-        *target_direction = Eigen::Vector3d::Zero();
+        control_state.yaw   = current_gimbal_yaw;
+        control_state.pitch = current_gimbal_pitch;
     }
 
     auto update_gimbal_direction() -> void {
-        auto odom_to_muzzle_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::MuzzleLink>(
+        using namespace rmcs_description;
+
+        auto odom_to_pitch_transform =
+            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::PitchLink>(
                 *rmcs_tf);
 
-        auto quat = Eigen::Quaterniond { odom_to_muzzle_transform.rotation() };
+        auto quat = Eigen::Quaterniond { odom_to_pitch_transform.toRotationMatrix() };
 
-        auto current_muzzle_direction = quat * Eigen::Vector3d::UnitX();
+        auto current_pitch_direction = quat * Eigen::Vector3d::UnitX();
 
-        current_gimbal_yaw = std::atan2(current_muzzle_direction.y(), current_muzzle_direction.x());
-        current_gimbal_pitch = std::atan2(current_muzzle_direction.z(),
-            std::hypot(current_muzzle_direction.x(), current_muzzle_direction.y()));
+        current_gimbal_yaw   = std::atan2(current_pitch_direction.y(), current_pitch_direction.x());
+        current_gimbal_pitch = std::atan2(current_pitch_direction.z(),
+            std::hypot(current_pitch_direction.x(), current_pitch_direction.y()));
     }
 };
 

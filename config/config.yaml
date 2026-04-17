@@ -14,17 +14,17 @@ capturer:
     # float
     exposure_us: 2000.0
     # float
-    framerate: 60
+    framerate: 120
     # float
     gain: 16.9807
 
     invert_image: false
     software_sync: false
     trigger_mode: false
-    fixed_framerate: true
+    fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/translation.mp4"
+    location: "/workspaces/alliance/test_videos/outpost.mp4"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -40,20 +40,23 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "shenzhen-0526.onnx"
-  infer_device: "AUTO"
+  model_location: "tongji-yolov5.xml"
+  infer_device: "GPU"
   use_roi_segment: false
   roi_rows: 640
   roi_cols: 640
   input_rows: 640
   input_cols: 640
   min_confidence: 0.5
-  score_threshold: 0.8
-  nms_threshold: 0.45
+  score_threshold: 0.7
+  nms_threshold: 0.3
 
 tracker:
   # blue or red
-  enemy_color: blue
+  enemy_color: red
+  max_temporary_loss_frames: 4
+  max_unconfirmed_loss_frames: 2
+  tracking_confirm_frames: 2
 
 pose_estimator:
   camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
@@ -74,20 +77,21 @@ pose_estimator:
       q: [1., 0., 0., 0.]
 
 fire_control:
-  initial_bullet_speed: 20 # m/s
+  initial_bullet_speed: 26.6 # m/s
   shoot_delay: 0.1 # s
-  shoot_offset_x: 0.0 # m
-  shoot_offset_y: 0.0 # m
-  shoot_offset_z: 0.0 # m
+  yaw_offset: 0.0 # degree
+  pitch_offset: 0.0 # degree
 
-  k: 0.019
-  bias_scale: 1.0
-
-  coming_angle: 60.0      # degree
+  coming_angle: 70.0      # degree
   leaving_angle: 20.0     # degree
   outpost_coming_angle: 70.0      # degree
   outpost_leaving_angle: 30.0     # degree
   angular_velocity_threshold: 120 # degree/s
+
+  first_tolerance: 3 # 近距离射击容差，degree
+  second_tolerance: 2 # 远距离射击容差，degree
+  judge_distance: 2 #距离判断阈值
+  auto_fire: true # 是否由自瞄控制射击
 
 visualization:
   framerate: 60
