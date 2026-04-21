@@ -41,6 +41,12 @@ include_directories(
     ${fast_tf_INCLUDE_DIRS}
 )
 
+#第三方库
+add_subdirectory(third_party/tinympc/src/tinympc)
+if(TARGET tinympcstatic AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tinympcstatic PRIVATE -w)
+endif()
+
 ## 代码资源搜索
 file(GLOB_RECURSE AUTO_AIM_KERNEL
     CONFIGURE_DEPENDS
@@ -71,14 +77,17 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}_module
-    yaml-cpp::yaml-cpp
-    ament_index_cpp::ament_index_cpp
-    openvino::runtime
-    rclcpp::rclcpp
-    ${OpenCV_LIBS}
-    ${hikcamera_LIBRARIES}
-    ${visualization_msgs_LIBRARIES}
-    ${geometry_msgs_LIBRARIES}
+    PUBLIC
+        yaml-cpp::yaml-cpp
+        ament_index_cpp::ament_index_cpp
+        openvino::runtime
+        rclcpp::rclcpp
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+        ${visualization_msgs_LIBRARIES}
+        ${geometry_msgs_LIBRARIES}
+    PRIVATE
+        tinympcstatic
 )
 
 ## 组件构建: component

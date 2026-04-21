@@ -85,6 +85,16 @@ fire_control:
   outpost_coming_angle: 50.0      # degree
   outpost_leaving_angle: 40.0     # degree
 
+  mpc_enable: true
+  mpc_max_yaw_acc: 50.0
+  mpc_yaw_q_angle: 9000000.0
+  mpc_yaw_q_rate: 0.0
+  mpc_yaw_r_acc: 1.0
+  mpc_max_pitch_acc: 100.0
+  mpc_pitch_q_angle: 9000000.0
+  mpc_pitch_q_rate: 0.0
+  mpc_pitch_r_acc: 1.0
+
   first_tolerance: 3 # 近距离射击容差，degree
   second_tolerance: 2 # 远距离射击容差，degree
   judge_distance: 2 #距离判断阈值

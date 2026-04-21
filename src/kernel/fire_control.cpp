@@ -1,5 +1,6 @@
 #include "fire_control.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
+#include "module/fire_control/mpc_trajectory_planner.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
@@ -44,6 +45,7 @@ struct FireControl::Impl {
     Config config;
 
     AimPointChooser aim_point_chooser;
+    MpcTrajectoryPlanner mpc_trajectory_planner;
     ShootEvaluator shoot_evaluator;
 
     const double kMinValidBulletSpeed { 10. };
@@ -78,15 +80,31 @@ struct FireControl::Impl {
             return std::unexpected { std::format(
                 "shoot_evaluator init failed: {}", evaluate_result.error()) };
         }
-        return { };
+
+        auto planner_result = mpc_trajectory_planner.initialize(yaml, chooser_config);
+        if (!planner_result.has_value()) {
+            return std::unexpected { std::format(
+                "mpc_trajectory_planner init failed: {}", planner_result.error()) };
+        }
+        return {};
     }
 
     const int kMaxIterateCount { 5 };
     const double kMaxFlyTimeThreshold { 0.001 };
 
-    auto make_result(const Armor3D& armor, bool control, double current_yaw)
-        -> std::optional<Result> {
-        auto armor_position_in_world = Eigen::Vector3d { };
+    struct AimCommand {
+        double pitch;
+        double yaw;
+        double horizon_distance;
+    };
+
+    struct ImpactTarget {
+        Armor3D armor;
+        Clock::time_point impact_time;
+    };
+
+    auto make_command(const Armor3D& armor) const -> std::optional<AimCommand> {
+        auto armor_position_in_world = Eigen::Vector3d {};
         armor.translation.copy_to(armor_position_in_world);
 
         auto target_d = std::sqrt(armor_position_in_world.x() * armor_position_in_world.x()
@@ -109,26 +127,32 @@ struct FireControl::Impl {
         auto final_yaw = std::atan2(armor_position_in_world.y(), armor_position_in_world.x());
         final_yaw += config.yaw_offset;
 
-        auto command = ShootEvaluator::Command {
+        return AimCommand {
+            .pitch            = trajectory_result->pitch + config.pitch_offset,
+            .yaw              = final_yaw,
+            .horizon_distance = target_d,
+        };
+    }
+
+    auto make_result(AimCommand const& command, bool control, double current_yaw) -> Result {
+        auto shoot_command = ShootEvaluator::Command {
             .control          = control,
             .auto_aim_enabled = control,
             .aim_point_valid  = true,
-            .yaw              = final_yaw,
-            .distance         = target_d,
+            .yaw              = command.yaw,
+            .distance         = command.horizon_distance,
         };
-        auto shoot_permitted   = shoot_evaluator.evaluate(command, current_yaw);
-        const auto final_pitch = trajectory_result->pitch + config.pitch_offset;
+        auto shoot_permitted = shoot_evaluator.evaluate(shoot_command, current_yaw);
 
         return Result {
-            .pitch            = final_pitch,
-            .yaw              = final_yaw,
-            .horizon_distance = target_d,
+            .pitch            = command.pitch,
+            .yaw              = command.yaw,
+            .horizon_distance = command.horizon_distance,
             .shoot_permitted  = shoot_permitted,
         };
     }
 
-    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
-        -> std::optional<Result> {
+    auto solve_target(const predictor::Snapshot& snapshot) -> std::optional<ImpactTarget> {
         auto target_kinematics = snapshot.kinematics();
 
         // 以整车位置来初步迭代飞行时间
@@ -182,7 +206,32 @@ struct FireControl::Impl {
 
         if (!best_armor_opt) return std::nullopt;
 
-        return make_result(*best_armor_opt, control, current_yaw);
+        auto const impact_time = snapshot.time_stamp()
+            + std::chrono::duration_cast<Clock::duration>(
+                std::chrono::duration<double>(current_fly_time + config.shoot_delay));
+
+        return ImpactTarget {
+            .armor       = *best_armor_opt,
+            .impact_time = impact_time,
+        };
+    }
+
+    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
+        -> std::optional<Result> {
+        auto impact_target = solve_target(snapshot);
+        if (!impact_target) return std::nullopt;
+
+        auto direct_command = make_command(impact_target->armor);
+        if (!direct_command) return std::nullopt;
+
+        auto final_command = *direct_command;
+        if (auto planned = mpc_trajectory_planner.plan(snapshot, impact_target->impact_time,
+                config.initial_bullet_speed, config.yaw_offset, config.pitch_offset)) {
+            final_command.yaw   = planned->yaw;
+            final_command.pitch = planned->pitch;
+        }
+
+        return make_result(final_command, control, current_yaw);
     }
 };
 

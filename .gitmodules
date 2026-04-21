@@ -1,0 +1,3 @@
+[submodule "third_party/tinympc"]
+	path = third_party/tinympc
+	url = git@github.com:Alliance-Algorithm/TinyMPC.git
