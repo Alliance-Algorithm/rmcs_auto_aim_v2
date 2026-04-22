@@ -5,8 +5,7 @@
 #include <cmath>
 #include <format>
 
-#include <tinympc/tiny_api.hpp>
-
+#include "module/fire_control/tiny_mpc_axis_solver.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
@@ -15,11 +14,10 @@ using namespace rmcs::fire_control;
 
 namespace {
 
-constexpr double kMpcDt    = 0.01;
-constexpr int kHalfHorizon = 50;
-constexpr int kHorizon     = kHalfHorizon * 2;
+constexpr double kMpcAxisDt       = 0.01;
+constexpr int kMpcAxisHalfHorizon = kMpcAxisHorizon / 2;
 
-using ReferenceTrajectory = Eigen::Matrix<double, 4, kHorizon>;
+using ReferenceTrajectory = Eigen::Matrix<double, 4, kMpcAxisHorizon>;
 
 struct AimSample {
     double yaw;
@@ -38,14 +36,19 @@ auto to_duration(double seconds) -> rmcs::predictor::Snapshot::Clock::duration {
         std::chrono::duration<double> { seconds });
 }
 
-auto destroy_solver(TinySolver*& solver) noexcept -> void {
-    if (solver == nullptr) return;
-    delete solver->solution;
-    delete solver->cache;
-    delete solver->settings;
-    delete solver->work;
-    delete solver;
-    solver = nullptr;
+auto extract_axis_reference(ReferenceTrajectory const& trajectory, int row_offset)
+    -> MpcAxisTrajectory {
+    return MpcAxisTrajectory { trajectory.template block<2, kMpcAxisHorizon>(row_offset, 0) };
+}
+
+auto assemble_plan(ReferencePlan const& reference, double yaw, double pitch)
+    -> MpcTrajectoryPlanner::Plan {
+    auto result         = MpcTrajectoryPlanner::Plan {};
+    result.target_yaw   = reference.target_yaw;
+    result.target_pitch = reference.target_pitch;
+    result.yaw          = rmcs::util::normalize_angle(yaw + reference.yaw_origin);
+    result.pitch        = pitch;
+    return result;
 }
 
 } // namespace
@@ -87,13 +90,8 @@ struct MpcTrajectoryPlanner::Impl {
     Config config {};
     AimPointChooser::Config chooser_config {};
 
-    TinySolver* yaw_solver { nullptr };
-    TinySolver* pitch_solver { nullptr };
-
-    ~Impl() noexcept {
-        destroy_solver(yaw_solver);
-        destroy_solver(pitch_solver);
-    }
+    TinyMpcAxisSolver yaw_solver {};
+    TinyMpcAxisSolver pitch_solver {};
 
     auto initialize(const YAML::Node& yaml, AimPointChooser::Config const& config_in) noexcept
         -> std::expected<void, std::string> {
@@ -104,16 +102,26 @@ struct MpcTrajectoryPlanner::Impl {
             return std::unexpected { result.error() };
         }
 
-        if (!config.mpc_enable) return {};
+        if (!config.mpc_enable) {
+            return {};
+        }
 
-        result = setup_solver(yaw_solver, config.mpc_max_yaw_acc, config.mpc_yaw_q_angle,
-            config.mpc_yaw_q_rate, config.mpc_yaw_r_acc);
+        result = yaw_solver.initialize(TinyMpcAxisSolver::Config {
+            .max_acc = config.mpc_max_yaw_acc,
+            .q_angle = config.mpc_yaw_q_angle,
+            .q_rate  = config.mpc_yaw_q_rate,
+            .r_acc   = config.mpc_yaw_r_acc,
+        });
         if (!result.has_value()) {
             return std::unexpected { std::format("yaw solver init failed: {}", result.error()) };
         }
 
-        result = setup_solver(pitch_solver, config.mpc_max_pitch_acc, config.mpc_pitch_q_angle,
-            config.mpc_pitch_q_rate, config.mpc_pitch_r_acc);
+        result = pitch_solver.initialize(TinyMpcAxisSolver::Config {
+            .max_acc = config.mpc_max_pitch_acc,
+            .q_angle = config.mpc_pitch_q_angle,
+            .q_rate  = config.mpc_pitch_q_rate,
+            .r_acc   = config.mpc_pitch_r_acc,
+        });
         if (!result.has_value()) {
             return std::unexpected {
                 std::format("pitch solver init failed: {}", result.error()),
@@ -126,7 +134,7 @@ struct MpcTrajectoryPlanner::Impl {
     auto plan(const predictor::Snapshot& snapshot,
         predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
         double pitch_offset) -> std::optional<Plan> {
-        if (!config.mpc_enable || yaw_solver == nullptr || pitch_solver == nullptr) {
+        if (!config.mpc_enable) {
             return std::nullopt;
         }
 
@@ -134,66 +142,17 @@ struct MpcTrajectoryPlanner::Impl {
             generate_reference(snapshot, center_time, bullet_speed, yaw_offset, pitch_offset);
         if (!reference) return std::nullopt;
 
-        auto yaw_x0 = Eigen::Vector2d {};
-        yaw_x0 << reference->trajectory(0, 0), reference->trajectory(1, 0);
-        if (tiny_set_x0(yaw_solver, yaw_x0) != 0) return std::nullopt;
+        auto const yaw = yaw_solver.solve_center(extract_axis_reference(reference->trajectory, 0));
+        if (!yaw.has_value()) return std::nullopt;
 
-        auto yaw_ref = Eigen::MatrixXd { reference->trajectory.block(0, 0, 2, kHorizon) };
-        if (tiny_set_x_ref(yaw_solver, yaw_ref) != 0) return std::nullopt;
-        if (tiny_solve(yaw_solver) != 0) return std::nullopt;
+        auto const pitch =
+            pitch_solver.solve_center(extract_axis_reference(reference->trajectory, 2));
+        if (!pitch.has_value()) return std::nullopt;
 
-        auto pitch_x0 = Eigen::Vector2d {};
-        pitch_x0 << reference->trajectory(2, 0), reference->trajectory(3, 0);
-        if (tiny_set_x0(pitch_solver, pitch_x0) != 0) return std::nullopt;
-
-        auto pitch_ref = Eigen::MatrixXd { reference->trajectory.block(2, 0, 2, kHorizon) };
-        if (tiny_set_x_ref(pitch_solver, pitch_ref) != 0) return std::nullopt;
-        if (tiny_solve(pitch_solver) != 0) return std::nullopt;
-
-        auto result         = Plan {};
-        result.target_yaw   = reference->target_yaw;
-        result.target_pitch = reference->target_pitch;
-        result.yaw =
-            util::normalize_angle(yaw_solver->work->x(0, kHalfHorizon) + reference->yaw_origin);
-        result.pitch = pitch_solver->work->x(0, kHalfHorizon);
-        return result;
+        return assemble_plan(*reference, yaw.value(), pitch.value());
     }
 
 private:
-    static auto setup_solver(TinySolver*& solver, double max_acc, double q_angle, double q_rate,
-        double r_acc) -> std::expected<void, std::string> {
-        destroy_solver(solver);
-
-        auto A = Eigen::MatrixXd(2, 2);
-        A << 1.0, kMpcDt, 0.0, 1.0;
-        auto B = Eigen::MatrixXd(2, 1);
-        B << 0.0, kMpcDt;
-        auto f = Eigen::MatrixXd(2, 1);
-        f << 0.0, 0.0;
-
-        Eigen::Matrix2d Q = Eigen::Matrix2d::Zero();
-        Q(0, 0)           = q_angle;
-        Q(1, 1)           = q_rate;
-        Eigen::Matrix<double, 1, 1> R;
-        R << r_acc;
-
-        if (tiny_setup(&solver, A, B, f, Q, R, 1.0, 2, 1, kHorizon, 0) != 0 || solver == nullptr) {
-            return std::unexpected { "tiny_setup returned non-zero status" };
-        }
-
-        auto x_min = Eigen::MatrixXd::Constant(2, kHorizon, -1e17);
-        auto x_max = Eigen::MatrixXd::Constant(2, kHorizon, 1e17);
-        auto u_min = Eigen::MatrixXd::Constant(1, kHorizon - 1, -max_acc);
-        auto u_max = Eigen::MatrixXd::Constant(1, kHorizon - 1, max_acc);
-        if (tiny_set_bound_constraints(solver, x_min, x_max, u_min, u_max) != 0) {
-            destroy_solver(solver);
-            return std::unexpected { "tiny_set_bound_constraints returned non-zero status" };
-        }
-
-        solver->settings->max_iter = 10;
-        return {};
-    }
-
     static auto sample_at(const predictor::Snapshot& snapshot,
         predictor::Snapshot::Clock::time_point t, double bullet_speed, double yaw_offset,
         double pitch_offset, AimPointChooser& chooser) -> std::optional<AimSample> {
@@ -231,28 +190,28 @@ private:
         auto chooser = AimPointChooser {};
         chooser.initialize(chooser_config);
 
-        auto samples = std::array<AimSample, kHorizon + 2> {};
+        auto samples = std::array<AimSample, kMpcAxisHorizon + 2> {};
         for (int i = 0; i < static_cast<int>(samples.size()); ++i) {
-            auto const offset = (i - (kHalfHorizon + 1)) * kMpcDt;
+            auto const offset = (i - (kMpcAxisHalfHorizon + 1)) * kMpcAxisDt;
             auto const t      = center_time + to_duration(offset);
             auto sample = sample_at(snapshot, t, bullet_speed, yaw_offset, pitch_offset, chooser);
             if (!sample) return std::nullopt;
             samples[i] = *sample;
         }
 
-        auto const yaw_origin   = samples[kHalfHorizon + 1].yaw;
+        auto const yaw_origin   = samples[kMpcAxisHalfHorizon + 1].yaw;
         auto const target_yaw   = yaw_origin;
-        auto const target_pitch = samples[kHalfHorizon + 1].pitch;
+        auto const target_pitch = samples[kMpcAxisHalfHorizon + 1].pitch;
 
         auto trajectory = ReferenceTrajectory {};
-        for (int i = 0; i < kHorizon; ++i) {
+        for (int i = 0; i < kMpcAxisHorizon; ++i) {
             auto const& previous = samples[i];
             auto const& current  = samples[i + 1];
             auto const& next     = samples[i + 2];
 
             auto const yaw_velocity =
-                util::normalize_angle(next.yaw - previous.yaw) / (2.0 * kMpcDt);
-            auto const pitch_velocity = (next.pitch - previous.pitch) / (2.0 * kMpcDt);
+                util::normalize_angle(next.yaw - previous.yaw) / (2.0 * kMpcAxisDt);
+            auto const pitch_velocity = (next.pitch - previous.pitch) / (2.0 * kMpcAxisDt);
 
             trajectory.col(i) << util::normalize_angle(current.yaw - yaw_origin), yaw_velocity,
                 current.pitch, pitch_velocity;
