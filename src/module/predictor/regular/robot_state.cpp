@@ -49,6 +49,8 @@ struct RegularRobotState::Impl {
     }
 
     auto predict(TimePoint t) -> void {
+        if (t <= time_stamp) return;
+
         if (initialized) {
             auto dt = util::delta_time(t, time_stamp);
             if (dt > kResetInterval) {
