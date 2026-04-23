@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <type_traits>
 #include <unistd.h>
+#include <utility>
 
 #include "kernel/feishu.hpp"
 #include "utility/shared/interprocess.hpp"
@@ -130,8 +131,8 @@ TEST(TimestampAlignment, HistoryClientFindLatestChoosesNewestStateNotAfterImageT
         [&](const ControlState& state) { return state.timestamp <= base + 10ms; }, matched));
     EXPECT_EQ(matched.timestamp, base + 10ms);
 
-    EXPECT_FALSE(
-        recv.find_latest([&](const ControlState& state) { return state.timestamp < base; }, matched));
+    EXPECT_FALSE(recv.find_latest(
+        [&](const ControlState& state) { return state.timestamp < base; }, matched));
 }
 
 TEST(TimestampAlignment, LateTriggerEventMustNotBindToNextFrame) {
@@ -144,8 +145,8 @@ TEST(TimestampAlignment, LateTriggerEventMustNotBindToNextFrame) {
     ASSERT_TRUE(send.open(shm_name.c_str()));
     ASSERT_TRUE(recv.open(shm_name.c_str()));
 
-    auto last_bound_trigger_seq        = std::uint64_t { 0 };
-    auto last_image_capture_timestamp  = std::optional<Clock::time_point> {};
+    auto last_bound_trigger_seq         = std::uint64_t { 0 };
+    auto last_image_capture_timestamp   = std::optional<Clock::time_point> {};
     constexpr auto trigger_sync_max_age = 50ms;
 
     auto bind = [&](Clock::time_point capture_timestamp) -> std::optional<CameraTriggerEvent> {

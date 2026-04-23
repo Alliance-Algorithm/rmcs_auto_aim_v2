@@ -67,8 +67,7 @@ struct Capturer::Impl {
             return std::unexpected { instantitation_result.error() };
         }
 
-        auto trigger_sync_config = yaml["enable_trigger_sync"].as<bool>();
-        enable_trigger_sync      = (source == "hikcamera" && trigger_sync_config);
+        enable_trigger_sync = source == "hikcamera" && yaml["enable_trigger_sync"].as<bool>();
 
         auto show_loss_framerate          = yaml["show_loss_framerate"].as<bool>();
         auto show_loss_framerate_interval = yaml["show_loss_framerate_interval"].as<int>();
@@ -106,9 +105,9 @@ struct Capturer::Impl {
         log.info("[Capturer runtime thread] starts");
 
         // Success context
-        auto missing_trigger_limit  = util::TimesLimit { 3 };
+        auto missing_trigger_limit        = util::TimesLimit { 3 };
         auto last_image_capture_timestamp = std::optional<util::Clock::time_point> {};
-        auto bind_trigger_timestamp = [&](std::unique_ptr<Image>& image) {
+        auto bind_trigger_timestamp       = [&](std::unique_ptr<Image>& image) {
             if (!enable_trigger_sync) {
                 return;
             }
@@ -123,7 +122,7 @@ struct Capturer::Impl {
                             && capture_timestamp - candidate.timestamp <= trigger_sync_max_age;
                     })) {
                 image->set_timestamp(trigger->timestamp);
-                last_bound_trigger_seq_ = trigger->seq;
+                last_bound_trigger_seq_      = trigger->seq;
                 last_image_capture_timestamp = capture_timestamp;
                 missing_trigger_limit.reset();
                 missing_trigger_limit.enable();
