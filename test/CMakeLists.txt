@@ -7,6 +7,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
+if(NOT TARGET tinympcstatic)
+    add_subdirectory(
+        ${RMCS_SOURCE_DIR}/third_party/tinympc/src/tinympc
+        ${CMAKE_CURRENT_BINARY_DIR}/tinympc
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(tinympcstatic PRIVATE -w)
+    endif()
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -19,6 +29,7 @@ find_package(OpenCV 4.5 REQUIRED)
 
 include_directories(
     ${RMCS_SRC_DIR}
+    ${RMCS_SOURCE_DIR}/third_party/tinympc/src
     ${hikcamera_INCLUDE_DIRS}
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}

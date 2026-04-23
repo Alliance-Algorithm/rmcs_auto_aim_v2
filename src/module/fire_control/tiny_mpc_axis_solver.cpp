@@ -1,9 +1,9 @@
 #include "tiny_mpc_axis_solver.hpp"
 
-#include <format>
 #include <memory>
+#include <optional>
 
-#include <tinympc/tiny_api.hpp>
+#include "utility/control/tiny_mpc_solver.hpp"
 
 using namespace rmcs::fire_control;
 
@@ -20,17 +20,12 @@ using AxisDynamics    = Eigen::Matrix<double, kAxisStateDim, kAxisStateDim>;
 using AxisInputMatrix = Eigen::Matrix<double, kAxisStateDim, kAxisInputDim>;
 using AxisStateCost   = Eigen::Matrix<double, kAxisStateDim, kAxisStateDim>;
 using AxisInputCost   = Eigen::Matrix<double, kAxisInputDim, kAxisInputDim>;
+using AxisSolver      = rmcs::util::TinyMpcSolver<kAxisStateDim, kAxisInputDim, kMpcAxisHorizon>;
 
 } // namespace
 
 struct TinyMpcAxisSolver::Impl {
-    struct TinySolverDeleter {
-        auto operator()(TinySolver* solver) const noexcept -> void { tiny_destroy(solver); }
-    };
-
-    using TinySolverPtr = std::unique_ptr<TinySolver, TinySolverDeleter>;
-
-    TinySolverPtr solver {};
+    std::optional<AxisSolver> solver {};
 
     auto initialize(TinyMpcAxisSolver::Config const& config) -> std::expected<void, std::string> {
         AxisDynamics A;
@@ -48,71 +43,52 @@ struct TinyMpcAxisSolver::Impl {
         AxisInputCost R;
         R << config.r_acc;
 
-        TinySolver* raw_solver  = nullptr;
-        auto const setup_status = tiny_setup(&raw_solver, A, B, f, Q, R, kSolverRho, kAxisStateDim,
-            kAxisInputDim, kMpcAxisHorizon, 0);
-        if (setup_status != 0 || raw_solver == nullptr) {
-            tiny_destroy(raw_solver);
-            return std::unexpected {
-                std::format("tiny_setup failed with status {}", setup_status),
-            };
-        }
-        auto new_solver = TinySolverPtr { raw_solver };
-
-        auto const x_min =
-            Eigen::MatrixXd::Constant(kAxisStateDim, kMpcAxisHorizon, -kUnboundedState);
-        auto const x_max =
-            Eigen::MatrixXd::Constant(kAxisStateDim, kMpcAxisHorizon, kUnboundedState);
-        auto const u_min =
-            Eigen::MatrixXd::Constant(kAxisInputDim, kMpcAxisHorizon - 1, -config.max_acc);
-        auto const u_max =
-            Eigen::MatrixXd::Constant(kAxisInputDim, kMpcAxisHorizon - 1, config.max_acc);
-        auto const bounds_status =
-            tiny_set_bound_constraints(new_solver.get(), x_min, x_max, u_min, u_max);
-        if (bounds_status != 0) {
-            return std::unexpected {
-                std::format("tiny_set_bound_constraints failed with status {}", bounds_status),
-            };
+        auto created = AxisSolver::create(AxisSolver::InitConfig {
+            .setup =
+                AxisSolver::SetupConfig {
+                    .A   = A,
+                    .B   = B,
+                    .f   = f,
+                    .Q   = Q,
+                    .R   = R,
+                    .rho = kSolverRho,
+                },
+            .bounds =
+                AxisSolver::BoundConstraints {
+                    .x_min = AxisSolver::StateTrajectory::Constant(-kUnboundedState),
+                    .x_max = AxisSolver::StateTrajectory::Constant(kUnboundedState),
+                    .u_min = AxisSolver::InputTrajectory::Constant(-config.max_acc),
+                    .u_max = AxisSolver::InputTrajectory::Constant(config.max_acc),
+                },
+            .max_iter = config.max_iter,
+        });
+        if (!created.has_value()) {
+            return std::unexpected { created.error() };
         }
 
-        new_solver->settings->max_iter = config.max_iter;
-        solver                         = std::move(new_solver);
+        solver = std::move(created).value();
         return {};
     }
 
-    auto solve_at_step(MpcAxisTrajectory const& reference, int step) const
+    auto solve_at_step(MpcAxisTrajectory const& reference, int step)
         -> std::expected<double, std::string> {
-        if (solver == nullptr) {
+        if (!solver.has_value()) {
             return std::unexpected { "solver is not initialized" };
         }
-        if (step < 0 || step >= kMpcAxisHorizon) {
-            return std::unexpected {
-                std::format("step {} is out of range [0, {})", step, kMpcAxisHorizon),
-            };
+
+        if (auto result = solver->set_x0(reference.col(0)); !result.has_value()) {
+            return std::unexpected { result.error() };
         }
 
-        AxisState x0         = reference.col(0);
-        auto const x0_status = tiny_set_x0(solver.get(), x0);
-        if (x0_status != 0) {
-            return std::unexpected { std::format("tiny_set_x0 failed with status {}", x0_status) };
+        if (auto result = solver->set_x_ref(reference); !result.has_value()) {
+            return std::unexpected { result.error() };
         }
 
-        tinyMatrix x_ref      = reference;
-        auto const ref_status = tiny_set_x_ref(solver.get(), x_ref);
-        if (ref_status != 0) {
-            return std::unexpected {
-                std::format("tiny_set_x_ref failed with status {}", ref_status),
-            };
+        if (auto result = solver->solve(); !result.has_value()) {
+            return std::unexpected { result.error() };
         }
 
-        auto const solve_status = tiny_solve(solver.get());
-        if (solve_status != 0) {
-            return std::unexpected {
-                std::format("tiny_solve failed with status {}", solve_status),
-            };
-        }
-
-        return solver->work->x(0, step);
+        return solver->state_value(0, step);
     }
 };
 

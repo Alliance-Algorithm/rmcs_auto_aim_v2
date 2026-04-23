@@ -57,3 +57,29 @@ TEST(tiny_mpc_axis_solver, can_reinitialize_without_reset) {
     ASSERT_TRUE(result.has_value()) << result.error();
     EXPECT_NEAR(result.value(), 0.5, 1e-6);
 }
+
+TEST(tiny_mpc_axis_solver, initialize_rejects_non_positive_max_iter) {
+    auto solver = TinyMpcAxisSolver {};
+
+    auto config     = make_config();
+    config.max_iter = 0;
+
+    auto init = solver.initialize(config);
+    ASSERT_FALSE(init.has_value());
+    EXPECT_EQ(init.error(), "max_iter must be positive, got 0");
+}
+
+TEST(tiny_mpc_axis_solver, can_solve_multiple_references_after_initialization) {
+    auto solver = TinyMpcAxisSolver {};
+
+    auto init = solver.initialize(make_config());
+    ASSERT_TRUE(init.has_value()) << init.error();
+
+    auto first = solver.solve_center(make_constant_reference(0.25));
+    ASSERT_TRUE(first.has_value()) << first.error();
+    EXPECT_NEAR(first.value(), 0.25, 1e-6);
+
+    auto second = solver.solve_center(make_constant_reference(-0.5));
+    ASSERT_TRUE(second.has_value()) << second.error();
+    EXPECT_NEAR(second.value(), -0.5, 1e-6);
+}
