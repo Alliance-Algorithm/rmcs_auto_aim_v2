@@ -24,8 +24,9 @@ public:
     auto initialize(const YAML::Node& yaml, AimPointChooser::Config const& chooser_config) noexcept
         -> std::expected<void, std::string>;
 
-    auto plan(const predictor::Snapshot& snapshot, predictor::Snapshot::Clock::time_point center_time,
-        double bullet_speed, double yaw_offset, double pitch_offset) -> std::optional<Plan>;
+    auto plan(const predictor::Snapshot& snapshot,
+        predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
+        double pitch_offset) -> std::optional<Plan>;
 };
 
 } // namespace rmcs::fire_control

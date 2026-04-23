@@ -1,11 +1,11 @@
-#include "mpc_trajectory_planner.hpp"
+#include "module/fire_control/planner/mpc_trajectory_planner.hpp"
 
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
 
-#include "module/fire_control/tiny_mpc_axis_solver.hpp"
+#include "module/fire_control/planner/tiny_mpc_axis_solver.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"

@@ -1,6 +1,6 @@
 #include "fire_control.hpp"
 #include "module/fire_control/aim_point_chooser.hpp"
-#include "module/fire_control/mpc_trajectory_planner.hpp"
+#include "module/fire_control/planner/mpc_trajectory_planner.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"

@@ -107,7 +107,7 @@ ament_add_gtest(
     ${RMCS_SRC_DIR}/utility/math/solve_pnp/yaw_optimizer.cpp
     ${RMCS_SRC_DIR}/utility/math/camera.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
-    ${RMCS_SRC_DIR}/utility/image/image.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpptest/CMakeLists.txt
 )
 ament_target_dependencies(
     test_solve_pnp
