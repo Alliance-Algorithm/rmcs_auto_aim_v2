@@ -48,6 +48,7 @@ public:
         action_throttler.register_action("commit_control_state_failed");
         action_throttler.register_action("commit_camera_trigger_failed");
         action_throttler.register_action("camera_trigger_gap_detected");
+        action_throttler.register_action("camera_trigger_not_ready");
     }
 
     auto update() -> void override {
@@ -146,19 +147,31 @@ private:
     auto publish_control_state() -> void {
         update_gimbal_direction();
         update_control_state();
-        publish_camera_trigger_event();
 
         auto success = feishu.commit(control_state);
         if (!success) {
             action_throttler.dispatch("commit_control_state_failed",
                 [&] { rclcpp.info("commit control state failed!"); });
-        } else {
-            action_throttler.reset("commit_control_state_failed");
+            return;
         }
+
+        action_throttler.reset("commit_control_state_failed");
+
+        if (!camera_trigger_seq_.ready() || !camera_trigger_timestamp_.ready()) [[unlikely]] {
+            action_throttler.dispatch("camera_trigger_not_ready", [&] {
+                rclcpp.warn("camera trigger input is not ready, skip publishing trigger event");
+            });
+            return;
+        }
+
+        action_throttler.reset("camera_trigger_not_ready");
+        const auto trigger_seq       = *camera_trigger_seq_;
+        const auto trigger_timestamp = *camera_trigger_timestamp_;
+        publish_camera_trigger_event(trigger_seq, trigger_timestamp);
     }
 
-    auto publish_camera_trigger_event() -> void {
-        auto trigger_seq = *camera_trigger_seq_;
+    auto publish_camera_trigger_event(
+        std::uint64_t trigger_seq, Clock::time_point trigger_timestamp) -> void {
         if (trigger_seq == 0 || trigger_seq == last_committed_camera_trigger_seq_) {
             return;
         }
@@ -175,7 +188,7 @@ private:
 
         auto success = camera_trigger_channel.commit(CameraTriggerEvent {
             .seq       = trigger_seq,
-            .timestamp = *camera_trigger_timestamp_,
+            .timestamp = trigger_timestamp,
         });
         if (!success) {
             action_throttler.dispatch("commit_camera_trigger_failed",

@@ -9,6 +9,7 @@
 #include "utility/thread/spsc_queue.hpp"
 #include "utility/times_limit.hpp"
 
+#include <optional>
 #include <rclcpp/utilities.hpp>
 #include <thread>
 
@@ -106,6 +107,7 @@ struct Capturer::Impl {
 
         // Success context
         auto missing_trigger_limit  = util::TimesLimit { 3 };
+        auto last_image_capture_timestamp = std::optional<util::Clock::time_point> {};
         auto bind_trigger_timestamp = [&](std::unique_ptr<Image>& image) {
             if (!enable_trigger_sync) {
                 return;
@@ -115,15 +117,20 @@ struct Capturer::Impl {
             if (auto trigger = camera_trigger_channel.fetch_latest_matching(
                     [&](const util::CameraTriggerEvent& candidate) {
                         return candidate.seq > last_bound_trigger_seq_
+                            && (!last_image_capture_timestamp
+                                || candidate.timestamp > *last_image_capture_timestamp)
                             && candidate.timestamp <= capture_timestamp
                             && capture_timestamp - candidate.timestamp <= trigger_sync_max_age;
                     })) {
                 image->set_timestamp(trigger->timestamp);
                 last_bound_trigger_seq_ = trigger->seq;
+                last_image_capture_timestamp = capture_timestamp;
                 missing_trigger_limit.reset();
                 missing_trigger_limit.enable();
                 return;
             }
+
+            last_image_capture_timestamp = capture_timestamp;
 
             if (missing_trigger_limit.tick()) {
                 log.warn("No camera trigger event is available for the captured image");

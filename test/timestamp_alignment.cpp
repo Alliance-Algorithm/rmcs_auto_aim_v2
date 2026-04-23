@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <sys/mman.h>
 #include <type_traits>
@@ -131,6 +132,56 @@ TEST(TimestampAlignment, HistoryClientFindLatestChoosesNewestStateNotAfterImageT
 
     EXPECT_FALSE(
         recv.find_latest([&](const ControlState& state) { return state.timestamp < base; }, matched));
+}
+
+TEST(TimestampAlignment, LateTriggerEventMustNotBindToNextFrame) {
+    using Channel = HistoryClient<CameraTriggerEvent, 8>;
+
+    auto shm_name = ShmScope { unique_shm_name("rmcs_auto_aim_trigger_late") };
+    auto send     = Channel::Send {};
+    auto recv     = Channel::Recv {};
+
+    ASSERT_TRUE(send.open(shm_name.c_str()));
+    ASSERT_TRUE(recv.open(shm_name.c_str()));
+
+    auto last_bound_trigger_seq        = std::uint64_t { 0 };
+    auto last_image_capture_timestamp  = std::optional<Clock::time_point> {};
+    constexpr auto trigger_sync_max_age = 50ms;
+
+    auto bind = [&](Clock::time_point capture_timestamp) -> std::optional<CameraTriggerEvent> {
+        auto trigger = CameraTriggerEvent {};
+        auto ok      = recv.find_latest(
+            [&](const CameraTriggerEvent& candidate) {
+                return candidate.seq > last_bound_trigger_seq
+                    && (!last_image_capture_timestamp
+                        || candidate.timestamp > *last_image_capture_timestamp)
+                    && candidate.timestamp <= capture_timestamp
+                    && capture_timestamp - candidate.timestamp <= trigger_sync_max_age;
+            },
+            trigger);
+
+        if (ok) {
+            last_bound_trigger_seq       = trigger.seq;
+            last_image_capture_timestamp = capture_timestamp;
+            return trigger;
+        }
+
+        last_image_capture_timestamp = capture_timestamp;
+        return std::nullopt;
+    };
+
+    auto base = Clock::now();
+
+    EXPECT_FALSE(bind(base + 15ms).has_value());
+
+    ASSERT_TRUE(send.push(CameraTriggerEvent { .seq = 100, .timestamp = base + 10ms }));
+    EXPECT_FALSE(bind(base + 30ms).has_value());
+
+    ASSERT_TRUE(send.push(CameraTriggerEvent { .seq = 101, .timestamp = base + 38ms }));
+    auto matched = bind(base + 40ms);
+    ASSERT_TRUE(matched.has_value());
+    EXPECT_EQ(matched->seq, 101U);
+    EXPECT_EQ(matched->timestamp, base + 38ms);
 }
 
 TEST(TimestampAlignment, FeishuFetchLatestBeforeUsesControlStateHistorySemantics) {

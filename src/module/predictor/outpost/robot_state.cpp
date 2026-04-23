@@ -315,6 +315,10 @@ struct OutpostRobotState::Impl {
     }
 
     auto predict(Clock::time_point t) -> void {
+        if (t <= time_stamp) {
+            return;
+        }
+
         if (initialized) {
             auto dt = rmcs::util::delta_time(t, time_stamp);
             if (dt > config.reset_interval) {
