@@ -10,8 +10,6 @@
 namespace rmcs::kernel {
 
 class FireControl {
-    using Clock = util::Clock;
-
     RMCS_PIMPL_DEFINITION(FireControl)
 
 public:

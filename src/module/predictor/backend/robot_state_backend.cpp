@@ -11,14 +11,14 @@ namespace rmcs::predictor {
 template <class State>
 class RobotStateBackendAdapter final : public IRobotStateBackend {
 public:
-    explicit RobotStateBackendAdapter(Clock::time_point stamp) noexcept
+    explicit RobotStateBackendAdapter(TimePoint stamp) noexcept
         : state { stamp } { }
 
-    auto initialize(Armor3D const& armor, Clock::time_point t) -> void override {
+    auto initialize(Armor3D const& armor, TimePoint t) -> void override {
         state.initialize(armor, t);
     }
 
-    auto predict(Clock::time_point t) -> void override { state.predict(t); }
+    auto predict(TimePoint t) -> void override { state.predict(t); }
 
     auto update(std::span<Armor3D const> armors) -> bool override { return state.update(armors); }
 
@@ -32,8 +32,8 @@ private:
     State state;
 };
 
-[[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind,
-    IRobotStateBackend::Clock::time_point stamp) -> std::unique_ptr<IRobotStateBackend> {
+[[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind, TimePoint stamp)
+    -> std::unique_ptr<IRobotStateBackend> {
     switch (kind) {
     case RobotStateBackendKind::Outpost:
         return std::make_unique<RobotStateBackendAdapter<OutpostRobotState>>(stamp);

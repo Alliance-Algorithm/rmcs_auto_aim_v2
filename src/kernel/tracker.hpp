@@ -12,8 +12,6 @@
 namespace rmcs::kernel {
 
 struct Tracker {
-    using Clock = util::Clock;
-
     RMCS_PIMPL_DEFINITION(Tracker)
 public:
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
@@ -22,6 +20,6 @@ public:
 
     auto filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D>;
 
-    auto decide(std::span<Armor3D const> armors, Clock::time_point t) -> tracker::Decider::Output;
+    auto decide(std::span<Armor3D const> armors, TimePoint t) -> tracker::Decider::Output;
 };
 }

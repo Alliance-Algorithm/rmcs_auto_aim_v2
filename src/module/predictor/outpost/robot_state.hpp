@@ -12,13 +12,12 @@ namespace rmcs::predictor {
 
 class OutpostRobotState {
 public:
-    using Clock = util::Clock;
-    using EKF   = OutpostEKFParameters::EKF;
+    using EKF = OutpostEKFParameters::EKF;
 
-    explicit OutpostRobotState(Clock::time_point stamp) noexcept;
+    explicit OutpostRobotState(TimePoint stamp) noexcept;
 
-    auto initialize(Armor3D const& armor, Clock::time_point t) -> void;
-    auto predict(Clock::time_point t) -> void;
+    auto initialize(Armor3D const& armor, TimePoint t) -> void;
+    auto predict(TimePoint t) -> void;
 
     auto update(std::span<Armor3D const> armors) -> bool;
 

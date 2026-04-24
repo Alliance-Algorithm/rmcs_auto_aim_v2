@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <utility>
 
-#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "module/predictor/backend/snapshot_backend.hpp"
+#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/time.hpp"
 
@@ -19,7 +19,7 @@ namespace {
     }
 
     auto make_armor(DeviceId device, CampColor color, int id) -> Armor3D {
-        auto armor  = Armor3D {};
+        auto armor  = Armor3D { };
         armor.genre = device;
         armor.color = camp_color2armor_color(color);
         armor.id    = id;
@@ -27,26 +27,23 @@ namespace {
     }
 
     struct OutpostSnapshotBackend final : ISnapshotBackend {
-        explicit OutpostSnapshotBackend(
-            Snapshot::OutpostEKF::XVec x, CampColor color, int armor_num,
-            Snapshot::Clock::time_point stamp, int spin_sign, OutpostArmorLayout layout) noexcept
+        explicit OutpostSnapshotBackend(Snapshot::OutpostEKF::XVec x, CampColor color,
+            int armor_num, TimePoint stamp, int spin_sign, OutpostArmorLayout layout) noexcept
             : ISnapshotBackend { DeviceId::OUTPOST, color, armor_num, stamp }
             , x { std::move(x) }
             , spin_sign { normalize_spin_sign(spin_sign) }
             , layout { layout } { }
 
-        [[nodiscard]] auto kinematics_at(Snapshot::Clock::time_point t) const
-            -> Snapshot::Kinematics override {
+        [[nodiscard]] auto kinematics_at(TimePoint t) const -> Snapshot::Kinematics override {
             return kinematics_of(predict_state_at(t));
         }
 
-        [[nodiscard]] auto predicted_armors(Snapshot::Clock::time_point t) const
-            -> std::vector<Armor3D> override {
+        [[nodiscard]] auto predicted_armors(TimePoint t) const -> std::vector<Armor3D> override {
             auto const predicted_x = predict_state_at(t);
             auto const max_armors =
                 std::clamp(armor_num, 0, OutpostEKFParameters::kOutpostArmorCount);
 
-            auto armors = std::vector<Armor3D> {};
+            auto armors = std::vector<Armor3D> { };
             armors.reserve(max_armors);
 
             for (int id = 0; id < max_armors; ++id) {
@@ -83,7 +80,7 @@ namespace {
             return { Eigen::Vector3d { x[0], x[2], center_z }, angular_velocity };
         }
 
-        auto predict_state_at(Snapshot::Clock::time_point t) const -> Snapshot::OutpostEKF::XVec {
+        auto predict_state_at(TimePoint t) const -> Snapshot::OutpostEKF::XVec {
             auto const dt = util::delta_time(t, stamp).count();
             return OutpostEKFParameters::f(dt, spin_sign)(x);
         }
@@ -96,8 +93,8 @@ namespace {
 } // namespace
 
 auto detail::make_outpost_snapshot(Snapshot::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
-    Snapshot::Clock::time_point stamp, int outpost_spin_sign,
-    OutpostArmorLayout outpost_layout) noexcept -> Snapshot {
+    TimePoint stamp, int outpost_spin_sign, OutpostArmorLayout outpost_layout) noexcept
+    -> Snapshot {
     return detail::make_snapshot(std::make_unique<OutpostSnapshotBackend>(
         std::move(ekf_x), color, armor_num, stamp, outpost_spin_sign, outpost_layout));
 }

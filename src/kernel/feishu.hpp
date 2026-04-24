@@ -10,7 +10,7 @@ namespace rmcs::kernel {
 
 template <class T>
 concept timestamp_trait = requires(const T& data) {
-    { data.timestamp } -> std::convertible_to<util::Clock::time_point>;
+    { data.timestamp } -> std::convertible_to<TimePoint>;
 };
 
 template <class T>
@@ -22,7 +22,7 @@ concept context_trait = requires {
 template <context_trait SendT, context_trait RecvT>
 class Feishu {
 private:
-    using Timestamp = util::Clock::time_point;
+    using Timestamp = TimePoint;
     using Duration  = Timestamp::duration;
 
     using SendClient = shm::Client<SendT>::Send;

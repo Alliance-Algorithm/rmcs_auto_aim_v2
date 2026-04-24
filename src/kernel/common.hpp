@@ -12,14 +12,12 @@ using result_type = std::expected<void, std::string>;
 using handle_type = std::coroutine_handle<co::task<result_type>::promise_type>;
 
 namespace details {
-    using Expansion = rmcs::util::Serializable;
-
     template <class T>
     concept has_config_trait = requires { typename T::Config; };
 
     template <class T>
     concept serialable_config_trait =
-        requires { requires std::derived_from<typename T::Config, Expansion>; };
+        requires { requires std::derived_from<typename T::Config, util::Serializable>; };
 
     template <class T>
     concept can_initialize_trait = requires(T& kernel) {

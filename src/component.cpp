@@ -83,7 +83,7 @@ private:
     }
 
     static auto make_invalid_auto_aim_state() -> AutoAimState {
-        auto state = AutoAimState {};
+        auto state = AutoAimState { };
         state.reset();
         return state;
     }

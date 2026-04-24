@@ -11,13 +11,12 @@ namespace rmcs::predictor {
 
 class RegularRobotState {
 public:
-    using Clock = util::Clock;
-    using EKF   = EKFParameters::EKF;
+    using EKF = EKFParameters::EKF;
 
-    explicit RegularRobotState(Clock::time_point stamp) noexcept;
+    explicit RegularRobotState(TimePoint stamp) noexcept;
 
-    auto initialize(Armor3D const& armor, Clock::time_point t) -> void;
-    auto predict(Clock::time_point t) -> void;
+    auto initialize(Armor3D const& armor, TimePoint t) -> void;
+    auto predict(TimePoint t) -> void;
 
     auto update(std::span<Armor3D const> armors) -> bool;
 

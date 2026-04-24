@@ -9,25 +9,25 @@
 #include "utility/shared/context.hpp"
 
 using namespace std::chrono_literals;
+using rmcs::AutoAimState;
+using rmcs::Clock;
+using rmcs::ControlState;
 using rmcs::kernel::Feishu;
-using rmcs::util::AutoAimState;
-using rmcs::util::Clock;
-using rmcs::util::ControlState;
 
 TEST(FeishuIntegration, BidirectionalCommunication) {
     const auto pid = ::fork();
     ASSERT_NE(pid, -1);
 
     if (pid == 0) {
-        auto feishu_child = Feishu<AutoAimState, ControlState> {};
+        auto feishu_child = Feishu<AutoAimState, ControlState> { };
         feishu_child.start();
         std::this_thread::sleep_for(50ms);
 
         auto deadline = Clock::now() + 500ms;
-        auto ctrl     = std::optional<ControlState> {};
+        auto ctrl     = std::optional<ControlState> { };
         while (!ctrl && Clock::now() < deadline) {
             if (feishu_child.updated()) {
-                auto state = ControlState {};
+                auto state = ControlState { };
                 feishu_child.recv([&](const auto& data) { state = data; });
                 ctrl = state;
             } else {
@@ -36,7 +36,7 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         }
         ASSERT_TRUE(ctrl.has_value());
 
-        auto auto_state            = AutoAimState {};
+        auto auto_state            = AutoAimState { };
         auto_state.gimbal_takeover = true;
         auto_state.shoot_permitted = true;
         auto_state.yaw             = 1.23;
@@ -45,20 +45,20 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         exit(0);
     }
 
-    auto feishu_parent = Feishu<ControlState, AutoAimState> {};
+    auto feishu_parent = Feishu<ControlState, AutoAimState> { };
     feishu_parent.start();
     std::this_thread::sleep_for(50ms);
 
-    auto ctrl      = ControlState {};
+    auto ctrl      = ControlState { };
     ctrl.timestamp = Clock::now();
 
     feishu_parent.send([&](auto& data) { data = ctrl; });
 
     auto deadline   = Clock::now() + 500ms;
-    auto auto_state = std::optional<AutoAimState> {};
+    auto auto_state = std::optional<AutoAimState> { };
     while (!auto_state && Clock::now() < deadline) {
         if (feishu_parent.updated()) {
-            auto state = AutoAimState {};
+            auto state = AutoAimState { };
             feishu_parent.recv([&](const auto& data) { state = data; });
             auto_state = state;
         } else {

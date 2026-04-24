@@ -7,7 +7,7 @@
 #include "utility/shared/interprocess.hpp"
 #include <gtest/gtest.h>
 
-using Transform = rmcs::util::Transform;
+using Transform = rmcs::Transform;
 
 namespace {
 
@@ -56,7 +56,7 @@ TEST(TransformShm, SendRecvSequence) {
     constexpr auto init_delay    = 50ms;
 
     // 父进程先创建共享内存对象
-    auto send = Send {};
+    auto send = Send { };
     ASSERT_TRUE(send.open(shm_name));
     ASSERT_TRUE(send.opened());
 
@@ -65,7 +65,7 @@ TEST(TransformShm, SendRecvSequence) {
 
     if (pid == 0) {
         // 子进程：接收数据
-        auto recv = Recv {};
+        auto recv = Recv { };
         ASSERT_TRUE(recv.open(shm_name));
         ASSERT_TRUE(recv.opened());
 
@@ -122,7 +122,7 @@ TEST(TransformShm, SnapshotAndUpdate) {
     send.send(first);
     EXPECT_TRUE(recv.is_updated());
 
-    Transform snapshot {};
+    Transform snapshot { };
     recv.with_read([&](const auto& data) { snapshot = data; });
     expect_transform_equal(snapshot, first);
     EXPECT_FALSE(recv.is_updated()); // 读取后版本同步

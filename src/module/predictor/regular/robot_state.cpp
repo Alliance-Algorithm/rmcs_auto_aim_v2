@@ -17,10 +17,10 @@ struct RegularRobotState::Impl {
         bool is_valid;
     };
 
-    explicit Impl(Clock::time_point stamp) noexcept
+    explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
-    auto initialize(Armor3D const& armor, Clock::time_point t) -> void {
+    auto initialize(Armor3D const& armor, TimePoint t) -> void {
         device       = armor.genre;
         color        = armor_color2camp_color(armor.color);
         armor_num    = EKFParameters::armor_num(armor.genre);
@@ -30,7 +30,7 @@ struct RegularRobotState::Impl {
         initialized = true;
     }
 
-    auto predict(Clock::time_point t) -> void {
+    auto predict(TimePoint t) -> void {
         if (initialized) {
             auto dt = util::delta_time(t, time_stamp);
             if (dt > reset_interval) {
@@ -134,7 +134,7 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto z = EKF::ZVec {};
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
@@ -149,7 +149,7 @@ private:
     }
 
     auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> {};
+        auto armors = std::vector<Eigen::Vector4d> { };
         armors.reserve(armor_num);
         for (int i = 0; i < armor_num; ++i) {
             auto angle = EKFParameters::armor_yaw(device, x, i);
@@ -163,8 +163,8 @@ private:
     CampColor color { CampColor::UNKNOWN };
     int armor_num { 0 };
 
-    EKF ekf { EKF {} };
-    Clock::time_point time_stamp;
+    EKF ekf { EKF { } };
+    TimePoint time_stamp;
 
     bool initialized { false };
     int update_count { 0 };
@@ -176,18 +176,18 @@ private:
 RegularRobotState::RegularRobotState() noexcept
     : RegularRobotState(Clock::now()) { }
 
-RegularRobotState::RegularRobotState(Clock::time_point stamp) noexcept
+RegularRobotState::RegularRobotState(TimePoint stamp) noexcept
     : pimpl { std::make_unique<Impl>(stamp) } { }
 
 RegularRobotState::~RegularRobotState() noexcept                                      = default;
 RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept                    = default;
 auto RegularRobotState::operator=(RegularRobotState&&) noexcept -> RegularRobotState& = default;
 
-auto RegularRobotState::initialize(Armor3D const& armor, Clock::time_point t) -> void {
+auto RegularRobotState::initialize(Armor3D const& armor, TimePoint t) -> void {
     return pimpl->initialize(armor, t);
 }
 
-auto RegularRobotState::predict(Clock::time_point t) -> void { return pimpl->predict(t); }
+auto RegularRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 
 auto RegularRobotState::update(std::span<Armor3D const> armors) -> bool {
     return pimpl->update(armors);

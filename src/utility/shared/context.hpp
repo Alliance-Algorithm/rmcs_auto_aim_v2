@@ -6,7 +6,7 @@
 #include <cmath>
 #include <limits>
 
-namespace rmcs::util {
+namespace rmcs {
 
 enum class ShootMode {
     STOPPING,
@@ -25,7 +25,7 @@ struct AutoAimState {
     static constexpr auto kLabel  = "/shm_autoaim_state";
     static constexpr auto kLength = 512;
 
-    Clock::time_point timestamp { };
+    TimePoint timestamp { };
 
     bool gimbal_takeover { false };
     bool shoot_permitted = { false };
@@ -77,15 +77,19 @@ struct ControlState {
     static constexpr auto kLabel  = "/shm_control_state";
     static constexpr auto kLength = 512;
 
-    Clock::time_point timestamp { };
+    /// Dynamic Context
+    ///
+    TimePoint timestamp { };
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
 
-    DeviceIds invincible_devices { DeviceIds::None() };
-
     Transform odom_to_camera_transform { };
+
+    /// Lazy Context
+    ///
+    DeviceIds invincible_devices { DeviceIds::None() };
 
     auto reset() noexcept -> void {
         timestamp                = Clock::now();
@@ -97,4 +101,4 @@ struct ControlState {
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);
-}
+} // namespace rmcs

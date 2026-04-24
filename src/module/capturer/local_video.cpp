@@ -12,12 +12,13 @@ using namespace rmcs::cap;
 struct LocalVideo::Impl {
     Config config;
 
-    using Clock = std::chrono::steady_clock;
+    using Clock     = std::chrono::steady_clock;
+    using TimePoint = std::chrono::steady_clock::time_point;
 
     std::optional<cv::VideoCapture> capturer;
 
     std::chrono::nanoseconds interval_duration { 0 };
-    Clock::time_point last_read_time { Clock::now() };
+    TimePoint last_read_time { Clock::now() };
 
     auto set_framerate_interval(double hz) noexcept -> void {
         if (hz > 0) {
@@ -54,7 +55,7 @@ struct LocalVideo::Impl {
 
         last_read_time = Clock::now();
 
-        return {};
+        return { };
     }
 
     auto connect() -> std::expected<void, std::string> { return configure(config); }
@@ -84,7 +85,7 @@ struct LocalVideo::Impl {
             last_read_time = config.allow_skipping ? Clock::now() : next_read_time_expected;
         }
 
-        auto frame = cv::Mat {};
+        auto frame = cv::Mat { };
         auto image = std::make_unique<Image>();
         if (!capturer->read(frame)) {
             if (config.loop_play) {

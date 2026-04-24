@@ -9,13 +9,11 @@
 
 namespace rmcs::predictor {
 struct RobotState {
-    using Clock = util::Clock;
-
     RMCS_PIMPL_DEFINITION(RobotState)
 public:
-    auto initialize(Armor3D const&, Clock::time_point) -> void;
+    auto initialize(Armor3D const&, TimePoint) -> void;
 
-    auto predict(Clock::time_point t) -> void;
+    auto predict(TimePoint t) -> void;
 
     auto update(std::span<Armor3D const> armors) -> bool;
 
