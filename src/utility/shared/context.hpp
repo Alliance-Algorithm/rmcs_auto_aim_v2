@@ -17,12 +17,15 @@ enum class ShootMode {
 };
 
 struct Transform {
-    Translation position {};
-    Orientation orientation {};
+    Translation position { };
+    Orientation orientation { };
 };
 
 struct AutoAimState {
-    Clock::time_point timestamp {};
+    static constexpr auto kLabel  = "/shm_autoaim_state";
+    static constexpr auto kLength = 512;
+
+    Clock::time_point timestamp { };
 
     bool gimbal_takeover { false };
     bool shoot_permitted = { false };
@@ -71,7 +74,10 @@ struct AutoAimState {
 static_assert(std::is_trivially_copyable_v<AutoAimState>);
 
 struct ControlState {
-    Clock::time_point timestamp {};
+    static constexpr auto kLabel  = "/shm_control_state";
+    static constexpr auto kLength = 512;
+
+    Clock::time_point timestamp { };
     ShootMode shoot_mode { ShootMode::BATTLE };
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
@@ -79,7 +85,7 @@ struct ControlState {
 
     DeviceIds invincible_devices { DeviceIds::None() };
 
-    Transform odom_to_camera_transform {};
+    Transform odom_to_camera_transform { };
 
     auto reset() noexcept -> void {
         timestamp                = Clock::now();
@@ -87,7 +93,7 @@ struct ControlState {
         yaw                      = std::numeric_limits<double>::quiet_NaN();
         pitch                    = std::numeric_limits<double>::quiet_NaN();
         invincible_devices       = DeviceIds::None();
-        odom_to_camera_transform = {};
+        odom_to_camera_transform = { };
     }
 };
 static_assert(std::is_trivially_copyable_v<ControlState>);

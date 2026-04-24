@@ -34,13 +34,13 @@ auto main() -> int {
 
     {
         /// Runtime
-        auto feishu         = kernel::Feishu<RuntimeRole::AutoAim> {};
-        auto capturer       = kernel::Capturer {};
-        auto identifier     = kernel::Identifier {};
-        auto tracker        = kernel::Tracker {};
-        auto pose_estimator = kernel::PoseEstimator {};
-        auto fire_control   = kernel::FireControl {};
-        auto visualization  = kernel::Visualization {};
+        auto feishu         = kernel::Feishu<AutoAimState, ControlState> { };
+        auto capturer       = kernel::Capturer { };
+        auto identifier     = kernel::Identifier { };
+        auto tracker        = kernel::Tracker { };
+        auto pose_estimator = kernel::PoseEstimator { };
+        auto fire_control   = kernel::FireControl { };
+        auto visualization  = kernel::Visualization { };
 
         auto action_throttler = util::ActionThrottler { 1s, 233 };
 
@@ -102,48 +102,15 @@ auto main() -> int {
         // DEBUG
         constexpr auto control_state_label { "control_state_not_updated" };
         constexpr auto identifier_failed_label { "identifier_failed" };
-        constexpr auto feishu_commit_label { "feishu_commit_failed" };
         {
             action_throttler.register_action(control_state_label, 1);
             action_throttler.register_action(identifier_failed_label, 1);
-            action_throttler.register_action(feishu_commit_label, 1);
         }
 
-        ///
-        /// Steps
-        ///
-        const auto fetch_control_state = [&] -> ControlState {
-            if (is_local_runtime) {
-                auto state = ControlState {};
-                state.reset();
-                return state;
+        while (util::get_running()) {
+            if (feishu.heartbeat()) {
+                //
             }
-            if (!feishu.updated()) {
-                action_throttler.dispatch(control_state_label,
-                    [&] { rclcpp_node.warn("Control state 尚未更新，使用上一次缓存值."); });
-            } else {
-                action_throttler.reset(control_state_label);
-            }
-            return feishu.fetch();
-        };
-
-        const auto commit_state = [&](const AutoAimState& state) {
-            if (!feishu.commit(state)) {
-                action_throttler.dispatch(feishu_commit_label, [&] {
-                    rclcpp_node.warn(
-                        "Commit auto_aim_state failed (target={})", rmcs::to_string(state.target));
-                });
-                return false;
-            }
-
-            action_throttler.reset(feishu_commit_label);
-            return true;
-        };
-
-        for (;;) {
-            if (!util::get_running()) [[unlikely]]
-                break;
-
             rclcpp_node.spin_once();
 
             if (auto image = capturer.fetch_image()) {
@@ -154,13 +121,22 @@ auto main() -> int {
                 } };
                 std::ignore = stream_guard;
 
-                auto control_state = fetch_control_state();
-                auto next_state    = AutoAimState {};
+                auto control_state = ControlState { };
+                if (!is_local_runtime) {
+                    if (feishu.updated()) {
+                        action_throttler.reset(control_state_label);
+                        feishu.recv([&](const auto& data) { control_state = data; });
+                    } else {
+                        action_throttler.dispatch(control_state_label,
+                            [&] { rclcpp_node.warn("Control state 尚未更新，使用上一次缓存值."); });
+                    }
+                }
+                auto next_state = AutoAimState { };
                 next_state.reset();
 
                 /// 1. Identify Armor
                 ///
-                auto armors_2d = Armor2Ds {};
+                auto armors_2d = Armor2Ds { };
                 {
                     auto result = identifier.sync_identify(*image);
                     if (!result.has_value()) {
@@ -182,7 +158,7 @@ auto main() -> int {
 
                 /// 2. Transform 2d to 3d
                 ///
-                auto armors_3d = Armor3Ds {};
+                auto armors_3d = Armor3Ds { };
                 if (!armors_2d.empty()) {
                     auto solved_armors_3d = pose_estimator.solve_pnp(armors_2d);
                     if (solved_armors_3d && visualization.initialized()) {
@@ -223,7 +199,7 @@ auto main() -> int {
 
                 /// 4. Transmit State
                 ///
-                commit_state(next_state);
+                feishu.send([&](auto& data) { data = next_state; });
             }
         } // runtime loop scope
     } // runtime objects scope

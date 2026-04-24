@@ -44,6 +44,7 @@ public:
     }
 
     auto update() -> void override {
+        feishu.start();
         if (!rmcs_tf.ready()) [[unlikely]] {
             handle_tf_not_ready();
             return;
@@ -64,7 +65,7 @@ private:
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
-    Feishu<RuntimeRole::Control> feishu;
+    Feishu<ControlState, AutoAimState> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
     bool auto_aim_state_received_ { false };
@@ -89,7 +90,7 @@ private:
 
     auto resolve_auto_aim_state() -> AutoAimState {
         if (feishu.updated()) {
-            auto_aim_state           = feishu.fetch();
+            feishu.recv([&](const auto& data) { auto_aim_state = data; });
             auto_aim_state_received_ = true;
         }
 
@@ -134,13 +135,8 @@ private:
         update_gimbal_direction();
         update_control_state();
 
-        auto success = feishu.commit(control_state);
-        if (!success) {
-            action_throttler.dispatch("commit_control_state_failed",
-                [&] { rclcpp.info("commit control state failed!"); });
-        } else {
-            action_throttler.reset("commit_control_state_failed");
-        }
+        feishu.send([&](auto& data) { data = control_state; });
+        action_throttler.reset("commit_control_state_failed");
     }
 
     auto update_control_state() -> void {
