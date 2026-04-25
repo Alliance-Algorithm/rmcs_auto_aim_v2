@@ -8,6 +8,9 @@
 
 namespace rmcs {
 
+template <class T>
+concept context_trait = std::is_trivially_copyable_v<T>;
+
 enum class ShootMode {
     STOPPING,
     OUTPOST,
@@ -19,6 +22,22 @@ enum class ShootMode {
 struct Transform {
     Translation position { };
     Orientation orientation { };
+
+    static constexpr auto kNaN() {
+        return Transform {
+            Translation {
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            },
+            Orientation {
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            },
+        };
+    };
 };
 
 struct AutoAimState {
@@ -35,43 +54,18 @@ struct AutoAimState {
 
     DeviceId target { DeviceId::UNKNOWN };
 
-    auto reset() noexcept -> void {
-        timestamp = Clock::now();
-
-        gimbal_takeover = false;
-        shoot_permitted = false;
-        yaw             = std::numeric_limits<double>::quiet_NaN();
-        pitch           = std::numeric_limits<double>::quiet_NaN();
-        target          = DeviceId::UNKNOWN;
-    }
-
-    auto set_hold_state(double current_yaw, double current_pitch, DeviceId current_target) noexcept
-        -> void {
-        timestamp = Clock::now();
-
-        gimbal_takeover = true;
-        shoot_permitted = false;
-        yaw             = current_yaw;
-        pitch           = current_pitch;
-        target          = current_target;
-    }
-
-    auto set_tracking_state(double target_yaw, double target_pitch, DeviceId tracked_target,
-        bool allow_shoot) noexcept -> void {
-        timestamp = Clock::now();
-
-        gimbal_takeover = true;
-        shoot_permitted = allow_shoot;
-        yaw             = target_yaw;
-        pitch           = target_pitch;
-        target          = tracked_target;
-    }
-
-    [[nodiscard]] auto has_control_direction() const noexcept -> bool {
-        return gimbal_takeover && std::isfinite(yaw) && std::isfinite(pitch);
+    static auto kInvalid() {
+        return AutoAimState {
+            .timestamp       = Clock::now(),
+            .gimbal_takeover = false,
+            .shoot_permitted = false,
+            .yaw             = std::numeric_limits<double>::quiet_NaN(),
+            .pitch           = std::numeric_limits<double>::quiet_NaN(),
+            .target          = DeviceId::UNKNOWN,
+        };
     }
 };
-static_assert(std::is_trivially_copyable_v<AutoAimState>);
+static_assert(context_trait<AutoAimState>);
 
 struct ControlState {
     static constexpr auto kLabel  = "/shm_control_state";
@@ -87,18 +81,27 @@ struct ControlState {
 
     Transform odom_to_camera_transform { };
 
+    struct {
+        TimePoint timestamp = Clock::now();
+        std::uint64_t index = 0;
+    } capture_signals;
+
     /// Lazy Context
     ///
     DeviceIds invincible_devices { DeviceIds::None() };
 
-    auto reset() noexcept -> void {
-        timestamp                = Clock::now();
-        shoot_mode               = ShootMode::STOPPING;
-        yaw                      = std::numeric_limits<double>::quiet_NaN();
-        pitch                    = std::numeric_limits<double>::quiet_NaN();
-        invincible_devices       = DeviceIds::None();
-        odom_to_camera_transform = { };
+    static auto kInvalid() {
+        return ControlState {
+            .timestamp                = Clock::now(),
+            .shoot_mode               = ShootMode::STOPPING,
+            .yaw                      = std::numeric_limits<double>::quiet_NaN(),
+            .pitch                    = std::numeric_limits<double>::quiet_NaN(),
+            .odom_to_camera_transform = Transform::kNaN(),
+            .capture_signals          = { },
+            .invincible_devices       = DeviceIds::None(),
+        };
     }
 };
-static_assert(std::is_trivially_copyable_v<ControlState>);
+static_assert(context_trait<ControlState>);
+
 } // namespace rmcs
