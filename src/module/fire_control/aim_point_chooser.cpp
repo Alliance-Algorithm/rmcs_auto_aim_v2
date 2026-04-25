@@ -1,5 +1,7 @@
 #include "aim_point_chooser.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <tuple>
 #include <vector>
