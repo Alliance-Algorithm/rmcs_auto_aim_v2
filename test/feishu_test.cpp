@@ -20,16 +20,13 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
 
     if (pid == 0) {
         auto feishu_child = Feishu<AutoAimState, ControlState> { };
-        feishu_child.start();
         std::this_thread::sleep_for(50ms);
 
         auto deadline = Clock::now() + 500ms;
         auto ctrl     = std::optional<ControlState> { };
         while (!ctrl && Clock::now() < deadline) {
-            if (feishu_child.updated()) {
-                auto state = ControlState { };
-                feishu_child.recv([&](const auto& data) { state = data; });
-                ctrl = state;
+            if (feishu_child.heartbeat()) {
+                ctrl = feishu_child.latest();
             } else {
                 std::this_thread::sleep_for(10ms);
             }
@@ -41,26 +38,23 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         auto_state.shoot_permitted = true;
         auto_state.yaw             = 1.23;
 
-        feishu_child.send([&](auto& data) { data = auto_state; });
+        feishu_child.with_write([&](auto& data) { data = auto_state; });
         exit(0);
     }
 
     auto feishu_parent = Feishu<ControlState, AutoAimState> { };
-    feishu_parent.start();
     std::this_thread::sleep_for(50ms);
 
     auto ctrl      = ControlState { };
     ctrl.timestamp = Clock::now();
 
-    feishu_parent.send([&](auto& data) { data = ctrl; });
+    feishu_parent.with_write([&](auto& data) { data = ctrl; });
 
     auto deadline   = Clock::now() + 500ms;
     auto auto_state = std::optional<AutoAimState> { };
     while (!auto_state && Clock::now() < deadline) {
-        if (feishu_parent.updated()) {
-            auto state = AutoAimState { };
-            feishu_parent.recv([&](const auto& data) { state = data; });
-            auto_state = state;
+        if (feishu_parent.heartbeat()) {
+            auto_state = feishu_parent.latest();
         } else {
             std::this_thread::sleep_for(10ms);
         }

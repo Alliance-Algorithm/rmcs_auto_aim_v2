@@ -34,7 +34,6 @@ private:
     mutable Timestamp latest_timestamp = Timestamp::min();
     std::deque<RecvT> recv_buffer { };
 
-public:
     template <std::invocable<const RecvT&> F>
     auto recv(F&& f) const noexcept {
         auto with = [this, f = std::forward<F>(f)](const RecvT& data) {
@@ -43,13 +42,8 @@ public:
         };
         recv_client.with_read(with);
     }
-
-    template <std::invocable<SendT&> F>
-    auto send(F&& f) noexcept {
-        send_client.with_write(std::forward<F>(f));
-    }
-    auto send(const SendT& data) noexcept {
-        Feishu::send([&](SendT& buffer) { buffer = data; });
+    auto recv(RecvT& data) const noexcept {
+        recv([&](const RecvT& source) { data = source; });
     }
 
     auto start() noexcept -> bool {
@@ -59,6 +53,19 @@ public:
     }
 
     auto updated() const noexcept { return recv_client.is_updated(); }
+
+public:
+    /// 发送消息
+    template <std::invocable<SendT&> F>
+    auto with_write(F&& f) noexcept {
+        send_client.with_write(std::forward<F>(f));
+    }
+    auto send(const SendT& data) noexcept {
+        with_write([&](SendT& buffer) { buffer = data; });
+    }
+
+    /// 双向通道是否建立
+    auto online() const noexcept { return send_client.opened() && recv_client.opened(); }
 
     /// @return bool 是否收到数据
     auto heartbeat() noexcept -> bool {
@@ -72,6 +79,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    /// 获取最新的数据切片
+    auto latest() const noexcept -> std::optional<RecvT> {
+        if (recv_buffer.empty()) {
+            return std::nullopt;
+        }
+        return std::optional<RecvT> { recv_buffer.back() };
     }
 
     /// 搜索离传入时间戳最近的消息
