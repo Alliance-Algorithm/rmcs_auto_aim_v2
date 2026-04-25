@@ -133,3 +133,10 @@ ament_add_gtest(
     test_feishu
     ${TEST_DIR}/feishu_test.cpp
 )
+
+# Aim point chooser
+ament_add_gtest(
+    test_aim_point_chooser
+    ${TEST_DIR}/aim_point_chooser.cpp
+    ${RMCS_SRC_DIR}/module/fire_control/aim_point_chooser.cpp
+)
