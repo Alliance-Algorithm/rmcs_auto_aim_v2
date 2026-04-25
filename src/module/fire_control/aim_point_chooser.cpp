@@ -1,5 +1,7 @@
 #include "aim_point_chooser.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "utility/math/conversion.hpp"
@@ -7,23 +9,114 @@
 using namespace rmcs::fire_control;
 
 struct AimPointChooser::Impl {
+    static constexpr int kNoArmor = -1;
 
-    double coming_angle { 60 / 57.3 };  // rad
-    double leaving_angle { 20 / 57.3 }; // rad
+    struct ArmorCandidate {
+        int index { kNoArmor };
+        double delta_yaw { 0.0 };
+        double phase { 0.0 };
+    };
 
-    double outpost_coming_angle { 70 / 57.3 };  // rad
-    double outpost_leaving_angle { 30 / 57.3 }; // rad
+    struct AngleWindow {
+        double coming { 0.0 };
+        double leaving { 0.0 };
+    };
+
+    AngleWindow normal_window { util::deg2rad(60.0), util::deg2rad(20.0) };  // rad
+    AngleWindow outpost_window { util::deg2rad(70.0), util::deg2rad(30.0) }; // rad
+    const double min_switch_improvement_angle { util::deg2rad(6.0) };
 
     double angular_velocity_threshold { 2 }; // rad/s
 
-    int last_chosen_id { -1 };
+    int last_chosen_id { kNoArmor };
+
+    auto should_switch_target(double current_abs_error, double candidate_abs_error) const noexcept
+        -> bool {
+        return candidate_abs_error + min_switch_improvement_angle < current_abs_error;
+    }
+
+    static auto abs_error(ArmorCandidate const& candidate) noexcept -> double {
+        return std::abs(candidate.delta_yaw);
+    }
+
+    auto angle_window(DeviceId genre) const noexcept -> AngleWindow const& {
+        return genre == DeviceId::OUTPOST ? outpost_window : normal_window;
+    }
+
+    auto choose_low_speed(
+        std::span<ArmorCandidate const> candidates, AngleWindow const& window) const -> int {
+        auto const in_window = [&](ArmorCandidate const& candidate) {
+            return abs_error(candidate) < window.coming;
+        };
+
+        auto best_in_window = std::optional<ArmorCandidate> {};
+        for (auto const& candidate : candidates) {
+            if (!in_window(candidate)) continue;
+            if (!best_in_window.has_value() || abs_error(candidate) < abs_error(*best_in_window)) {
+                best_in_window = candidate;
+            }
+        }
+
+        if (!best_in_window.has_value()) return kNoArmor;
+
+        auto const has_last_candidate =
+            (last_chosen_id >= 0) && (static_cast<size_t>(last_chosen_id) < candidates.size());
+        if (!has_last_candidate) return best_in_window->index;
+
+        auto const& last_candidate = candidates[static_cast<size_t>(last_chosen_id)];
+        if (!in_window(last_candidate)) return best_in_window->index;
+        if (best_in_window->index == last_chosen_id) return last_chosen_id;
+        if (!should_switch_target(abs_error(last_candidate), abs_error(*best_in_window)))
+            return last_chosen_id;
+
+        return best_in_window->index;
+    }
+
+    auto choose_high_speed(
+        std::span<ArmorCandidate const> candidates, AngleWindow const& window) const -> int {
+        auto const is_in_window = [&](ArmorCandidate const& candidate) {
+            return abs_error(candidate) < window.coming && candidate.phase <= window.leaving;
+        };
+
+        auto const is_incoming = [](ArmorCandidate const& candidate) {
+            return candidate.phase < 0.0;
+        };
+
+        auto const is_better_than = [&](ArmorCandidate const& candidate,
+                                        ArmorCandidate const& current_best) {
+            auto const candidate_incoming = is_incoming(candidate);
+            auto const best_incoming      = is_incoming(current_best);
+            if (candidate_incoming != best_incoming) return candidate_incoming;
+
+            return abs_error(candidate) < abs_error(current_best);
+        };
+
+        auto preferred = std::optional<ArmorCandidate> {};
+        for (auto const& candidate : candidates) {
+            if (!is_in_window(candidate)) continue;
+
+            if (!preferred.has_value() || is_better_than(candidate, *preferred)) {
+                preferred = candidate;
+            }
+        }
+
+        if (!preferred) return kNoArmor;
+
+        auto const has_last =
+            (last_chosen_id >= 0) && (static_cast<size_t>(last_chosen_id) < candidates.size());
+        if (!has_last) return preferred->index;
+
+        auto const& last = candidates[static_cast<size_t>(last_chosen_id)];
+        if (!is_in_window(last)) return preferred->index;
+        if (preferred->index == last_chosen_id) return last_chosen_id;
+
+        return should_switch_target(abs_error(last), abs_error(*preferred)) ? preferred->index
+                                                                            : last_chosen_id;
+    }
 
     auto initialize(Config const& config) noexcept -> void {
-        coming_angle  = config.coming_angle;
-        leaving_angle = config.leaving_angle;
-
-        outpost_coming_angle  = config.outpost_coming_angle;
-        outpost_leaving_angle = config.outpost_leaving_angle;
+        normal_window  = { config.coming_angle, config.leaving_angle };
+        outpost_window = { config.outpost_coming_angle, config.outpost_leaving_angle };
 
         angular_velocity_threshold = config.angular_velocity_threshold;
     }
@@ -31,20 +124,13 @@ struct AimPointChooser::Impl {
     auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
         double angular_velocity) -> std::optional<Armor3D> {
         if (armors.empty()) {
-            last_chosen_id = -1;
+            last_chosen_id = kNoArmor;
             return std::nullopt;
         }
 
         const auto center_yaw = std::atan2(center_position.y(), center_position.x());
-
-        struct ArmorCandidate {
-            int index;
-            double delta_yaw;
-            double score; // 分数越低越好
-        };
-
-        auto candidates = std::array<ArmorCandidate, 4> {};
-        const auto n    = std::min(armors.size(), candidates.size());
+        auto candidates       = std::array<ArmorCandidate, 4> {};
+        const auto n          = std::min(armors.size(), candidates.size());
 
         for (size_t id = 0; id < n; ++id) {
             auto orientation = Eigen::Quaterniond {};
@@ -52,69 +138,35 @@ struct AimPointChooser::Impl {
 
             const auto ypr          = util::eulers(orientation);
             const auto yaw_in_world = ypr[0];
+            const auto delta_yaw    = util::normalize_angle(yaw_in_world - center_yaw);
+            const auto phase        = (angular_velocity > 0.0) ? delta_yaw
+                       : (angular_velocity < 0.0)              ? -delta_yaw
+                                                               : 0.0;
 
-            candidates.at(id) = { static_cast<int>(id),
-                util::normalize_angle(yaw_in_world - center_yaw), 0. };
+            candidates[id] = { static_cast<int>(id), delta_yaw, phase };
         }
 
-        auto chosen_id = int { -1 };
+        auto chosen_id      = kNoArmor;
+        auto candidate_view = std::span<ArmorCandidate const> { candidates }.first(n);
+        auto const genre    = armors.front().genre;
+        auto const& window  = angle_window(genre);
 
         // ---  非小陀螺模式 (低速旋转) ---
         if ((std::abs(angular_velocity) < angular_velocity_threshold)
-            && (armors.front().genre != DeviceId::OUTPOST)) {
-            for (auto& candidate : candidates) {
-                candidate.score = std::abs(candidate.delta_yaw);
-
-                if (candidate.index == last_chosen_id)
-                    candidate.score -= util::deg2rad(8); // 约 8 度的优先权，防止微小跳变导致换板
-            }
-
-            auto valid_it = std::ranges::min_element(
-                candidates | std::views::take(n), {}, [](auto const& candidate) {
-                    return (std::abs(candidate.delta_yaw) > util::deg2rad(90)) ? 1e5
-                                                                               : candidate.score;
-                });
-            if (std::abs(valid_it->delta_yaw) < util::deg2rad(90)) chosen_id = valid_it->index;
+            && (genre != DeviceId::OUTPOST)) {
+            chosen_id = choose_low_speed(candidate_view, window);
         }
         // --- 小陀螺模式 (快速旋转) ---
         else {
-            auto genre         = armors.front().genre;
-            auto _coming_angle = (genre == DeviceId::OUTPOST) ? outpost_coming_angle : coming_angle;
-            auto _leaving_angle =
-                (genre == DeviceId::OUTPOST) ? outpost_leaving_angle : leaving_angle;
-
-            for (auto& candidate : candidates) {
-                candidate.score = std::abs(candidate.delta_yaw);
-                // 判断旋转方向，给予“顺势”补偿
-                // 如果 omega > 0 (逆时针)，板从右侧 (delta > 0) 进入。
-                // 我们给正处于“迎面而来”位置的板减分
-                bool is_incoming = (angular_velocity > 0 && candidate.delta_yaw > 0)
-                    || (angular_velocity < 0 && candidate.delta_yaw < 0);
-
-                if (is_incoming) candidate.score -= 0.2;
-
-                if (candidate.index == last_chosen_id) {
-                    candidate.score -= util::deg2rad(17); // 约 17 度的优先权
-                }
-                // 剔除已经快要转没的板 (Leaving Angle)
-                if ((angular_velocity > 0 && candidate.delta_yaw < -_leaving_angle)
-                    || (angular_velocity < 0 && candidate.delta_yaw > _leaving_angle)) {
-                    candidate.score += 10.0;
-                }
-            }
-
-            auto it = std::ranges::min_element(
-                candidates | std::views::take(n), std::ranges::less {}, &ArmorCandidate::score);
-
-            if (std::abs(it->delta_yaw) < _coming_angle) chosen_id = it->index;
+            chosen_id = choose_high_speed(candidate_view, window);
         }
 
-        if (chosen_id != -1) {
+        if (chosen_id != kNoArmor) {
             last_chosen_id = chosen_id;
             return { armors[chosen_id] };
         }
 
-        last_chosen_id = -1;
+        last_chosen_id = kNoArmor;
         return std::nullopt;
     }
 };
