@@ -1,3 +1,4 @@
+#include "adapter/sentry.hpp"
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
@@ -9,20 +10,18 @@
 #include <cmath>
 #include <limits>
 
-#include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
 namespace rmcs {
 
-using namespace rmcs::util;
+using namespace util;
 using namespace kernel;
 
 class AutoAimComponent final : public rmcs_executor::Component {
 public:
     explicit AutoAimComponent() noexcept
-        : rclcpp { get_component_name() } {
-
-        register_input("/tf", rmcs_tf);
+        : adapter { *this }
+        , rclcpp { get_component_name() } {
 
         register_output("/gimbal/auto_aim/auto_aim_enabled", gimbal_takeover, false);
         register_output(
@@ -33,10 +32,10 @@ public:
         framerate.set_interval(2s);
 
         const auto config = visual::Transform::Config {
-            .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
-            .topic        = "odom_to_camera_transform", // 发布的 topic 名
-            .parent_frame = "odom_imu_link",            // 父坐标系
-            .child_frame  = "camera_link",              // 子坐标系
+            .rclcpp       = rclcpp,
+            .topic        = "odom_to_camera_transform",
+            .parent_frame = Adapter::kParentFrame,
+            .child_frame  = "camera_link",
         };
         visual_odom_to_camera = std::make_unique<visual::Transform>(config);
 
@@ -45,19 +44,42 @@ public:
     }
 
     auto update() -> void override {
-        if (!rmcs_tf.ready()) [[unlikely]] {
-            handle_tf_not_ready();
+        if (!adapter.ready()) [[unlikely]] {
+            action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("adapter is not ready"); });
+            command = ControlState::kInvalid();
+
+            const auto state  = AutoAimState::kInvalid();
+            *gimbal_takeover  = state.gimbal_takeover;
+            *shoot_permitted  = state.shoot_permitted;
+            *target_direction = compute_target_direction(state);
             return;
         }
 
-        publish_control_state();
-        forward_auto_aim_outputs();
+        update_control_state();
+        feishu.send(command);
+        action_throttler.reset("commit_control_state_failed");
+
+        if (feishu.heartbeat()) {
+            if (auto latest = feishu.latest()) {
+                context = *latest;
+            }
+            auto_aim_state_received_ = true;
+        }
+
+        const auto state =
+            auto_aim_state_received_ && Clock::now() - context.timestamp <= kAutoAimTimeout
+            ? context
+            : AutoAimState::kInvalid();
+
+        *gimbal_takeover  = state.gimbal_takeover;
+        *shoot_permitted  = state.shoot_permitted;
+        *target_direction = compute_target_direction(state);
     }
 
 private:
     static constexpr auto kAutoAimTimeout = std::chrono::milliseconds { 100 };
 
-    InputInterface<rmcs_description::Tf> rmcs_tf;
+    Adapter adapter;
 
     double current_gimbal_yaw { std::numeric_limits<double>::quiet_NaN() };
     double current_gimbal_pitch { std::numeric_limits<double>::quiet_NaN() };
@@ -66,8 +88,8 @@ private:
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
     Feishu<ControlState, AutoAimState> feishu;
-    ControlState control_state;
-    AutoAimState auto_aim_state;
+    ControlState command;
+    AutoAimState context;
     bool auto_aim_state_received_ { false };
 
     OutputInterface<bool> gimbal_takeover;
@@ -76,13 +98,6 @@ private:
 
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
-
-    /// FIXME:
-    /// 很多细碎的辅助函数和逻辑
-    /// 显然是不需要的，记得重构掉
-    static auto make_invalid_auto_aim_state() -> AutoAimState {
-        return AutoAimState::kInvalid();
-    }
 
     static auto compute_target_direction(const AutoAimState& state) -> Eigen::Vector3d {
         if (!state.gimbal_takeover || !std::isfinite(state.yaw) || !std::isfinite(state.pitch)) {
@@ -98,84 +113,31 @@ private:
         };
     }
 
-    auto has_fresh_auto_aim_state() const -> bool {
-        return auto_aim_state_received_
-            && Clock::now() - auto_aim_state.timestamp <= kAutoAimTimeout;
-    }
-
-    auto resolve_auto_aim_state() -> AutoAimState {
-        if (feishu.heartbeat()) {
-            if (auto latest = feishu.latest()) {
-                auto_aim_state = *latest;
-            }
-            auto_aim_state_received_ = true;
-        }
-
-        if (has_fresh_auto_aim_state()) {
-            return auto_aim_state;
-        }
-
-        return make_invalid_auto_aim_state();
-    }
-
-    auto publish_auto_aim_outputs(const AutoAimState& state) -> void {
-        *gimbal_takeover  = state.gimbal_takeover;
-        *shoot_permitted  = state.shoot_permitted;
-        *target_direction = compute_target_direction(state);
-    }
-
-    auto forward_auto_aim_outputs() -> void { publish_auto_aim_outputs(resolve_auto_aim_state()); }
-
-    auto handle_tf_not_ready() -> void {
-        action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
-        control_state = ControlState::kInvalid();
-        publish_auto_aim_outputs(make_invalid_auto_aim_state());
-    }
-
-    auto publish_control_state() -> void {
-        update_gimbal_direction();
-        update_control_state();
-
-        feishu.with_write([&](auto& data) { data = control_state; });
-        action_throttler.reset("commit_control_state_failed");
-    }
-
+    std::uint8_t publish_count = 0;
     auto update_control_state() -> void {
-        control_state.timestamp = Clock::now();
+        command.timestamp = Clock::now();
 
-        auto odom_to_camera_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::CameraLink>(
-                *rmcs_tf);
+        auto dir             = adapter.barrel_direction();
+        current_gimbal_yaw   = std::atan2(dir.y(), dir.x());
+        current_gimbal_pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
-        control_state.odom_to_camera_transform.position = odom_to_camera_transform.translation();
-        control_state.odom_to_camera_transform.orientation =
-            Eigen::Quaterniond(odom_to_camera_transform.rotation());
+        auto iso                                     = adapter.camera_transform();
+        command.odom_to_camera_transform.position    = iso.translation();
+        command.odom_to_camera_transform.orientation = Eigen::Quaterniond(iso.rotation());
 
-        visual_odom_to_camera->move(control_state.odom_to_camera_transform.position,
-            control_state.odom_to_camera_transform.orientation);
-        visual_odom_to_camera->update();
+        visual_odom_to_camera->move(command.odom_to_camera_transform.position,
+            command.odom_to_camera_transform.orientation);
+
+        if (publish_count++ > 100) {
+            publish_count = 0;
+            visual_odom_to_camera->update();
+        }
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
-        control_state.invincible_devices = DeviceIds::None();
+        command.invincible_devices = DeviceIds::None();
 
-        control_state.yaw   = current_gimbal_yaw;
-        control_state.pitch = current_gimbal_pitch;
-    }
-
-    auto update_gimbal_direction() -> void {
-        using namespace rmcs_description;
-
-        auto odom_to_pitch_transform =
-            fast_tf::lookup_transform<rmcs_description::OdomImu, rmcs_description::PitchLink>(
-                *rmcs_tf);
-
-        auto quat = Eigen::Quaterniond { odom_to_pitch_transform.toRotationMatrix() };
-
-        auto current_pitch_direction = quat * Eigen::Vector3d::UnitX();
-
-        current_gimbal_yaw   = std::atan2(current_pitch_direction.y(), current_pitch_direction.x());
-        current_gimbal_pitch = std::atan2(current_pitch_direction.z(),
-            std::hypot(current_pitch_direction.x(), current_pitch_direction.y()));
+        command.yaw   = current_gimbal_yaw;
+        command.pitch = current_gimbal_pitch;
     }
 };
 

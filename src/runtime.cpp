@@ -186,6 +186,8 @@ auto main() -> int {
         ///
         feishu.send(command);
 
+        node.info("command: yaw({:.2}), pitch({:.2})", command.yaw, command.pitch);
+
     } // runtime loop scope
 
     node.shutdown();
