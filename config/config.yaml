@@ -41,7 +41,7 @@ identifier:
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
   model_location: "tongji-yolov5.xml"
-  infer_device: "GPU"
+  infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
   roi_cols: 640
@@ -59,8 +59,20 @@ tracker:
   tracking_confirm_frames: 2
 
 pose_estimator:
-  camera_matrix: [1.722231837421459e+03, 0, 7.013056440882832e+02, 0, 1.724876404292754e+03,5.645821718351237e+02 , 0, 0, 1]
-  distort_coeff: [-0.064232403853946, -0.087667493884102, 0,0, 0.792381808294582]
+  camera_matrix:
+    [
+      1.722231837421459e+03,
+      0,
+      7.013056440882832e+02,
+      0,
+      1.724876404292754e+03,
+      5.645821718351237e+02,
+      0,
+      0,
+      1,
+    ]
+  distort_coeff:
+    [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
   transforms:
     - parent: "imu_link"
@@ -82,10 +94,10 @@ fire_control:
   yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
-  coming_angle: 70.0      # degree
-  leaving_angle: 20.0     # degree
-  outpost_coming_angle: 70.0      # degree
-  outpost_leaving_angle: 30.0     # degree
+  coming_angle: 70.0 # degree
+  leaving_angle: 20.0 # degree
+  outpost_coming_angle: 70.0 # degree
+  outpost_leaving_angle: 30.0 # degree
   angular_velocity_threshold: 120 # degree/s
 
   first_tolerance: 3 # 近距离射击容差，degree

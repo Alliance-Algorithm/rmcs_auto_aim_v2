@@ -38,17 +38,19 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         auto_state.shoot_permitted = true;
         auto_state.yaw             = 1.23;
 
-        feishu_child.with_write([&](auto& data) { data = auto_state; });
+        feishu_child.send(auto_state);
         exit(0);
     }
 
     auto feishu_parent = Feishu<ControlState, AutoAimState> { };
     std::this_thread::sleep_for(50ms);
 
+    feishu_parent.heartbeat();
+
     auto ctrl      = ControlState { };
     ctrl.timestamp = Clock::now();
 
-    feishu_parent.with_write([&](auto& data) { data = ctrl; });
+    feishu_parent.send(ctrl);
 
     auto deadline   = Clock::now() + 500ms;
     auto auto_state = std::optional<AutoAimState> { };
