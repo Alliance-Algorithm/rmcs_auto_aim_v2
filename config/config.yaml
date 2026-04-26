@@ -98,7 +98,6 @@ fire_control:
   leaving_angle: 30.0     # degree
   outpost_coming_angle: 50.0      # degree
   outpost_leaving_angle: 40.0     # degree
-  angular_velocity_threshold: 120 # degree/s
 
   first_tolerance: 3 # 近距离射击容差，degree
   second_tolerance: 2 # 远距离射击容差，degree

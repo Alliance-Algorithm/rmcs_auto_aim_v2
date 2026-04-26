@@ -12,11 +12,10 @@ namespace rmcs::fire_control {
 class AimPointChooser {
 public:
     struct Config {
-        double coming_angle;               // rad
-        double leaving_angle;              // rad
-        double angular_velocity_threshold; // rad/s
-        double outpost_coming_angle;       // rad
-        double outpost_leaving_angle;      // rad
+        double coming_angle;          // rad
+        double leaving_angle;         // rad
+        double outpost_coming_angle;  // rad
+        double outpost_leaving_angle; // rad
     };
     auto initialize(Config const& config) noexcept -> void;
 

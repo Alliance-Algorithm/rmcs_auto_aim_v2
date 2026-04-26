@@ -22,11 +22,10 @@ struct FireControl::Impl {
         double yaw_offset;           // rad (config in degree)
         double pitch_offset;         // rad (config in degree)
 
-        double coming_angle;               // rad
-        double leaving_angle;              // rad
-        double outpost_coming_angle;       // rad
-        double outpost_leaving_angle;      // rad
-        double angular_velocity_threshold; // rad/s
+        double coming_angle;          // rad
+        double leaving_angle;         // rad
+        double outpost_coming_angle;  // rad
+        double outpost_leaving_angle; // rad
 
         // clang-format off
         constexpr static std::tuple metas {
@@ -39,7 +38,6 @@ struct FireControl::Impl {
             &Config::leaving_angle,"leaving_angle",
             &Config::outpost_coming_angle,"outpost_coming_angle",
             &Config::outpost_leaving_angle,"outpost_leaving_angle",
-            &Config::angular_velocity_threshold,"angular_velocity_threshold",
         };
         // clang-format on
     };
@@ -61,20 +59,18 @@ struct FireControl::Impl {
                 "Invalid initial_bullet_speed: {}", config.initial_bullet_speed) };
         }
 
-        config.yaw_offset                 = util::deg2rad(config.yaw_offset);
-        config.pitch_offset               = util::deg2rad(config.pitch_offset);
-        config.coming_angle               = util::deg2rad(config.coming_angle);
-        config.leaving_angle              = util::deg2rad(config.leaving_angle);
-        config.outpost_coming_angle       = util::deg2rad(config.outpost_coming_angle);
-        config.outpost_leaving_angle      = util::deg2rad(config.outpost_leaving_angle);
-        config.angular_velocity_threshold = util::deg2rad(config.angular_velocity_threshold);
+        config.yaw_offset            = util::deg2rad(config.yaw_offset);
+        config.pitch_offset          = util::deg2rad(config.pitch_offset);
+        config.coming_angle          = util::deg2rad(config.coming_angle);
+        config.leaving_angle         = util::deg2rad(config.leaving_angle);
+        config.outpost_coming_angle  = util::deg2rad(config.outpost_coming_angle);
+        config.outpost_leaving_angle = util::deg2rad(config.outpost_leaving_angle);
 
         auto chooser_config = AimPointChooser::Config {
-            .coming_angle               = config.coming_angle,
-            .leaving_angle              = config.leaving_angle,
-            .angular_velocity_threshold = config.angular_velocity_threshold,
-            .outpost_coming_angle       = config.outpost_coming_angle,
-            .outpost_leaving_angle      = config.outpost_leaving_angle,
+            .coming_angle          = config.coming_angle,
+            .leaving_angle         = config.leaving_angle,
+            .outpost_coming_angle  = config.outpost_coming_angle,
+            .outpost_leaving_angle = config.outpost_leaving_angle,
         };
         aim_point_chooser.initialize(chooser_config);
 
