@@ -48,7 +48,7 @@ auto main() -> int {
     auto configuration     = util::configuration();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
-    auto is_local_runtime  = configuration["is_local_runtime"].as<bool>();
+    auto without_rmcs      = configuration["is_local_runtime"].as<bool>();
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -114,14 +114,9 @@ auto main() -> int {
             }
         } };
 
-        auto received = ControlState { };
-        if (!is_local_runtime) {
-            if (auto latest = feishu.latest()) {
-                logging.reset("receive", 5);
-                received = *latest;
-            } else {
-                logging.warn("receive", "Control state 尚未收到，使用默认值.");
-            }
+        auto received = ControlState::kInvalid();
+        if (!without_rmcs && updated) {
+            received = *feishu.latest();
         }
 
         /// 1. Identify Armor
