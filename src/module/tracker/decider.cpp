@@ -1,8 +1,8 @@
 #include "decider.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,13 +16,8 @@ using namespace rmcs::predictor;
 using namespace std::chrono_literals;
 
 struct Decider::Impl {
-    static constexpr auto kDefaultCleanupInterval    = 1s;
-    static constexpr auto kOutpostCleanupInterval    = 1.5s;
-    static constexpr double kPriorityScoreBase       = 10.0;
-    static constexpr double kDistanceScoreWeight     = 5.0;
-    static constexpr double kDistanceScoreBias       = 1.0;
-    static constexpr double kConvergedScoreBonus     = 4.0;
-    static constexpr double kPrimaryTargetScoreBonus = 2.0;
+    static constexpr auto kDefaultCleanupInterval = 1s;
+    static constexpr auto kOutpostCleanupInterval = 1.5s;
 
     struct TargetMemory {
         std::optional<TimePoint> last_seen_time { };
@@ -62,7 +57,9 @@ struct Decider::Impl {
             return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
         }
 
-        return { };
+        if (priority_mode.empty()) priority_mode = mode2;
+
+        return {};
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
@@ -166,16 +163,18 @@ struct Decider::Impl {
     }
 
     auto arbitrate(const std::unordered_set<DeviceId>& observed_ids) -> DeviceId {
-        auto candidates = trackers | std::views::filter([&](const auto& pair) {
-            return observed_ids.contains(pair.first);
-        });
+        auto best_target_id = DeviceId::UNKNOWN;
 
-        if (std::ranges::empty(candidates)) return DeviceId::UNKNOWN;
+        for (const auto& [device_id, _] : trackers) {
+            if (!observed_ids.contains(device_id)) continue;
 
-        auto it = std::ranges::max_element(candidates, { },
-            [&](const auto& pair) { return calculate_score(pair.first, *pair.second); });
+            if (best_target_id == DeviceId::UNKNOWN
+                || is_better_target(device_id, best_target_id)) {
+                best_target_id = device_id;
+            }
+        }
 
-        return it->first;
+        return best_target_id;
     }
 
     auto tracking_confirmed(DeviceId device_id) const -> bool {
@@ -229,28 +228,30 @@ struct Decider::Impl {
         return memory_it->second.consecutive_missing_frames <= max_missing_frames;
     }
 
-    // TODO:需要进一步确定
-    //  评分函数：结合优先级模式、距离、收敛情况
-    auto calculate_score(DeviceId device, RobotState const& tracker) const -> double {
-        double score = 0.0;
-
-        // 基础优先级评分
-        if (priority_mode.contains(device)) {
-            // RobotPriority 枚举值越小，优先级越高
-            score += (kPriorityScoreBase - static_cast<double>(priority_mode.at(device)));
+    auto priority_of(DeviceId device_id) const -> int {
+        if (auto it = priority_mode.find(device_id); it != priority_mode.end()) {
+            return it->second;
         }
+        return std::numeric_limits<int>::max();
+    }
 
-        // 距离加权：优先锁定近处的目标 (简单的 1/dist)
-        double dist = tracker.distance();
-        score += kDistanceScoreWeight / (dist + kDistanceScoreBias);
+    auto is_better_target(DeviceId lhs, DeviceId rhs) const -> bool {
+        auto rank = [&](DeviceId device_id) {
+            auto const& tracker = *trackers.at(device_id);
+            auto distance       = tracker.distance();
+            auto safe_distance =
+                std::isfinite(distance) ? distance : std::numeric_limits<double>::infinity();
 
-        // 优先延续已经收敛的目标，避免频繁切到未收敛目标导致停留 Detecting。
-        if (tracker.is_converged()) score += kConvergedScoreBonus;
+            // 比较顺序：优先级 -> 收敛状态 -> 距离 -> 固定 ID 兜底。
+            return std::tuple {
+                priority_of(device_id),    // 数值越小，优先级越高。
+                !tracker.is_converged(),   // 收敛目标映射为 0，未收敛目标映射为 1。
+                safe_distance,             // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
+                rmcs::to_index(device_id), // 完全相同时按固定顺序兜底，避免容器遍历顺序抖动。
+            };
+        };
 
-        // 粘滞性：如果已经是主目标，额外加分防止“摇头”
-        if (device == primary_target_id) score += kPrimaryTargetScoreBonus;
-
-        return score;
+        return rank(lhs) < rank(rhs);
     }
 
     DeviceId primary_target_id { DeviceId::UNKNOWN };
@@ -265,9 +266,9 @@ struct Decider::Impl {
         { DeviceId::ENGINEER, 4 },
         { DeviceId::INFANTRY_3, 1 },
         { DeviceId::INFANTRY_4, 1 },
-        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::INFANTRY_5, 5 },
         { DeviceId::SENTRY, 3 },
-        { DeviceId::OUTPOST, 5 },
+        { DeviceId::OUTPOST, 2 },
         { DeviceId::BASE, 5 },
         { DeviceId::UNKNOWN, 5 },
     };
@@ -276,10 +277,10 @@ struct Decider::Impl {
         { DeviceId::HERO, 1 },
         { DeviceId::ENGINEER, 2 },
         { DeviceId::INFANTRY_3, 1 },
-        { DeviceId::INFANTRY_4, 2 },
-        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::INFANTRY_4, 1 },
+        { DeviceId::INFANTRY_5, 5 },
         { DeviceId::SENTRY, 3 },
-        { DeviceId::OUTPOST, 5 },
+        { DeviceId::OUTPOST, 1 },
         { DeviceId::BASE, 5 },
         { DeviceId::UNKNOWN, 5 },
     };

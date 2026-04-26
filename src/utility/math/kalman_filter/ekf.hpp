@@ -133,7 +133,8 @@ public:
         // --- 3. 计算最优卡尔曼增益 (Optimal Kalman Gain) ---
         // K_k = P_{k|k-1} * H_k^T * S_k^-1
         // 使用高效的 LDLT 分解求解线性方程组 S*K^T = H*P
-        auto K = P_ * H.transpose() * S.ldlt().solve(RMat::Identity());
+        auto const ldlt = S.ldlt();
+        auto K          = P_ * H.transpose() * ldlt.solve(RMat::Identity());
 
         // --- 4. 状态后验更新 (State Update) ---
         // x_{k|k} = x_{k|k-1} + K_k * y_k
