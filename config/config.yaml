@@ -19,7 +19,7 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: true
+    invert_image: false
     software_sync: false
     trigger_mode: false
     fixed_framerate: true

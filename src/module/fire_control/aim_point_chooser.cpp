@@ -1,4 +1,9 @@
 #include "aim_point_chooser.hpp"
+
+#include <cmath>
+#include <tuple>
+#include <vector>
+
 #include "utility/math/conversion.hpp"
 
 #include <cmath>
@@ -9,7 +14,9 @@ using namespace rmcs::fire_control;
 
 struct AimPointChooser::Impl {
     struct CandidateEval {
+    struct CandidateEval {
         double delta_yaw { 0.0 };
+        bool in_window { false };
         bool in_window { false };
     };
 
@@ -22,9 +29,11 @@ struct AimPointChooser::Impl {
     AngleWindow outpost_window { util::deg2rad(70.0), util::deg2rad(30.0) };     // rad
     const double min_switch_improvement_angle { util::deg2rad(7.0) };
 
-    std::optional<int> last_chosen_armor_id { };
+    std::optional<int> last_chosen_armor_id {};
 
     auto initialize(Config const& config) noexcept -> void {
+        normal_fast_window = { config.coming_angle, config.leaving_angle };
+        outpost_window     = { config.outpost_coming_angle, config.outpost_leaving_angle };
         normal_fast_window = { config.coming_angle, config.leaving_angle };
         outpost_window     = { config.outpost_coming_angle, config.outpost_leaving_angle };
     }
@@ -32,6 +41,7 @@ struct AimPointChooser::Impl {
     auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
         double angular_velocity) -> std::optional<Armor3D> {
         if (armors.empty()) {
+            last_chosen_armor_id.reset();
             last_chosen_armor_id.reset();
             return std::nullopt;
         }
@@ -41,9 +51,14 @@ struct AimPointChooser::Impl {
         auto const& active_window = is_outpost ? outpost_window : normal_fast_window;
 
         auto candidate_evals = std::vector<CandidateEval>(armors.size());
+        const auto center_yaw     = std::atan2(center_position.y(), center_position.x());
+        const auto is_outpost     = armors.front().genre == DeviceId::OUTPOST;
+        auto const& active_window = is_outpost ? outpost_window : normal_fast_window;
+
+        auto candidate_evals = std::vector<CandidateEval>(armors.size());
 
         const auto yaw = [&](size_t index) {
-            auto orientation = Eigen::Quaterniond { };
+            auto orientation = Eigen::Quaterniond {};
             armors[index].orientation.copy_to(orientation);
             return util::eulers(orientation)[0];
         };
@@ -80,8 +95,8 @@ struct AimPointChooser::Impl {
             return std::tuple { abs_delta, last_penalty, id, index };
         };
 
-        auto best_idx = std::optional<size_t> { };
-        auto last_idx = std::optional<size_t> { };
+        auto best_idx = std::optional<size_t> {};
+        auto last_idx = std::optional<size_t> {};
 
         {
             // 2) 最优筛选（仅角度窗口内）并定位上次目标
@@ -104,6 +119,22 @@ struct AimPointChooser::Impl {
             return std::nullopt;
         }
 
+        {
+            // 3) 切换抖动抑制
+            if (last_idx.has_value() && (*last_idx != *best_idx)) {
+                auto const last_abs    = std::abs(candidate_evals[*last_idx].delta_yaw);
+                auto const best_abs    = std::abs(candidate_evals[*best_idx].delta_yaw);
+                auto const improvement = last_abs - best_abs;
+                if (improvement < min_switch_improvement_angle) {
+                    best_idx = last_idx;
+                }
+            }
+        }
+        {
+            // 4) 状态更新并返回
+            last_chosen_armor_id = armors[*best_idx].id;
+            return { armors[*best_idx] };
+        }
         {
             // 3) 切换抖动抑制
             if (last_idx.has_value() && (*last_idx != *best_idx)) {
