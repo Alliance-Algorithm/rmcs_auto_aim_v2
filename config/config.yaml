@@ -40,7 +40,7 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "tongji-yolov5.xml"
+  model_location: "shenzhen-0526.onnx"
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
