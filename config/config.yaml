@@ -22,7 +22,7 @@ capturer:
     invert_image: true
     software_sync: false
     trigger_mode: false
-    fixed_framerate: false
+    fixed_framerate: true
   local_video:
     # 替换为你具体的路径
     location: "/workspaces/data/autoaim/1777297317784.avi"
