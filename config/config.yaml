@@ -19,7 +19,7 @@ capturer:
     gain: 16.9807
 
     invert_image: false
-    software_sync: true
+    software_sync: false
     trigger_mode: false
     fixed_framerate: true
   local_video:

@@ -43,7 +43,7 @@ auto make_observation(rmcs::Armor3D const& armor) -> OutpostObservation {
     auto const ypr = rmcs::util::eulers(orientation);
     auto const ypd = rmcs::util::xyz2ypd(xyz);
 
-    auto z = OutpostEKF::ZVec { };
+    auto z = OutpostEKF::ZVec {};
     z << ypd[0], ypd[1], ypd[2], ypr[0];
 
     return { z, OutpostEKFParameters::R(xyz, ypr, ypd), xyz, ypr, ypd };
@@ -86,7 +86,7 @@ struct TrackingConfig {
     std::chrono::duration<double> reset_interval { 1.5 };
     int spin_confirm_switches { 2 };
     int min_converged_updates { 6 };
-    MatchingConfig matching { };
+    MatchingConfig matching {};
 };
 
 struct SpinTracker {
@@ -95,7 +95,7 @@ struct SpinTracker {
     int candidate_count { 0 };
     bool locked { false };
 
-    auto reset() -> void { *this = { }; }
+    auto reset() -> void { *this = {}; }
 
     auto current_sign() const -> int {
         if (locked) return locked_sign;
@@ -177,9 +177,9 @@ public:
         , config_ { config } { }
 
     auto decide(OutpostObservation const& observation) const -> AssociationDecision {
-        if (!has_assigned_slot(layout_, current_armor_id_)) return { };
+        if (!has_assigned_slot(layout_, current_armor_id_)) return {};
 
-        auto best_decision        = AssociationDecision { };
+        auto best_decision        = AssociationDecision {};
         auto const current_phase  = layout_.slots[current_armor_id_].phase_offset;
         auto const current_height = layout_.slots[current_armor_id_].height_offset;
 
@@ -216,7 +216,7 @@ private:
 
         // 这里没有加yaw约束，一是因为yaw的抖动太大，二是因为大部分图像中 一帧只有一块装甲板
         if (azimuth_error > config_.azimuth_gate || z_error > config_.z_gate) {
-            return { };
+            return {};
         }
 
         auto const H           = OutpostEKFParameters::H(x_, phase_offset, height_offset);
@@ -225,7 +225,7 @@ private:
         auto const S           = H * P_ * H.transpose() + observation.R;
         auto const mahalanobis = rmcs::util::mahalanobis_distance(innovation, S);
         if (!mahalanobis.has_value() || *mahalanobis > config_.mahalanobis_gate) {
-            return { };
+            return {};
         }
 
         auto error = *mahalanobis;
@@ -302,10 +302,10 @@ struct OutpostRobotState::Impl {
     auto initialize(Armor3D const& armor, TimePoint t) -> void {
         color      = armor_color2camp_color(armor.color);
         ekf        = EKF { OutpostEKFParameters::x(armor),
-                   OutpostEKFParameters::P_initial_dig().asDiagonal() };
+            OutpostEKFParameters::P_initial_dig().asDiagonal() };
         time_stamp = t;
 
-        layout                   = OutpostArmorLayout { };
+        layout                   = OutpostArmorLayout {};
         layout.slots[0].assigned = true;
 
         spin.reset();
@@ -363,8 +363,8 @@ struct OutpostRobotState::Impl {
 private:
     auto reset_runtime_state(TimePoint t) -> void {
         color            = CampColor::UNKNOWN;
-        ekf              = EKF { };
-        layout           = OutpostArmorLayout { };
+        ekf              = EKF {};
+        layout           = OutpostArmorLayout {};
         time_stamp       = t;
         initialized      = false;
         current_armor_id = kUnknownArmorId;
@@ -373,7 +373,7 @@ private:
     }
 
     auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
-        auto best_match = std::optional<BestMatch> { };
+        auto best_match = std::optional<BestMatch> {};
         auto matcher =
             AssociationEngine { ekf.x, ekf.P(), layout, current_armor_id, spin, config.matching };
 
@@ -410,15 +410,15 @@ private:
     }
 
     CampColor color { CampColor::UNKNOWN };
-    EKF ekf { EKF { } };
-    OutpostArmorLayout layout { };
+    EKF ekf { EKF {} };
+    OutpostArmorLayout layout {};
     TimePoint time_stamp;
 
     bool initialized { false };
     int current_armor_id { kUnknownArmorId };
-    SpinTracker spin { };
+    SpinTracker spin {};
     int update_count { 0 };
-    TrackingConfig config { };
+    TrackingConfig config {};
 };
 
 OutpostRobotState::OutpostRobotState() noexcept
