@@ -37,7 +37,7 @@ struct Tracker::Impl {
             return std::unexpected { result.error() };
         }
 
-        return {};
+        return { };
     }
 
     auto set_invincible_armors(DeviceIds devices) -> void {
@@ -49,7 +49,7 @@ struct Tracker::Impl {
         return result;
     }
 
-    auto decide(std::span<Armor3D const> armors, Clock::time_point t) -> Decider::Output {
+    auto decide(std::span<Armor3D const> armors, TimePoint t) -> Decider::Output {
         auto decider_output = decider.update(armors, t);
         return decider_output;
     }
@@ -73,6 +73,6 @@ auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armo
     return pimpl->filter_armors(armors);
 }
 
-auto Tracker::decide(std::span<Armor3D const> armors, Clock::time_point t) -> Decider::Output {
+auto Tracker::decide(std::span<Armor3D const> armors, TimePoint t) -> Decider::Output {
     return pimpl->decide(armors, t);
 }

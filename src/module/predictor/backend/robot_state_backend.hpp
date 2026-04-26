@@ -15,12 +15,10 @@ enum class RobotStateBackendKind : std::uint8_t {
 
 class IRobotStateBackend {
 public:
-    using Clock = util::Clock;
-
     virtual ~IRobotStateBackend() noexcept = default;
 
-    virtual auto initialize(Armor3D const& armor, Clock::time_point t) -> void = 0;
-    virtual auto predict(Clock::time_point t) -> void                          = 0;
+    virtual auto initialize(Armor3D const& armor, TimePoint t) -> void = 0;
+    virtual auto predict(TimePoint t) -> void                          = 0;
 
     virtual auto update(std::span<Armor3D const> armors) -> bool = 0;
 
@@ -39,7 +37,7 @@ public:
     }
 }
 
-[[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind,
-    IRobotStateBackend::Clock::time_point stamp) -> std::unique_ptr<IRobotStateBackend>;
+[[nodiscard]] auto make_robot_state_backend(RobotStateBackendKind kind, TimePoint stamp)
+    -> std::unique_ptr<IRobotStateBackend>;
 
 } // namespace rmcs::predictor

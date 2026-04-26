@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+
 #include <rmcs_description/tf_description.hpp>
 #include <rmcs_executor/component.hpp>
 
@@ -31,7 +32,7 @@ public:
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
 
-        visual::Transform::Config config {
+        const auto config = visual::Transform::Config {
             .rclcpp       = rclcpp,                     // 当前组件持有的 RclcppNode
             .topic        = "odom_to_camera_transform", // 发布的 topic 名
             .parent_frame = "odom_imu_link",            // 父坐标系
@@ -54,7 +55,7 @@ public:
     }
 
 private:
-    static constexpr auto auto_aim_state_timeout { std::chrono::milliseconds { 100 } };
+    static constexpr auto kAutoAimTimeout = std::chrono::milliseconds { 100 };
 
     InputInterface<rmcs_description::Tf> rmcs_tf;
 
@@ -64,7 +65,7 @@ private:
     RclcppNode rclcpp;
     std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
-    Feishu<RuntimeRole::Control> feishu;
+    Feishu<ControlState, AutoAimState> feishu;
     ControlState control_state;
     AutoAimState auto_aim_state;
     bool auto_aim_state_received_ { false };
@@ -76,20 +77,37 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-    auto has_fresh_auto_aim_state() const -> bool {
-        return auto_aim_state_received_
-            && Clock::now() - auto_aim_state.timestamp <= auto_aim_state_timeout;
+    /// FIXME:
+    /// 很多细碎的辅助函数和逻辑
+    /// 显然是不需要的，记得重构掉
+    static auto make_invalid_auto_aim_state() -> AutoAimState {
+        return AutoAimState::kInvalid();
     }
 
-    static auto make_invalid_auto_aim_state() -> AutoAimState {
-        auto state = AutoAimState {};
-        state.reset();
-        return state;
+    static auto compute_target_direction(const AutoAimState& state) -> Eigen::Vector3d {
+        if (!state.gimbal_takeover || !std::isfinite(state.yaw) || !std::isfinite(state.pitch)) {
+            return Eigen::Vector3d::Zero();
+        }
+
+        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
+
+        return {
+            std::cos(pitch) * std::cos(yaw),
+            std::cos(pitch) * std::sin(yaw),
+            std::sin(pitch),
+        };
+    }
+
+    auto has_fresh_auto_aim_state() const -> bool {
+        return auto_aim_state_received_
+            && Clock::now() - auto_aim_state.timestamp <= kAutoAimTimeout;
     }
 
     auto resolve_auto_aim_state() -> AutoAimState {
-        if (feishu.updated()) {
-            auto_aim_state           = feishu.fetch();
+        if (feishu.heartbeat()) {
+            if (auto latest = feishu.latest()) {
+                auto_aim_state = *latest;
+            }
             auto_aim_state_received_ = true;
         }
 
@@ -106,27 +124,11 @@ private:
         *target_direction = compute_target_direction(state);
     }
 
-    static auto compute_target_direction(const AutoAimState& state) -> Eigen::Vector3d {
-        if (!state.has_control_direction()) {
-            return Eigen::Vector3d::Zero();
-        }
-
-        const auto& [yaw, pitch] = std::tie(state.yaw, state.pitch);
-
-        // clang-format off
-        return Eigen::Vector3d {
-            std::cos(pitch) * std::cos(yaw),
-            std::cos(pitch) * std::sin(yaw), 
-            std::sin(pitch)
-        };
-        // clang-format on
-    }
-
     auto forward_auto_aim_outputs() -> void { publish_auto_aim_outputs(resolve_auto_aim_state()); }
 
     auto handle_tf_not_ready() -> void {
         action_throttler.dispatch("tf_not_ready", [&] { rclcpp.warn("rmcs_tf is not ready"); });
-        control_state.reset();
+        control_state = ControlState::kInvalid();
         publish_auto_aim_outputs(make_invalid_auto_aim_state());
     }
 
@@ -134,13 +136,8 @@ private:
         update_gimbal_direction();
         update_control_state();
 
-        auto success = feishu.commit(control_state);
-        if (!success) {
-            action_throttler.dispatch("commit_control_state_failed",
-                [&] { rclcpp.info("commit control state failed!"); });
-        } else {
-            action_throttler.reset("commit_control_state_failed");
-        }
+        feishu.with_write([&](auto& data) { data = control_state; });
+        action_throttler.reset("commit_control_state_failed");
     }
 
     auto update_control_state() -> void {

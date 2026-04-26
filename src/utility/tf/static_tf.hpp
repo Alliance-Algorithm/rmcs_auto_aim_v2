@@ -124,7 +124,7 @@ struct Joint {
     static constexpr auto find() noexcept {
         using Result = typename Find<query_name, Joint>::Result;
         static_assert(!std::same_as<Result, void>, "没有找到你想要的变换节点");
-        return Result {};
+        return Result { };
     }
 
     template <StaticString query_name>
@@ -353,8 +353,9 @@ public:
 
     template <StaticString child>
     static constexpr auto impl_traversal_child(auto&& on_recursion) noexcept -> std::size_t {
-        auto result    = std::size_t { 0 };
-        auto recursion = [&]<class T>() {
+        auto result = std::size_t { 0 };
+
+        [[maybe_unused]] auto recursion = [&]<class T>() {
             if (result) return;
             /*  */ if (child == T::name) {
                 result = 1; // End Point

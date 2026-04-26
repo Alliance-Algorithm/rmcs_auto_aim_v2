@@ -3,18 +3,18 @@
 using namespace rmcs;
 
 struct Image::Impl {
-    Clock::time_point timestamp;
+    TimePoint timestamp;
     Details details;
 };
 
 auto Image::details() noexcept -> Details& { return pimpl->details; }
 auto Image::details() const noexcept -> const Details& { return pimpl->details; }
 
-auto Image::get_timestamp() const noexcept -> Clock::time_point //
+auto Image::get_timestamp() const noexcept -> TimePoint //
 {
     return pimpl->timestamp;
 }
-auto Image::set_timestamp(Clock::time_point timestamp) noexcept -> void //
+auto Image::set_timestamp(TimePoint timestamp) noexcept -> void //
 {
     pimpl->timestamp = timestamp;
 }

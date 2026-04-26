@@ -6,55 +6,57 @@
 #include <unistd.h>
 
 #include "kernel/feishu.hpp"
+#include "utility/shared/context.hpp"
 
 using namespace std::chrono_literals;
+using rmcs::AutoAimState;
+using rmcs::Clock;
+using rmcs::ControlState;
 using rmcs::kernel::Feishu;
-using rmcs::kernel::RuntimeRole;
-using rmcs::util::AutoAimState;
-using rmcs::util::Clock;
-using rmcs::util::ControlState;
 
 TEST(FeishuIntegration, BidirectionalCommunication) {
     const auto pid = ::fork();
     ASSERT_NE(pid, -1);
 
     if (pid == 0) {
-        auto feishu_child = Feishu<RuntimeRole::AutoAim> {};
-        std::this_thread::sleep_for(50ms); // ensure shm is ready
+        auto feishu_child = Feishu<AutoAimState, ControlState> { };
+        std::this_thread::sleep_for(50ms);
 
         auto deadline = Clock::now() + 500ms;
-        auto ctrl     = std::optional<ControlState> {};
+        auto ctrl     = std::optional<ControlState> { };
         while (!ctrl && Clock::now() < deadline) {
-            if (feishu_child.updated()) {
-                ctrl = feishu_child.fetch();
+            if (feishu_child.heartbeat()) {
+                ctrl = feishu_child.latest();
             } else {
                 std::this_thread::sleep_for(10ms);
             }
         }
         ASSERT_TRUE(ctrl.has_value());
 
-        auto auto_state            = AutoAimState {};
+        auto auto_state            = AutoAimState { };
         auto_state.gimbal_takeover = true;
         auto_state.shoot_permitted = true;
         auto_state.yaw             = 1.23;
 
-        ASSERT_TRUE(feishu_child.commit(auto_state));
+        feishu_child.send(auto_state);
         exit(0);
     }
 
-    auto feishu_parent = Feishu<RuntimeRole::Control> {};
-    std::this_thread::sleep_for(50ms); // ensure shm is ready
+    auto feishu_parent = Feishu<ControlState, AutoAimState> { };
+    std::this_thread::sleep_for(50ms);
 
-    auto ctrl      = ControlState {};
+    feishu_parent.heartbeat();
+
+    auto ctrl      = ControlState { };
     ctrl.timestamp = Clock::now();
 
-    ASSERT_TRUE(feishu_parent.commit(ctrl));
+    feishu_parent.send(ctrl);
 
     auto deadline   = Clock::now() + 500ms;
-    auto auto_state = std::optional<AutoAimState> {};
+    auto auto_state = std::optional<AutoAimState> { };
     while (!auto_state && Clock::now() < deadline) {
-        if (feishu_parent.updated()) {
-            auto_state = feishu_parent.fetch();
+        if (feishu_parent.heartbeat()) {
+            auto_state = feishu_parent.latest();
         } else {
             std::this_thread::sleep_for(10ms);
         }

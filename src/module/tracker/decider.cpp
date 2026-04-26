@@ -25,7 +25,7 @@ struct Decider::Impl {
     static constexpr double kPrimaryTargetScoreBonus = 2.0;
 
     struct TargetMemory {
-        std::optional<Clock::time_point> last_seen_time {};
+        std::optional<TimePoint> last_seen_time { };
         std::size_t consecutive_missing_frames { 0 };
         std::size_t consecutive_stable_frames { 0 };
         bool temporary_lost_armed { false };
@@ -62,7 +62,7 @@ struct Decider::Impl {
             return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
         }
 
-        return {};
+        return { };
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
@@ -76,14 +76,14 @@ struct Decider::Impl {
         }
     }
 
-    auto update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
+    auto update(std::span<Armor3D const> armors, TimePoint t) -> Output {
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
             tracker->predict(t);
         }
 
-        auto observed_ids   = std::unordered_set<DeviceId> {};
-        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> {};
+        auto observed_ids   = std::unordered_set<DeviceId> { };
+        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> { };
 
         for (const auto& armor : armors) {
             grouped_armors[armor.genre].emplace_back(armor);
@@ -172,7 +172,7 @@ struct Decider::Impl {
 
         if (std::ranges::empty(candidates)) return DeviceId::UNKNOWN;
 
-        auto it = std::ranges::max_element(candidates, {},
+        auto it = std::ranges::max_element(candidates, { },
             [&](const auto& pair) { return calculate_score(pair.first, *pair.second); });
 
         return it->first;
@@ -257,7 +257,7 @@ struct Decider::Impl {
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
     std::unordered_map<DeviceId, TargetMemory> target_memories;
 
-    Config config {};
+    Config config { };
     PriorityMode priority_mode;
 
     const PriorityMode mode1 = {
@@ -297,6 +297,6 @@ auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
 
-auto Decider::update(std::span<Armor3D const> armors, Clock::time_point t) -> Output {
+auto Decider::update(std::span<Armor3D const> armors, TimePoint t) -> Output {
     return pimpl->update(armors, t);
 }

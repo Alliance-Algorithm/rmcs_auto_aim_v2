@@ -19,7 +19,6 @@
 #include <openvino/runtime/exception.hpp>
 
 using namespace rmcs::identifier;
-using do_not_warning = rmcs::Image::Details;
 
 struct ArmorDetection::Impl {
 
@@ -88,16 +87,16 @@ struct ArmorDetection::Impl {
             const auto rows = static_cast<std::size_t>(shape.at(1));
             const auto cols = static_cast<std::size_t>(shape.at(2));
             if (cols != result_type::length()) {
-                return {};
+                return { };
             }
 
-            auto parsed_results = std::vector<result_type> {};
-            auto scores         = std::vector<float> {};
-            auto boxes          = std::vector<cv::Rect> {};
+            auto parsed_results = std::vector<result_type> { };
+            auto scores         = std::vector<float> { };
+            auto boxes          = std::vector<cv::Rect> { };
 
             const auto* data = tensor.data<precision_type>();
             for (std::size_t row = 0; row < rows; row++) {
-                auto line = result_type {};
+                auto line = result_type { };
                 line.unsafe_from(std::span { data + row * cols, cols });
                 line.confidence() = util::sigmoid(line.confidence());
 
@@ -108,10 +107,10 @@ struct ArmorDetection::Impl {
                 }
             }
 
-            auto kept_points = std::vector<int> {};
+            auto kept_points = std::vector<int> { };
             cv::dnn::NMSBoxes(boxes, scores, score_threshold, nms_threshold, kept_points);
 
-            auto final_result = Armor2Ds {};
+            auto final_result = Armor2Ds { };
             final_result.reserve(kept_points.size());
 
             for (auto idx : kept_points) {
@@ -162,7 +161,7 @@ struct ArmorDetection::Impl {
             } else {
                 return std::unexpected { "Unsupported model type: " + model_name };
             }
-            return {};
+            return { };
 
         } catch (const std::runtime_error& e) {
             return std::unexpected { std::string { "Failed to load model | " } + e.what() };
@@ -174,7 +173,7 @@ struct ArmorDetection::Impl {
 
     template <class model_type>
     auto compile_model_with() -> void {
-        auto model = model_type {};
+        auto model = model_type { };
         if (!config.infer_device.empty()) {
             model.infer_device = config.infer_device;
         }
@@ -257,7 +256,7 @@ struct ArmorDetection::Impl {
 
     template <class raw_type>
     static auto cast_to_armor_result(raw_type raw) noexcept -> Armor2D {
-        auto armor = Armor2D {};
+        auto armor = Armor2D { };
 
         armor.genre = raw.armor_genre();
         armor.color = raw.armor_color();

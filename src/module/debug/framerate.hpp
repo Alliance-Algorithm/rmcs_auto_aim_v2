@@ -3,13 +3,12 @@
 #include <chrono>
 #include <deque>
 
+#include "utility/clock.hpp"
+
 namespace rmcs {
 
 class FramerateCounter {
 public:
-    using Clock     = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
-
     std::deque<TimePoint> frame_times;
 
     TimePoint last_reach_interval_timestamp;
