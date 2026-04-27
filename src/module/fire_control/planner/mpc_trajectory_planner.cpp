@@ -5,10 +5,10 @@
 #include <cmath>
 #include <format>
 
+#include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/planner/tiny_mpc_axis_solver.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "utility/math/angle.hpp"
-#include "utility/serializable.hpp"
 
 using namespace rmcs::fire_control;
 
@@ -31,82 +31,29 @@ struct ReferencePlan {
     double target_pitch;
 };
 
-auto to_duration(double seconds) -> rmcs::Duration {
-    return std::chrono::duration_cast<rmcs::Duration>(
-        std::chrono::duration<double> { seconds });
-}
-
-auto extract_axis_reference(ReferenceTrajectory const& trajectory, int row_offset)
-    -> MpcAxisTrajectory {
-    return MpcAxisTrajectory { trajectory.template block<2, kMpcAxisHorizon>(row_offset, 0) };
-}
-
-auto assemble_plan(ReferencePlan const& reference, double yaw, double pitch)
-    -> MpcTrajectoryPlanner::Plan {
-    auto result         = MpcTrajectoryPlanner::Plan {};
-    result.target_yaw   = reference.target_yaw;
-    result.target_pitch = reference.target_pitch;
-    result.yaw          = rmcs::util::normalize_angle(yaw + reference.yaw_origin);
-    result.pitch        = pitch;
-    return result;
-}
-
 } // namespace
 
 struct MpcTrajectoryPlanner::Impl {
-    struct Config : util::Serializable {
-        bool mpc_enable { true };
-        double mpc_max_yaw_acc { 50.0 };
-        double mpc_yaw_q_angle { 9e6 };
-        double mpc_yaw_q_rate { 0.0 };
-        double mpc_yaw_r_acc { 1.0 };
-        double mpc_max_pitch_acc { 100.0 };
-        double mpc_pitch_q_angle { 9e6 };
-        double mpc_pitch_q_rate { 0.0 };
-        double mpc_pitch_r_acc { 1.0 };
-
-        constexpr static std::tuple metas {
-            &Config::mpc_enable,
-            "mpc_enable",
-            &Config::mpc_max_yaw_acc,
-            "mpc_max_yaw_acc",
-            &Config::mpc_yaw_q_angle,
-            "mpc_yaw_q_angle",
-            &Config::mpc_yaw_q_rate,
-            "mpc_yaw_q_rate",
-            &Config::mpc_yaw_r_acc,
-            "mpc_yaw_r_acc",
-            &Config::mpc_max_pitch_acc,
-            "mpc_max_pitch_acc",
-            &Config::mpc_pitch_q_angle,
-            "mpc_pitch_q_angle",
-            &Config::mpc_pitch_q_rate,
-            "mpc_pitch_q_rate",
-            &Config::mpc_pitch_r_acc,
-            "mpc_pitch_r_acc",
-        };
-    };
-
     Config config {};
     AimPointChooser::Config chooser_config {};
 
     TinyMpcAxisSolver yaw_solver {};
     TinyMpcAxisSolver pitch_solver {};
 
-    auto initialize(const YAML::Node& yaml, AimPointChooser::Config const& config_in) noexcept
-        -> std::expected<void, std::string> {
-        chooser_config = config_in;
-
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
+    auto initialize(Config const& config_in) noexcept -> std::expected<void, std::string> {
+        config         = config_in;
+        chooser_config = AimPointChooser::Config {
+            .coming_angle          = config.coming_angle,
+            .leaving_angle         = config.leaving_angle,
+            .outpost_coming_angle  = config.outpost_coming_angle,
+            .outpost_leaving_angle = config.outpost_leaving_angle,
+        };
 
         if (!config.mpc_enable) {
             return {};
         }
 
-        result = yaw_solver.initialize(TinyMpcAxisSolver::Config {
+        auto result = yaw_solver.initialize(TinyMpcAxisSolver::Config {
             .max_acc = config.mpc_max_yaw_acc,
             .q_angle = config.mpc_yaw_q_angle,
             .q_rate  = config.mpc_yaw_q_rate,
@@ -131,9 +78,8 @@ struct MpcTrajectoryPlanner::Impl {
         return {};
     }
 
-    auto plan(const predictor::Snapshot& snapshot,
-        TimePoint center_time, double bullet_speed, double yaw_offset,
-        double pitch_offset) -> std::optional<Plan> {
+    auto plan(const predictor::Snapshot& snapshot, TimePoint center_time, double bullet_speed,
+        double yaw_offset, double pitch_offset) -> std::optional<Plan> {
         if (!config.mpc_enable) {
             return std::nullopt;
         }
@@ -142,20 +88,26 @@ struct MpcTrajectoryPlanner::Impl {
             generate_reference(snapshot, center_time, bullet_speed, yaw_offset, pitch_offset);
         if (!reference) return std::nullopt;
 
-        auto const yaw = yaw_solver.solve_center(extract_axis_reference(reference->trajectory, 0));
+        auto const yaw = yaw_solver.solve_center(
+            MpcAxisTrajectory { reference->trajectory.template block<2, kMpcAxisHorizon>(0, 0) });
         if (!yaw.has_value()) return std::nullopt;
 
-        auto const pitch =
-            pitch_solver.solve_center(extract_axis_reference(reference->trajectory, 2));
+        auto const pitch = pitch_solver.solve_center(
+            MpcAxisTrajectory { reference->trajectory.template block<2, kMpcAxisHorizon>(2, 0) });
         if (!pitch.has_value()) return std::nullopt;
 
-        return assemble_plan(*reference, yaw.value(), pitch.value());
+        auto result         = Plan {};
+        result.target_yaw   = reference->target_yaw;
+        result.target_pitch = reference->target_pitch;
+        result.yaw          = util::normalize_angle(yaw.value() + reference->yaw_origin);
+        result.pitch        = pitch.value();
+        return result;
     }
 
 private:
-    static auto sample_at(const predictor::Snapshot& snapshot,
-        TimePoint t, double bullet_speed, double yaw_offset,
-        double pitch_offset, AimPointChooser& chooser) -> std::optional<AimSample> {
+    static auto sample_at(const predictor::Snapshot& snapshot, TimePoint t, double bullet_speed,
+        double yaw_offset, double pitch_offset, AimPointChooser& chooser)
+        -> std::optional<AimSample> {
         auto predicted_armors     = snapshot.predicted_armors(t);
         auto predicted_kinematics = snapshot.kinematics_at(t);
 
@@ -184,16 +136,18 @@ private:
         };
     }
 
-    auto generate_reference(const predictor::Snapshot& snapshot,
-        TimePoint center_time, double bullet_speed, double yaw_offset,
-        double pitch_offset) const -> std::optional<ReferencePlan> {
+    auto generate_reference(const predictor::Snapshot& snapshot, TimePoint center_time,
+        double bullet_speed, double yaw_offset, double pitch_offset) const
+        -> std::optional<ReferencePlan> {
         auto chooser = AimPointChooser {};
         chooser.initialize(chooser_config);
 
         auto samples = std::array<AimSample, kMpcAxisHorizon + 2> {};
         for (int i = 0; i < static_cast<int>(samples.size()); ++i) {
             auto const offset = (i - (kMpcAxisHalfHorizon + 1)) * kMpcAxisDt;
-            auto const t      = center_time + to_duration(offset);
+            auto const t      = center_time
+                + std::chrono::duration_cast<rmcs::Duration>(
+                    std::chrono::duration<double> { offset });
             auto sample = sample_at(snapshot, t, bullet_speed, yaw_offset, pitch_offset, chooser);
             if (!sample) return std::nullopt;
             samples[i] = *sample;
@@ -231,13 +185,12 @@ MpcTrajectoryPlanner::MpcTrajectoryPlanner() noexcept
 
 MpcTrajectoryPlanner::~MpcTrajectoryPlanner() noexcept = default;
 
-auto MpcTrajectoryPlanner::initialize(const YAML::Node& yaml,
-    AimPointChooser::Config const& chooser_config) noexcept -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml, chooser_config);
+auto MpcTrajectoryPlanner::initialize(Config const& config) noexcept
+    -> std::expected<void, std::string> {
+    return pimpl->initialize(config);
 }
 
-auto MpcTrajectoryPlanner::plan(const predictor::Snapshot& snapshot,
-    TimePoint center_time, double bullet_speed, double yaw_offset,
-    double pitch_offset) -> std::optional<Plan> {
+auto MpcTrajectoryPlanner::plan(const predictor::Snapshot& snapshot, TimePoint center_time,
+    double bullet_speed, double yaw_offset, double pitch_offset) -> std::optional<Plan> {
     return pimpl->plan(snapshot, center_time, bullet_speed, yaw_offset, pitch_offset);
 }

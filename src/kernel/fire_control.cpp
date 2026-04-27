@@ -27,6 +27,21 @@ struct FireControl::Impl {
         double outpost_coming_angle;  // rad
         double outpost_leaving_angle; // rad
 
+        bool mpc_enable { true };
+        double mpc_max_yaw_acc { 50.0 };
+        double mpc_yaw_q_angle { 9e6 };
+        double mpc_yaw_q_rate { 0.0 };
+        double mpc_yaw_r_acc { 1.0 };
+        double mpc_max_pitch_acc { 100.0 };
+        double mpc_pitch_q_angle { 9e6 };
+        double mpc_pitch_q_rate { 0.0 };
+        double mpc_pitch_r_acc { 1.0 };
+
+        double first_tolerance { 4.0 };  // rad (config in degree)
+        double second_tolerance { 2.0 }; // rad (config in degree)
+        double judge_distance { 3.0 };   // m
+        bool auto_fire { true };
+
         // clang-format off
         constexpr static std::tuple metas {
             &Config::initial_bullet_speed, "initial_bullet_speed",
@@ -38,6 +53,21 @@ struct FireControl::Impl {
             &Config::leaving_angle,"leaving_angle",
             &Config::outpost_coming_angle,"outpost_coming_angle",
             &Config::outpost_leaving_angle,"outpost_leaving_angle",
+
+            &Config::mpc_enable,"mpc_enable",
+            &Config::mpc_max_yaw_acc,"mpc_max_yaw_acc",
+            &Config::mpc_yaw_q_angle,"mpc_yaw_q_angle",
+            &Config::mpc_yaw_q_rate,"mpc_yaw_q_rate",
+            &Config::mpc_yaw_r_acc,"mpc_yaw_r_acc",
+            &Config::mpc_max_pitch_acc,"mpc_max_pitch_acc",
+            &Config::mpc_pitch_q_angle,"mpc_pitch_q_angle",
+            &Config::mpc_pitch_q_rate,"mpc_pitch_q_rate",
+            &Config::mpc_pitch_r_acc,"mpc_pitch_r_acc",
+
+            &Config::first_tolerance,"first_tolerance",
+            &Config::second_tolerance,"second_tolerance",
+            &Config::judge_distance,"judge_distance",
+            &Config::auto_fire,"auto_fire",
         };
         // clang-format on
     };
@@ -66,6 +96,8 @@ struct FireControl::Impl {
         config.leaving_angle         = util::deg2rad(config.leaving_angle);
         config.outpost_coming_angle  = util::deg2rad(config.outpost_coming_angle);
         config.outpost_leaving_angle = util::deg2rad(config.outpost_leaving_angle);
+        config.first_tolerance       = util::deg2rad(config.first_tolerance);
+        config.second_tolerance      = util::deg2rad(config.second_tolerance);
 
         auto chooser_config = AimPointChooser::Config {
             .coming_angle          = config.coming_angle,
@@ -75,13 +107,32 @@ struct FireControl::Impl {
         };
         aim_point_chooser.initialize(chooser_config);
 
-        auto evaluate_result = shoot_evaluator.initialize(yaml);
+        auto evaluate_result = shoot_evaluator.initialize(ShootEvaluator::Config {
+            .first_tolerance  = config.first_tolerance,
+            .second_tolerance = config.second_tolerance,
+            .judge_distance   = config.judge_distance,
+            .auto_fire        = config.auto_fire,
+        });
         if (!evaluate_result.has_value()) {
             return std::unexpected { std::format(
                 "shoot_evaluator init failed: {}", evaluate_result.error()) };
         }
 
-        auto planner_result = mpc_trajectory_planner.initialize(yaml, chooser_config);
+        auto planner_result = mpc_trajectory_planner.initialize(MpcTrajectoryPlanner::Config {
+            .mpc_enable           = config.mpc_enable,
+            .mpc_max_yaw_acc      = config.mpc_max_yaw_acc,
+            .mpc_yaw_q_angle      = config.mpc_yaw_q_angle,
+            .mpc_yaw_q_rate       = config.mpc_yaw_q_rate,
+            .mpc_yaw_r_acc        = config.mpc_yaw_r_acc,
+            .mpc_max_pitch_acc    = config.mpc_max_pitch_acc,
+            .mpc_pitch_q_angle    = config.mpc_pitch_q_angle,
+            .mpc_pitch_q_rate     = config.mpc_pitch_q_rate,
+            .mpc_pitch_r_acc      = config.mpc_pitch_r_acc,
+            .coming_angle         = config.coming_angle,
+            .leaving_angle        = config.leaving_angle,
+            .outpost_coming_angle = config.outpost_coming_angle,
+            .outpost_leaving_angle = config.outpost_leaving_angle,
+        });
         if (!planner_result.has_value()) {
             return std::unexpected { std::format(
                 "mpc_trajectory_planner init failed: {}", planner_result.error()) };

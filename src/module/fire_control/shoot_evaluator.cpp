@@ -4,56 +4,19 @@
 #include <optional>
 
 #include "utility/math/angle.hpp"
-#include "utility/serializable.hpp"
 
 using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
-    struct Config : util::Serializable {
-        double first_tolerance { 4.0 };  // degree
-        double second_tolerance { 2.0 }; // degree
-        double judge_distance { 3.0 };   // m
-        bool auto_fire { true };
 
-        constexpr static std::tuple metas {
-            &Config::first_tolerance,
-            "first_tolerance",
-            &Config::second_tolerance,
-            "second_tolerance",
-            &Config::judge_distance,
-            "judge_distance",
-            &Config::auto_fire,
-            "auto_fire",
-        };
-    };
-
-    Config config {};
-
-    double first_tolerance_ { 4.0 / 57.3 };
-    double second_tolerance_ { 2.0 / 57.3 };
-    double judge_distance_ { 3.0 };
-    bool auto_fire_ { true };
-
-    std::optional<Command> last_command_ {};
-
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-
-        first_tolerance_  = config.first_tolerance / 57.3;
-        second_tolerance_ = config.second_tolerance / 57.3;
-        judge_distance_   = config.judge_distance;
-        auto_fire_        = config.auto_fire;
+    auto initialize(Config const& config_in) noexcept -> std::expected<void, std::string> {
+        config = config_in;
         last_command_.reset();
 
-        if (!(first_tolerance_ > 0.0) || !(second_tolerance_ > 0.0)) {
+        if (!(config.first_tolerance > 0.0) || !(config.second_tolerance > 0.0))
             return std::unexpected { "first_tolerance and second_tolerance must be > 0" };
-        }
-        if (judge_distance_ < 0.0) {
-            return std::unexpected { "judge_distance must be >= 0" };
-        }
+
+        if (config.judge_distance < 0.0) return std::unexpected { "judge_distance must be >= 0" };
 
         return {};
     }
@@ -61,13 +24,13 @@ struct ShootEvaluator::Impl {
     auto evaluate(Command const& command, double current_yaw) noexcept -> bool {
         auto should_fire = false;
 
-        if (!command.control || !auto_fire_) {
+        if (!command.control || !config.auto_fire) {
             last_command_ = command;
             return false;
         }
 
-        const auto tolerance =
-            (command.distance > judge_distance_) ? second_tolerance_ : first_tolerance_;
+        const auto tolerance = (command.distance > config.judge_distance) ? config.second_tolerance
+                                                                          : config.first_tolerance;
 
         if (last_command_.has_value() && command.auto_aim_enabled && command.aim_point_valid) {
             const auto yaw_delta =
@@ -81,6 +44,11 @@ struct ShootEvaluator::Impl {
         last_command_ = command;
         return should_fire;
     }
+
+private:
+    Config config {};
+
+    std::optional<Command> last_command_ {};
 };
 
 ShootEvaluator::ShootEvaluator() noexcept
@@ -88,9 +56,8 @@ ShootEvaluator::ShootEvaluator() noexcept
 
 ShootEvaluator::~ShootEvaluator() noexcept = default;
 
-auto ShootEvaluator::initialize(const YAML::Node& yaml) noexcept
-    -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
+auto ShootEvaluator::initialize(Config const& config) noexcept -> std::expected<void, std::string> {
+    return pimpl->initialize(config);
 }
 
 auto ShootEvaluator::evaluate(Command const& command, double current_yaw) noexcept -> bool {

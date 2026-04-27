@@ -27,7 +27,7 @@ using AxisSolver      = rmcs::util::TinyMpcSolver<kAxisStateDim, kAxisInputDim, 
 struct TinyMpcAxisSolver::Impl {
     std::optional<AxisSolver> solver {};
 
-    auto initialize(TinyMpcAxisSolver::Config const& config) -> std::expected<void, std::string> {
+    auto initialize(Config const& config) -> std::expected<void, std::string> {
         AxisDynamics A;
         A << 1.0, kMpcAxisDt, 0.0, 1.0;
 

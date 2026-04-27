@@ -1,7 +1,5 @@
 #include "aim_point_chooser.hpp"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <tuple>
 #include <vector>
@@ -15,30 +13,7 @@
 using namespace rmcs::fire_control;
 
 struct AimPointChooser::Impl {
-    struct CandidateEval {
-    struct CandidateEval {
-        double delta_yaw { 0.0 };
-        bool in_window { false };
-        bool in_window { false };
-    };
-
-    struct AngleWindow {
-        double coming { 0.0 };
-        double leaving { 0.0 };
-    };
-
-    AngleWindow normal_fast_window { util::deg2rad(70.0), util::deg2rad(20.0) }; // rad
-    AngleWindow outpost_window { util::deg2rad(70.0), util::deg2rad(30.0) };     // rad
-    const double min_switch_improvement_angle { util::deg2rad(7.0) };
-
-    std::optional<int> last_chosen_armor_id {};
-
-    auto initialize(Config const& config) noexcept -> void {
-        normal_fast_window = { config.coming_angle, config.leaving_angle };
-        outpost_window     = { config.outpost_coming_angle, config.outpost_leaving_angle };
-        normal_fast_window = { config.coming_angle, config.leaving_angle };
-        outpost_window     = { config.outpost_coming_angle, config.outpost_leaving_angle };
-    }
+    auto initialize(Config const& config) noexcept -> void { config_ = config; }
 
     auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
         double angular_velocity) -> std::optional<Armor3D> {
@@ -48,14 +23,11 @@ struct AimPointChooser::Impl {
             return std::nullopt;
         }
 
-        const auto center_yaw     = std::atan2(center_position.y(), center_position.x());
-        const auto is_outpost     = armors.front().genre == DeviceId::OUTPOST;
-        auto const& active_window = is_outpost ? outpost_window : normal_fast_window;
-
-        auto candidate_evals = std::vector<CandidateEval>(armors.size());
-        const auto center_yaw     = std::atan2(center_position.y(), center_position.x());
-        const auto is_outpost     = armors.front().genre == DeviceId::OUTPOST;
-        auto const& active_window = is_outpost ? outpost_window : normal_fast_window;
+        const auto center_yaw    = std::atan2(center_position.y(), center_position.x());
+        const auto is_outpost    = armors.front().genre == DeviceId::OUTPOST;
+        auto const active_coming = is_outpost ? config_.outpost_coming_angle : config_.coming_angle;
+        auto const active_leaving =
+            is_outpost ? config_.outpost_leaving_angle : config_.leaving_angle;
 
         auto candidate_evals = std::vector<CandidateEval>(armors.size());
 
@@ -67,9 +39,9 @@ struct AimPointChooser::Impl {
 
         const auto in_window = [&](double delta_yaw) {
             auto const abs_delta  = std::abs(delta_yaw);
-            auto const in_coming  = abs_delta <= active_window.coming;
-            auto const in_leaving = (angular_velocity > 0.0) ? (delta_yaw <= active_window.leaving)
-                : (angular_velocity < 0.0)                   ? (delta_yaw >= -active_window.leaving)
+            auto const in_coming  = abs_delta <= active_coming;
+            auto const in_leaving = (angular_velocity > 0.0) ? (delta_yaw <= active_leaving)
+                : (angular_velocity < 0.0)                   ? (delta_yaw >= -active_leaving)
                                                              : true;
             return in_coming && in_leaving;
         };
@@ -154,6 +126,17 @@ struct AimPointChooser::Impl {
             return { armors[*best_idx] };
         }
     }
+
+private:
+    Config config_ {};
+
+    struct CandidateEval {
+        double delta_yaw { 0.0 };
+        bool in_window { false };
+    };
+
+    const double min_switch_improvement_angle { util::deg2rad(7.0) };
+    std::optional<int> last_chosen_armor_id {};
 };
 
 AimPointChooser::AimPointChooser() noexcept
