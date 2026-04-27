@@ -28,6 +28,9 @@ public:
 
     auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool;
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool;
+
+    // 自瞄方向，其坐标系为 OdomImu
+    auto update_aiming_direction(double yaw, double pitch) const -> void;
 };
 
 }

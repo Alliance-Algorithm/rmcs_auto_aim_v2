@@ -113,9 +113,10 @@ auto main() -> int {
         if (!image) continue;
 
         if (framerate.tick()) {
-            node.info("Autoaim framerate: {}", framerate.fps());
+            node.info("Autoaim Framerate: {}", framerate.fps());
         }
 
+        // 结束流程后发送串流帧
         [[maybe_unused]] auto _ = std::experimental::scope_exit { [&] {
             if (visualization.initialized()) {
                 visualization.send_image(*image);
@@ -130,20 +131,20 @@ auto main() -> int {
         /// 1. Identify Armor
         ///
         auto armors_2d = Armor2Ds { };
-        auto result    = identifier.sync_identify(*image);
-        if (!result.has_value()) {
-            logging.error("detection", "Armor detection failed");
-        } else {
+        {
+            auto result = identifier.sync_identify(*image);
+            if (!result.has_value()) {
+                logging.error("detection", "Something wrong happend in identifier");
+                continue; // 一般不会推理出错喵~
+            }
+            if (use_painted_image) {
+                for (const auto& armor : *result)
+                    util::draw(*image, armor);
+            }
             logging.reset("detection", 5);
 
             tracker.set_invincible_armors(received.invincible_devices);
-            auto filtered = tracker.filter_armors(*result);
-            if (use_painted_image) {
-                for (const auto& armor_2d : filtered)
-                    util::draw(*image, armor_2d);
-            }
-
-            armors_2d = std::move(filtered);
+            armors_2d = tracker.filter_armors(*result);
         }
 
         /// 2. Transform 2d to 3d
@@ -177,9 +178,10 @@ auto main() -> int {
             command.target          = target_id;
         }
 
+        // 火控
         if (target.allow_takeover && snapshot) {
-            if (auto result =
-                    fire_control.solve(*snapshot, target.tracking_confirmed, received.yaw)) {
+            auto result = fire_control.solve(*snapshot, target.tracking_confirmed, received.yaw);
+            if (result) {
                 command.shoot_permitted = result->shoot_permitted;
                 command.yaw             = result->yaw;
                 command.pitch           = result->pitch;

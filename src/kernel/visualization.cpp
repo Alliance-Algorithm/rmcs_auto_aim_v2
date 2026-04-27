@@ -6,6 +6,8 @@
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/math/conversion.hpp"
+#include "utility/rclcpp/visual/arrow.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
@@ -17,6 +19,9 @@ constexpr std::array kVideoTypes {
 };
 
 struct Visualization::Impl {
+    static constexpr auto kCameraLink = "camera_link";
+    static constexpr auto kOdomLink   = "odom_imu_link";
+
     using SessionConfig = debug::StreamSession::Config;
     using NormalResult  = std::expected<void, std::string>;
 
@@ -41,25 +46,26 @@ struct Visualization::Impl {
         };
     };
 
-    Printer log { "visualization" };
+    Printer log { "visual" };
 
     std::unique_ptr<debug::StreamSession> session;
     SessionConfig session_config;
 
+    std::unique_ptr<debug::ArmorVisualizer> armors_detect;
+    std::unique_ptr<debug::ArmorVisualizer> armors_group;
+    std::unique_ptr<visual::Arrow> aiming_direction;
+
     bool is_initialized  = false;
     bool size_determined = false;
 
-    std::unique_ptr<debug::ArmorVisualizer> solved_pnp_visualizer;
-    std::unique_ptr<debug::ArmorVisualizer> predicted_visualizer;
-
     Impl() noexcept {
-        session               = std::make_unique<debug::StreamSession>();
-        solved_pnp_visualizer = std::make_unique<debug::ArmorVisualizer>();
-        predicted_visualizer  = std::make_unique<debug::ArmorVisualizer>();
+        session       = std::make_unique<debug::StreamSession>();
+        armors_detect = std::make_unique<debug::ArmorVisualizer>();
+        armors_group  = std::make_unique<debug::ArmorVisualizer>();
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
-        auto config = Config {};
+        auto config = Config { };
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
@@ -77,11 +83,16 @@ struct Visualization::Impl {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
 
-        solved_pnp_visualizer->initialize(visual_node);
-        predicted_visualizer->initialize(visual_node);
+        armors_detect->initialize(visual_node);
+        armors_group->initialize(visual_node);
+        aiming_direction = std::make_unique<visual::Arrow>(visual::Arrow::Config {
+            .rclcpp = visual_node,
+            .name   = "aiming_direction",
+            .tf     = kOdomLink,
+        });
 
         is_initialized = true;
-        return {};
+        return { };
     }
 
     auto initialized() const noexcept { return is_initialized; }
@@ -130,12 +141,19 @@ struct Visualization::Impl {
 
     auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return solved_pnp_visualizer->visualize(armors, "solved_pnp_armors", "camera_link");
+        return armors_detect->visualize(armors, "solved_pnp_armors", kCameraLink);
     }
 
     auto predicted_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return predicted_visualizer->visualize(armors, "predicted_armors", "odom_imu_link");
+        return armors_group->visualize(armors, "predicted_armors", kOdomLink);
+    }
+
+    auto update_aiming_direction(double yaw, double pitch) const -> void {
+        if (!is_initialized) return;
+
+        aiming_direction->move(Translation { }, euler_to_quaternion(yaw, pitch, 0.0));
+        aiming_direction->update();
     }
 };
 
@@ -156,6 +174,11 @@ auto Visualization::solved_pnp_armors(std::span<Armor3D const> armors) const -> 
 auto Visualization::predicted_armors(std::span<Armor3D const> armors) const -> bool {
     return pimpl->predicted_armors(armors);
 }
+
+auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {
+    pimpl->update_aiming_direction(yaw, pitch);
+}
+
 Visualization::Visualization() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 

@@ -14,6 +14,8 @@ public:
 
     auto get_timestamp() const noexcept -> TimePoint;
     auto set_timestamp(TimePoint) noexcept -> void;
+
+    auto clone() const noexcept -> std::unique_ptr<Image>;
 };
 
 }

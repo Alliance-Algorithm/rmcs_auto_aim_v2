@@ -1,13 +1,14 @@
 use_visualization: true
 use_painted_image: true
-is_local_runtime: false
+is_local_runtime: true
 
 capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
-  # hikcamera or local_video
-  source: "hikcamera"
+
+  source: "local_video"
+  # source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500
@@ -18,13 +19,13 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: true
+    invert_image: false
     software_sync: false
     trigger_mode: false
-    fixed_framerate: true
+    fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/alliance/test_videos/outpost.mp4"
+    location: "/workspaces/data/autoaim/1777297317784.avi"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -36,11 +37,10 @@ identifier:
   binarization_threshold: 0.5
 
   # openvino infer
-  avaliable_models:
-    - "tongji-yolov5.xml"
-    - "shenzhen-0526.onnx"
-    - "shenzhen-0708.onnx"
   model_location: "shenzhen-0526.onnx"
+  # model_location: "shenzhen-0708.onnx"
+  # model_location: "tongji-yolov5.xml"
+
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
@@ -52,8 +52,8 @@ identifier:
   nms_threshold: 0.3
 
 tracker:
-  # blue or red
   enemy_color: red
+  # enemy_color: blue
   max_temporary_loss_frames: 4
   max_unconfirmed_loss_frames: 2
   tracking_confirm_frames: 2
@@ -74,20 +74,6 @@ pose_estimator:
   distort_coeff:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
-  transforms:
-    - parent: "imu_link"
-      child: "pitch_link"
-      t: [0., 0., 0.]
-      q: [1., 0., 0., 0.]
-    - parent: "pitch_link"
-      child: "muzzle_link"
-      t: [0., 0., 0.]
-      q: [1., 0., 0., 0.]
-    - parent: "pitch_link"
-      child: "camera_link"
-      t: [0., 0., 0.]
-      q: [1., 0., 0., 0.]
-
 fire_control:
   initial_bullet_speed: 21.0 # m/s
   shoot_delay: 0.1 # s
@@ -105,7 +91,7 @@ fire_control:
   auto_fire: true # 是否由自瞄控制射击
 
 visualization:
-  framerate: 60
-  monitor_host: "192.168.3.125"
+  framerate: 50
+  monitor_host: "127.0.0.1"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

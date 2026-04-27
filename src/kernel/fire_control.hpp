@@ -4,7 +4,6 @@
 #include <yaml-cpp/yaml.h>
 
 #include "module/predictor/snapshot.hpp"
-#include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::kernel {

@@ -1,11 +1,9 @@
 #include "pose_estimator.hpp"
 
-#include "kernel/transform_tree.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/math/solve_pnp/solve_pnp.hpp"
 #include "utility/serializable.hpp"
-#include "utility/yaml/tf.hpp"
 
 using namespace rmcs::util;
 using namespace rmcs;
@@ -27,7 +25,7 @@ struct PoseEstimator::Impl {
     };
 
     Config config;
-    PnpSolution pnp_solution {};
+    PnpSolution pnp_solution { };
 
     Eigen::Vector3d odom_to_camera_translation { Eigen::Vector3d::Zero() };
     Eigen::Quaterniond odom_to_camera_orientation { Eigen::Quaterniond::Identity() };
@@ -39,22 +37,12 @@ struct PoseEstimator::Impl {
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
-        {
-            auto result = serialize_from<tf::AutoAim>(yaml["transforms"]);
-            if (!result.has_value()
-                && result.error() != SerializeTfError::UNMATCHED_LINKS_IN_TREE) {
-                return std::unexpected { std::string { "Failed to parse transforms | " }
-                    + util::to_string(result.error()) };
-            }
-        }
-        {
-            pnp_solution.input.camera_matrix =
-                reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
-            pnp_solution.input.distort_coeff =
-                reshape_array<float, 5, double>(config.distort_coeff);
-        }
 
-        return {};
+        pnp_solution.input.camera_matrix =
+            reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
+        pnp_solution.input.distort_coeff = reshape_array<float, 5, double>(config.distort_coeff);
+
+        return { };
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
@@ -70,7 +58,7 @@ struct PoseEstimator::Impl {
             }
         };
 
-        auto armors_in_camera = std::vector<Armor3D> {};
+        auto armors_in_camera = std::vector<Armor3D> { };
 
         // TODO: YAW 角优化
         std::ranges::for_each(armors | std::views::enumerate,
@@ -89,7 +77,7 @@ struct PoseEstimator::Impl {
                     return;
                 }
 
-                auto armor_3d  = Armor3D {};
+                auto armor_3d  = Armor3D { };
                 armor_3d.genre = pnp_solution.result.genre;
                 armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
                 armor_3d.id    = i;
@@ -110,12 +98,12 @@ struct PoseEstimator::Impl {
     auto odom_to_camera(Armor3D const& armor) const -> Armor3D {
         auto transformed = armor;
 
-        auto position = Eigen::Vector3d {};
+        auto position = Eigen::Vector3d { };
         transformed.translation.copy_to(position);
         transformed.translation =
             odom_to_camera_orientation * position + odom_to_camera_translation;
 
-        auto quat = Eigen::Quaterniond {};
+        auto quat = Eigen::Quaterniond { };
         transformed.orientation.copy_to(quat);
         transformed.orientation = odom_to_camera_orientation * quat;
 
@@ -123,18 +111,18 @@ struct PoseEstimator::Impl {
     }
 
     auto odom_to_camera(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
-        auto result = std::vector<Armor3D> {};
+        auto result = std::vector<Armor3D> { };
         result.reserve(armors.size());
 
         for (const auto& armor : armors) {
             auto transformed = armor;
 
-            auto position = Eigen::Vector3d {};
+            auto position = Eigen::Vector3d { };
             transformed.translation.copy_to(position);
             transformed.translation =
                 odom_to_camera_orientation * position + odom_to_camera_translation;
 
-            auto quat = Eigen::Quaterniond {};
+            auto quat = Eigen::Quaterniond { };
             transformed.orientation.copy_to(quat);
             transformed.orientation = odom_to_camera_orientation * quat;
 

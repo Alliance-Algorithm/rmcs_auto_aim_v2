@@ -1,10 +1,9 @@
 #include "aim_point_chooser.hpp"
+#include "utility/math/conversion.hpp"
 
 #include <cmath>
 #include <tuple>
 #include <vector>
-
-#include "utility/math/conversion.hpp"
 
 using namespace rmcs::fire_control;
 
@@ -23,7 +22,7 @@ struct AimPointChooser::Impl {
     AngleWindow outpost_window { util::deg2rad(70.0), util::deg2rad(30.0) };     // rad
     const double min_switch_improvement_angle { util::deg2rad(7.0) };
 
-    std::optional<int> last_chosen_armor_id {};
+    std::optional<int> last_chosen_armor_id { };
 
     auto initialize(Config const& config) noexcept -> void {
         normal_fast_window = { config.coming_angle, config.leaving_angle };
@@ -44,7 +43,7 @@ struct AimPointChooser::Impl {
         auto candidate_evals = std::vector<CandidateEval>(armors.size());
 
         const auto yaw = [&](size_t index) {
-            auto orientation = Eigen::Quaterniond {};
+            auto orientation = Eigen::Quaterniond { };
             armors[index].orientation.copy_to(orientation);
             return util::eulers(orientation)[0];
         };
@@ -81,8 +80,8 @@ struct AimPointChooser::Impl {
             return std::tuple { abs_delta, last_penalty, id, index };
         };
 
-        auto best_idx = std::optional<size_t> {};
-        auto last_idx = std::optional<size_t> {};
+        auto best_idx = std::optional<size_t> { };
+        auto last_idx = std::optional<size_t> { };
 
         {
             // 2) 最优筛选（仅角度窗口内）并定位上次目标

@@ -38,6 +38,12 @@ struct Transform {
             },
         };
     };
+    static constexpr auto kIdentity() {
+        return Transform {
+            Translation { 0, 0, 0 },
+            Orientation { 0, 0, 0, 1 },
+        };
+    }
 };
 
 struct AutoAimState {
@@ -97,6 +103,17 @@ struct ControlState {
             .yaw                      = std::numeric_limits<double>::quiet_NaN(),
             .pitch                    = std::numeric_limits<double>::quiet_NaN(),
             .odom_to_camera_transform = Transform::kNaN(),
+            .capture_signals          = { },
+            .invincible_devices       = DeviceIds::None(),
+        };
+    }
+    static auto kIdentity() {
+        return ControlState {
+            .timestamp                = Clock::now(),
+            .shoot_mode               = ShootMode::BATTLE,
+            .yaw                      = 0,
+            .pitch                    = 0,
+            .odom_to_camera_transform = Transform::kIdentity(),
             .capture_signals          = { },
             .invincible_devices       = DeviceIds::None(),
         };

@@ -19,6 +19,15 @@ auto Image::set_timestamp(TimePoint timestamp) noexcept -> void //
     pimpl->timestamp = timestamp;
 }
 
+auto Image::clone() const noexcept -> std::unique_ptr<Image> {
+    auto result = std::make_unique<Image>();
+
+    result->details().mat = pimpl->details.mat.clone();
+    result->set_timestamp(pimpl->timestamp);
+
+    return result;
+}
+
 Image::Image() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
