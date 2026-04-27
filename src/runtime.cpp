@@ -6,6 +6,7 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/panic.hpp"
@@ -100,6 +101,9 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
+    auto framerate = FramerateCounter { };
+    framerate.set_interval(std::chrono::seconds { 5 });
+
     while (util::get_running()) {
         node.spin_once();
 
@@ -107,6 +111,10 @@ auto main() -> int {
 
         auto image = capturer.fetch_image();
         if (!image) continue;
+
+        if (framerate.tick()) {
+            node.info("Autoaim framerate: {}", framerate.fps());
+        }
 
         [[maybe_unused]] auto _ = std::experimental::scope_exit { [&] {
             if (visualization.initialized()) {

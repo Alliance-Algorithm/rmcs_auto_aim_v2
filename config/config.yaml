@@ -1,6 +1,6 @@
 use_visualization: true
 use_painted_image: true
-is_local_runtime: true
+is_local_runtime: false
 
 capturer:
   show_loss_framerate: false
@@ -18,7 +18,7 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: false
+    invert_image: true
     software_sync: false
     trigger_mode: false
     fixed_framerate: true
@@ -40,7 +40,7 @@ identifier:
     - "tongji-yolov5.xml"
     - "shenzhen-0526.onnx"
     - "shenzhen-0708.onnx"
-  model_location: "tongji-yolov5.xml"
+  model_location: "shenzhen-0526.onnx"
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
@@ -106,6 +106,6 @@ fire_control:
 
 visualization:
   framerate: 60
-  monitor_host: "127.0.0.1"
+  monitor_host: "192.168.3.125"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
