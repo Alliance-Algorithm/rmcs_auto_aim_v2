@@ -31,8 +31,8 @@ struct ReferencePlan {
     double target_pitch;
 };
 
-auto to_duration(double seconds) -> rmcs::predictor::Snapshot::Clock::duration {
-    return std::chrono::duration_cast<rmcs::predictor::Snapshot::Clock::duration>(
+auto to_duration(double seconds) -> rmcs::Duration {
+    return std::chrono::duration_cast<rmcs::Duration>(
         std::chrono::duration<double> { seconds });
 }
 
@@ -132,7 +132,7 @@ struct MpcTrajectoryPlanner::Impl {
     }
 
     auto plan(const predictor::Snapshot& snapshot,
-        predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
+        TimePoint center_time, double bullet_speed, double yaw_offset,
         double pitch_offset) -> std::optional<Plan> {
         if (!config.mpc_enable) {
             return std::nullopt;
@@ -154,7 +154,7 @@ struct MpcTrajectoryPlanner::Impl {
 
 private:
     static auto sample_at(const predictor::Snapshot& snapshot,
-        predictor::Snapshot::Clock::time_point t, double bullet_speed, double yaw_offset,
+        TimePoint t, double bullet_speed, double yaw_offset,
         double pitch_offset, AimPointChooser& chooser) -> std::optional<AimSample> {
         auto predicted_armors     = snapshot.predicted_armors(t);
         auto predicted_kinematics = snapshot.kinematics_at(t);
@@ -185,7 +185,7 @@ private:
     }
 
     auto generate_reference(const predictor::Snapshot& snapshot,
-        predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
+        TimePoint center_time, double bullet_speed, double yaw_offset,
         double pitch_offset) const -> std::optional<ReferencePlan> {
         auto chooser = AimPointChooser {};
         chooser.initialize(chooser_config);
@@ -237,7 +237,7 @@ auto MpcTrajectoryPlanner::initialize(const YAML::Node& yaml,
 }
 
 auto MpcTrajectoryPlanner::plan(const predictor::Snapshot& snapshot,
-    predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
+    TimePoint center_time, double bullet_speed, double yaw_offset,
     double pitch_offset) -> std::optional<Plan> {
     return pimpl->plan(snapshot, center_time, bullet_speed, yaw_offset, pitch_offset);
 }

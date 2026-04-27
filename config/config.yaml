@@ -80,10 +80,10 @@ fire_control:
   yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
-  coming_angle: 55.0      # degree
+  coming_angle: 60.0      # degree
   leaving_angle: 30.0     # degree
-  outpost_coming_angle: 50.0      # degree
-  outpost_leaving_angle: 40.0     # degree
+  outpost_coming_angle: 70.0      # degree
+  outpost_leaving_angle: 50.0     # degree
 
   mpc_enable: true
   mpc_max_yaw_acc: 50.0

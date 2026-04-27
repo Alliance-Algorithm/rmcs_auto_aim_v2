@@ -25,7 +25,7 @@ public:
         -> std::expected<void, std::string>;
 
     auto plan(const predictor::Snapshot& snapshot,
-        predictor::Snapshot::Clock::time_point center_time, double bullet_speed, double yaw_offset,
+        TimePoint center_time, double bullet_speed, double yaw_offset,
         double pitch_offset) -> std::optional<Plan>;
 };
 
