@@ -2,7 +2,6 @@
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
-#include "utility/clock.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
 
@@ -16,7 +15,6 @@ namespace rmcs {
 
 using namespace util;
 using namespace kernel;
-using Clock = util::Clock;
 
 class AutoAimComponent final : public rmcs_executor::Component {
 public:

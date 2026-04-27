@@ -37,7 +37,7 @@ struct Tracker::Impl {
             return std::unexpected { result.error() };
         }
 
-        return { };
+        return {};
     }
 
     auto set_invincible_armors(DeviceIds devices) -> void {

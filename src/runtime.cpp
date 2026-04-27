@@ -15,8 +15,8 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
+#include <csignal>
 #include <experimental/scope>
-#include <rclcpp/utilities.hpp>
 #include <string>
 #include <yaml-cpp/yaml.h>
 
@@ -27,6 +27,8 @@ using namespace rmcs::kernel;
 auto main() -> int {
     using namespace std::chrono_literals;
 
+    std::signal(SIGINT, [](int) { util::set_running(false); });
+
     auto node = RclcppNode { "AutoAim" };
     node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
@@ -35,13 +37,13 @@ auto main() -> int {
     logging.reset("detection", 5);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, ControlState> { };
-    auto capturer       = kernel::Capturer { };
-    auto identifier     = kernel::Identifier { };
-    auto tracker        = kernel::Tracker { };
-    auto pose_estimator = kernel::PoseEstimator { };
-    auto fire_control   = kernel::FireControl { };
-    auto visualization  = kernel::Visualization { };
+    auto feishu         = kernel::Feishu<AutoAimState, ControlState> {};
+    auto capturer       = kernel::Capturer {};
+    auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
+    auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
+    auto visualization  = kernel::Visualization {};
 
     /// Configure
     auto configuration     = util::configuration();

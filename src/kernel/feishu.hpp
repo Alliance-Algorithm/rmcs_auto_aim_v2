@@ -26,13 +26,13 @@ private:
     using Duration  = Timestamp::duration;
 
     using SendClient = shm::Client<SendT>::Send;
-    SendClient send_client { };
+    SendClient send_client {};
 
     using RecvClient = shm::Client<RecvT>::Recv;
-    RecvClient recv_client { };
+    RecvClient recv_client {};
 
     mutable Timestamp latest_timestamp = Timestamp::min();
-    std::deque<RecvT> recv_buffer { };
+    std::deque<RecvT> recv_buffer {};
 
     template <std::invocable<const RecvT&> F>
     auto recv(F&& f) const noexcept {
@@ -96,7 +96,7 @@ public:
 
         if (target > latest_timestamp) return std::nullopt;
 
-        auto to_return = std::optional<RecvT> { };
+        auto to_return = std::optional<RecvT> {};
         auto shortest  = max;
         for (const RecvT& data : recv_buffer | std::views::reverse) {
             const auto timestamp = Timestamp { data.timestamp };

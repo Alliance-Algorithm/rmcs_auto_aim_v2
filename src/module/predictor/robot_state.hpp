@@ -1,4 +1,7 @@
 #pragma once
+
+#include <span>
+
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"

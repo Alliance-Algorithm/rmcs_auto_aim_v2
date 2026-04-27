@@ -19,7 +19,7 @@ namespace {
     }
 
     auto make_armor(DeviceId device, CampColor color, int id) -> Armor3D {
-        auto armor  = Armor3D { };
+        auto armor  = Armor3D {};
         armor.genre = device;
         armor.color = camp_color2armor_color(color);
         armor.id    = id;
@@ -43,7 +43,7 @@ namespace {
             auto const max_armors =
                 std::clamp(armor_num, 0, OutpostEKFParameters::kOutpostArmorCount);
 
-            auto armors = std::vector<Armor3D> { };
+            auto armors = std::vector<Armor3D> {};
             armors.reserve(max_armors);
 
             for (int id = 0; id < max_armors; ++id) {
