@@ -26,44 +26,6 @@ auto make_unique_marker_id(rmcs::DeviceId device, int armor_index) -> int {
     return (device_index << kArmorIndexBitWidth) | armor_index;
 }
 
-auto set_marker_scale(Marker& marker, rmcs::DeviceId device, bool is_arrow) -> void {
-    if (is_arrow) {
-        marker.scale.x = 0.2;
-        marker.scale.y = 0.01;
-        marker.scale.z = 0.01;
-        return;
-    }
-
-    if (rmcs::DeviceIds::kSmallArmor().contains(device)) {
-        marker.scale.x = 0.003;
-        marker.scale.y = 0.140;
-        marker.scale.z = 0.125;
-    } else if (rmcs::DeviceIds::kLargeArmor().contains(device)) {
-        marker.scale.x = 0.003;
-        marker.scale.y = 0.235;
-        marker.scale.z = 0.127;
-    }
-}
-
-auto set_marker_color(Marker& marker, rmcs::CampColor camp) -> void {
-    if (camp == rmcs::CampColor::RED) {
-        marker.color.r = 1.;
-        marker.color.g = 0.;
-        marker.color.b = 0.;
-        marker.color.a = 1.;
-    } else if (camp == rmcs::CampColor::BLUE) {
-        marker.color.r = 0.;
-        marker.color.g = 0.;
-        marker.color.b = 1.;
-        marker.color.a = 1.;
-    } else {
-        marker.color.r = 1.;
-        marker.color.g = 0.;
-        marker.color.b = 1.;
-        marker.color.a = 1.;
-    }
-}
-
 auto make_marker(std::string_view frame_id, std::string_view ns, int id, int type, int action,
     rmcs::DeviceId device, rmcs::CampColor camp, const rmcs::Armor3D* armor,
     const rclcpp::Time& stamp) -> Marker {
@@ -77,12 +39,12 @@ auto make_marker(std::string_view frame_id, std::string_view ns, int id, int typ
     marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
 
     if (type == Marker::ARROW) {
-        set_marker_scale(marker, device, true);
+        marker.scale.x = 0.2, marker.scale.y = 0.01, marker.scale.z = 0.01;
     } else {
-        set_marker_scale(marker, device, false);
+        rmcs::ArmorVisualScale { device }.to(marker.scale);
     }
 
-    set_marker_color(marker, camp);
+    rmcs::ArmorVisualColor { camp }.to(marker.color);
 
     if (armor) {
         armor->translation.copy_to(marker.pose.position);
@@ -119,10 +81,10 @@ struct ArmorVisualizer::Impl final {
             previous_ids.clear();
         }
 
-        auto visual_marker      = MarkerArray { };
-        const auto current_time = rclcpp_clock.now();
-        auto current_ids        = std::unordered_set<int> { };
-        auto const arrow_name   = std::format("{}_arrow", name);
+        auto visual_marker = MarkerArray { };
+        auto current_time  = rclcpp_clock.now();
+        auto current_ids   = std::unordered_set<int> { };
+        auto arrow_name    = std::format("{}_arrow", name);
         current_ids.reserve(armors.size());
 
         for (auto const& armor : armors) {

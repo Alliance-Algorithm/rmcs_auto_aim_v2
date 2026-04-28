@@ -1,6 +1,5 @@
 #pragma once
 #include "utility/math/linear.hpp"
-#include "utility/math/point.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
 #include <generator>
@@ -67,6 +66,46 @@ struct Armor3D {
     Orientation orientation;
 };
 using Armor3Ds = std::vector<Armor3D>;
+
+struct ArmorVisualScale : public Scalar3d {
+    using Scalar3d::Scalar3d;
+
+    // ref: "https://www.robomaster.com/zh-CN/products/components/detail/149"
+    constexpr explicit ArmorVisualScale(DeviceId device) noexcept {
+        if (DeviceIds::kSmallArmor().contains(device)) {
+            x = 0.003, y = 0.140, z = 0.125;
+        } else if (DeviceIds::kLargeArmor().contains(device)) {
+            x = 0.003, y = 0.235, z = 0.127;
+        }
+    }
+
+    template <class T>
+    auto to(T& target) const noexcept -> void {
+        copy_to(target);
+    }
+};
+
+struct ArmorVisualColor : public Scalar3d {
+    using Scalar3d::Scalar3d;
+
+    constexpr explicit ArmorVisualColor(CampColor camp) noexcept {
+        if (camp == CampColor::RED) {
+            x = 1.0, y = 0.0, z = 0.0;
+        } else if (camp == CampColor::BLUE) {
+            x = 0.0, y = 0.0, z = 1.0;
+        } else {
+            x = 1.0, y = 0.0, z = 1.0;
+        }
+    }
+
+    template <class T>
+    auto to(T& target) const noexcept -> void {
+        target.r = x;
+        target.g = y;
+        target.b = z;
+        target.a = 1.0;
+    }
+};
 
 constexpr auto kLightBarHeight  = 0.056;
 constexpr auto kLargeArmorWidth = 0.23;

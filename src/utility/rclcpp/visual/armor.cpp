@@ -1,6 +1,7 @@
 #include "armor.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/node.details.hpp"
+#include "utility/robot/armor.hpp"
 
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -42,20 +43,8 @@ struct Armor::Impl {
         marker.action          = Marker::ADD;
         marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
 
-        // ref: "https://www.robomaster.com/zh-CN/products/components/detail/149"
-        /*  */ if (DeviceIds::kSmallArmor().contains(config.device)) {
-            marker.scale.x = 0.003, marker.scale.y = 0.140, marker.scale.z = 0.125;
-        } else if (DeviceIds::kLargeArmor().contains(config.device)) {
-            marker.scale.x = 0.003, marker.scale.y = 0.235, marker.scale.z = 0.127;
-        };
-
-        /*  */ if (config.camp == CampColor::RED) {
-            marker.color.r = 1., marker.color.g = 0., marker.color.b = 0., marker.color.a = 1.;
-        } else if (config.camp == CampColor::BLUE) {
-            marker.color.r = 0., marker.color.g = 0., marker.color.b = 1., marker.color.a = 1.;
-        } else {
-            marker.color.r = 1., marker.color.g = 0., marker.color.b = 1., marker.color.a = 1.;
-        }
+        ArmorVisualScale { config.device }.to(marker.scale);
+        ArmorVisualColor { config.camp }.to(marker.color);
 
         arrow_marker.header.frame_id = config.tf;
         arrow_marker.ns              = config.name + std::string("_arrow");
@@ -68,16 +57,7 @@ struct Armor::Impl {
         arrow_marker.scale.y = 0.01;
         arrow_marker.scale.z = 0.01;
 
-        /*  */ if (config.camp == CampColor::RED) {
-            arrow_marker.color.r = 1., arrow_marker.color.g = 0., arrow_marker.color.b = 0.,
-            arrow_marker.color.a = 1.;
-        } else if (config.camp == CampColor::BLUE) {
-            arrow_marker.color.r = 0., arrow_marker.color.g = 0., arrow_marker.color.b = 1.,
-            arrow_marker.color.a = 1.;
-        } else {
-            arrow_marker.color.r = 1., arrow_marker.color.g = 0., arrow_marker.color.b = 1.,
-            arrow_marker.color.a = 1.;
-        }
+        ArmorVisualColor { config.camp }.to(arrow_marker.color);
     }
 
     auto update() noexcept -> void {

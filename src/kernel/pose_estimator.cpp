@@ -1,8 +1,10 @@
 #include "pose_estimator.hpp"
 
 #include "utility/logging/printer.hpp"
+#include "utility/math/conversion.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/math/solve_pnp/solve_pnp.hpp"
+#include "utility/math/solve_pnp/yaw_optimizer.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::util;
@@ -26,6 +28,7 @@ struct PoseEstimator::Impl {
 
     Config config;
     PnpSolution pnp_solution { };
+    YawOptimizer yaw_optimizer { };
 
     Eigen::Vector3d odom_to_camera_translation { Eigen::Vector3d::Zero() };
     Eigen::Quaterniond odom_to_camera_orientation { Eigen::Quaterniond::Identity() };
@@ -38,9 +41,10 @@ struct PoseEstimator::Impl {
             return std::unexpected { result.error() };
         }
 
-        pnp_solution.input.camera_matrix =
+        pnp_solution.input.camera.camera_matrix =
             reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
-        pnp_solution.input.distort_coeff = reshape_array<float, 5, double>(config.distort_coeff);
+        pnp_solution.input.camera.distort_coeff =
+            reshape_array<float, 5, double>(config.distort_coeff);
 
         return { };
     } catch (const std::exception& e) {
@@ -58,36 +62,56 @@ struct PoseEstimator::Impl {
             }
         };
 
-        auto armors_in_camera = std::vector<Armor3D> { };
+        auto result = std::vector<Armor3D> { };
 
-        // TODO: YAW 角优化
-        std::ranges::for_each(armors | std::views::enumerate,
-            [&armors_in_camera, &armor_shape, this](auto const& item) {
-                auto [i, armor] = item;
+        auto q_camera_to_odom = odom_to_camera_orientation;
+        auto q_odom_to_camera = q_camera_to_odom.inverse();
+        auto center_yaw       = eulers(q_camera_to_odom, 2, 1, 0)[0];
 
-                pnp_solution.input.armor_shape = armor_shape(armor.shape);
-                pnp_solution.input.genre       = armor.genre;
-                pnp_solution.input.color       = armor_color2camp_color(armor.color);
-                std::ranges::copy(armor.corners(), pnp_solution.input.armor_detection.begin());
+        auto& input = yaw_optimizer.input;
 
-                auto solved = pnp_solution.solve();
-                if (!solved) {
-                    log.warn("solvePnP failed for armor {} ({} {})", i, get_enum_name(armor.genre),
-                        get_enum_name(armor.color));
-                    return;
-                }
+        input.camera                             = pnp_solution.input.camera;
+        input.camera.world_to_camera_orientation = Orientation { q_odom_to_camera };
+        input.camera.world_to_camera_translation = Translation { Eigen::Vector3d {
+            -(q_odom_to_camera * odom_to_camera_translation).eval() } };
 
-                auto armor_3d  = Armor3D { };
-                armor_3d.genre = pnp_solution.result.genre;
-                armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
-                armor_3d.id    = i;
-                pnp_solution.result.translation.copy_to(armor_3d.translation);
-                pnp_solution.result.orientation.copy_to(armor_3d.orientation);
+        for (auto&& [index, armor] : armors | std::views::enumerate) {
+            pnp_solution.input.armor_shape = armor_shape(armor.shape);
+            pnp_solution.input.genre       = armor.genre;
+            pnp_solution.input.color       = armor_color2camp_color(armor.color);
+            std::ranges::copy(armor.corners(), pnp_solution.input.armor_detection.begin());
 
-                armors_in_camera.emplace_back(armor_3d);
-            });
+            auto solved = pnp_solution.solve();
+            if (!solved) {
+                log.warn("solvePnP failed for armor {} ({} {})", index, get_enum_name(armor.genre),
+                    get_enum_name(armor.color));
+                continue;
+            }
 
-        return armors_in_camera;
+            auto armor_3d  = Armor3D { };
+            armor_3d.genre = pnp_solution.result.genre;
+            armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
+            armor_3d.id    = static_cast<int>(index);
+
+            armor_3d.translation = pnp_solution.result.translation;
+            armor_3d.orientation = pnp_solution.result.orientation;
+
+            auto t_in_camera = pnp_solution.result.translation.make<Eigen::Vector3d>();
+            auto t_in_world  = Eigen::Vector3d {
+                (q_camera_to_odom * t_in_camera + odom_to_camera_translation).eval()
+            };
+
+            input.armor_shape  = armor_shape(armor.shape);
+            input.xyz_in_world = Translation { t_in_world };
+            input.center_yaw   = center_yaw;
+            input.genre        = armor.genre;
+            std::ranges::copy(armor.corners(), input.detected_corners.begin());
+
+            armor_3d.orientation = yaw_optimizer.solve().orientation;
+
+            result.emplace_back(armor_3d);
+        };
+        return result;
     }
 
     auto set_odom_to_camera_transform(Transform const& transform) -> void {
@@ -143,7 +167,7 @@ auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const
     return pimpl->solve_pnp(armors);
 }
 
-auto PoseEstimator::set_odom_to_camera_transform(Transform const& transform) -> void {
+auto PoseEstimator::update_camera_transform(Transform const& transform) -> void {
     return pimpl->set_odom_to_camera_transform(transform);
 }
 

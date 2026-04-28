@@ -93,6 +93,8 @@ ament_add_gtest(
     test_solve_pnp
     ${TEST_DIR}/solve_pnp.cpp
     ${RMCS_SRC_DIR}/utility/math/solve_pnp/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp/yaw_optimizer.cpp
+    ${RMCS_SRC_DIR}/utility/math/camera.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
     ${RMCS_SRC_DIR}/utility/image/image.cpp
 )

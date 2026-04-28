@@ -152,7 +152,7 @@ struct Visualization::Impl {
     auto update_aiming_direction(double yaw, double pitch) const -> void {
         if (!is_initialized) return;
 
-        aiming_direction->move(Translation { }, euler_to_quaternion(yaw, pitch, 0.0));
+        aiming_direction->move(Translation::kZero(), euler_to_quaternion(yaw, pitch, 0.0));
         aiming_direction->update();
     }
 };

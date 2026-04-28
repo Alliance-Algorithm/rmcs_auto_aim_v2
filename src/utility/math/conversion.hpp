@@ -69,7 +69,7 @@ inline auto xyz2ypd_jacobian(Eigen::Vector3d const& xyz) -> Eigen::Matrix3d {
     const auto ddistance_dy = y / norm;
     const auto ddistance_dz = z / norm;
 
-    auto J = Eigen::Matrix<double, 3, 3> {};
+    auto J = Eigen::Matrix<double, 3, 3> { };
     // clang-format off
     J<<    dyaw_dx,     dyaw_dy,     dyaw_dz,
          dpitch_dx,   dpitch_dy,   dpitch_dz,
@@ -103,7 +103,7 @@ inline auto eulers(Eigen::Quaterniond const& q, int axis0 = 2, int axis1 = 1, in
     }
 
     const auto n2 = a * a + b * b + c * c + d * d;
-    auto eulers   = Eigen::Vector3d {};
+    auto eulers   = Eigen::Vector3d { };
     eulers[1]     = std::acos(2 * (a * a + b * b) / n2 - 1);
 
     const auto half_sum  = std::atan2(b, a);

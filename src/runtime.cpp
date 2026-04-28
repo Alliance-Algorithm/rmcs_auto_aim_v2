@@ -123,7 +123,7 @@ auto main() -> int {
             }
         } };
 
-        auto received = ControlState::kInvalid();
+        auto received = ControlState::kIdentity();
         if (!without_rmcs && updated) {
             received = *feishu.latest();
         }
@@ -145,20 +145,19 @@ auto main() -> int {
 
             tracker.set_invincible_armors(received.invincible_devices);
             armors_2d = tracker.filter_armors(*result);
+
+            if (armors_2d.empty()) continue;
         }
 
         /// 2. Transform 2d to 3d
         ///
         auto armors_3d = Armor3Ds { };
-        if (!armors_2d.empty()) {
-            auto solved_armors_3d = pose_estimator.solve_pnp(armors_2d);
-            if (solved_armors_3d && visualization.initialized()) {
-                std::ignore = visualization.solved_pnp_armors(*solved_armors_3d);
-            }
+        if (auto result = pose_estimator.solve_pnp(armors_2d)) {
+            pose_estimator.update_camera_transform(received.odom_to_camera_transform);
+            armors_3d = pose_estimator.odom_to_camera(*result);
 
-            if (solved_armors_3d) {
-                pose_estimator.set_odom_to_camera_transform(received.odom_to_camera_transform);
-                armors_3d = pose_estimator.odom_to_camera(*solved_armors_3d);
+            if (visualization.initialized()) {
+                visualization.solved_pnp_armors(*result);
             }
         }
 
