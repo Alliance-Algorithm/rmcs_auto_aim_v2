@@ -92,6 +92,7 @@ fire_control:
 
 visualization:
   framerate: 50
+  # monitor_host: "localhost"
   monitor_host: "192.168.3.125"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

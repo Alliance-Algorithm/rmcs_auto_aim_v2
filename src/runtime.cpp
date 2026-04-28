@@ -123,10 +123,13 @@ auto main() -> int {
             }
         } };
 
-        auto received = ControlState::kIdentity();
-        if (!without_rmcs && updated) {
-            received = *feishu.latest();
+        auto received = ControlState::kInvalid();
+        if (without_rmcs) {
+            received = ControlState::kIdentity();
         }
+
+        if (!updated) continue;
+        received = *feishu.latest();
 
         /// 1. Identify Armor
         ///
@@ -152,48 +155,49 @@ auto main() -> int {
         /// 2. Transform 2d to 3d
         ///
         auto armors_3d = Armor3Ds { };
+        pose_estimator.update_camera_transform(received.odom_to_camera_transform);
         if (auto result = pose_estimator.solve_pnp(armors_2d)) {
-            pose_estimator.update_camera_transform(received.odom_to_camera_transform);
             armors_3d = pose_estimator.odom_to_camera(*result);
 
             if (visualization.initialized()) {
                 visualization.solved_pnp_armors(*result);
             }
+
+            if (armors_3d.empty()) continue;
         }
 
         /// 3. Apply Tracker
         ///
         auto target    = tracker.decide(armors_3d, image->get_timestamp());
         auto target_id = target.target_id;
-        auto snapshot  = std::move(target.snapshot);
 
         auto command = AutoAimState::kInvalid();
-        if (target.allow_takeover) {
-            command.timestamp       = Clock::now();
-            command.gimbal_takeover = true;
-            command.shoot_permitted = false;
-            command.yaw             = received.yaw;
-            command.pitch           = received.pitch;
-            command.target          = target_id;
-        }
+        if (auto& snapshot = target.snapshot) {
+            command.timestamp      = Clock::now();
+            command.should_control = true;
+            command.should_shoot   = false;
+            command.yaw            = received.yaw;
+            command.pitch          = received.pitch;
+            command.target         = target_id;
 
-        // 火控
-        if (target.allow_takeover && snapshot) {
-            auto result = fire_control.solve(*snapshot, target.tracking_confirmed, received.yaw);
-            if (result) {
-                command.shoot_permitted = result->shoot_permitted;
-                command.yaw             = result->yaw;
-                command.pitch           = result->pitch;
+            if (target.allow_control) {
+                const auto control = target.tracking_confirmed;
+                const auto yaw     = received.yaw;
+                if (auto result = fire_control.solve(*snapshot, control, yaw)) {
+                    command.should_shoot = result->shoot_permitted;
+                    command.yaw          = result->yaw;
+                    command.pitch        = result->pitch;
+                }
             }
-        }
 
-        if (visualization.initialized() && snapshot) {
-            visualization.predicted_armors(snapshot->predicted_armors(Clock::now()));
-        }
+            if (visualization.initialized()) {
+                visualization.predicted_armors(snapshot->predicted_armors(Clock::now()));
+            }
 
-        /// 4. Transmit State
-        ///
-        feishu.send(command);
+            /// 4. Transmit State
+            ///
+            feishu.send(command);
+        }
 
     } // runtime loop scope
 

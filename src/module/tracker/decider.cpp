@@ -1,4 +1,7 @@
 #include "decider.hpp"
+#include "module/predictor/robot_state.hpp"
+#include "utility/serializable.hpp"
+#include "utility/time.hpp"
 
 #include <cmath>
 #include <limits>
@@ -7,22 +10,20 @@
 #include <unordered_set>
 #include <vector>
 
-#include "module/predictor/robot_state.hpp"
-#include "utility/serializable.hpp"
-#include "utility/time.hpp"
-
 using namespace rmcs::tracker;
 using namespace rmcs::predictor;
 using namespace std::chrono_literals;
 
 struct Decider::Impl {
-    static constexpr auto kDefaultCleanupInterval = 1s;
+    static constexpr auto kDefaultCleanupInterval = 1.0s;
     static constexpr auto kOutpostCleanupInterval = 1.5s;
+    static constexpr auto kReleaseAfterFrames     = std::size_t { 3 };
 
     struct TargetMemory {
         std::optional<TimePoint> last_seen_time { };
         std::size_t consecutive_missing_frames { 0 };
         std::size_t consecutive_stable_frames { 0 };
+        std::size_t consecutive_instable_frames { 0 };
         bool temporary_lost_armed { false };
     };
 
@@ -40,6 +41,15 @@ struct Decider::Impl {
             "tracking_confirm_frames",
         };
     };
+
+    static constexpr auto get_cleanup_interval(DeviceId device_id) {
+        switch (device_id) {
+        case DeviceId::OUTPOST:
+            return kOutpostCleanupInterval;
+        default:
+            return kDefaultCleanupInterval;
+        }
+    }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
@@ -59,19 +69,10 @@ struct Decider::Impl {
 
         if (priority_mode.empty()) priority_mode = mode2;
 
-        return {};
+        return { };
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
-
-    static auto cleanup_interval_for(DeviceId device_id) -> std::chrono::duration<double> {
-        switch (device_id) {
-        case DeviceId::OUTPOST:
-            return kOutpostCleanupInterval;
-        default:
-            return kDefaultCleanupInterval;
-        }
-    }
 
     auto update(std::span<Armor3D const> armors, TimePoint t) -> Output {
         // 推进所有现有追踪器的时间轴
@@ -107,14 +108,23 @@ struct Decider::Impl {
         // 1. unconfirmed: 已有 tracker，但还没稳定到可接管；
         // 2. confirmed: 连续稳定若干帧后允许控制接管；
         // 3. temporary lost: confirmed 目标短暂丢失时，保留控制输出窗口。
+        // 4. confirmed → unconfirmed: 需要连续不稳定 kReleaseAfterFrames 帧才释放
         for (const auto& [id, tracker] : trackers) {
             auto& target_memory         = target_memories[id];
             auto was_tracking_confirmed = tracking_confirmed(id);
 
             if (observed_ids.contains(id) && tracker->is_converged()) {
                 ++target_memory.consecutive_stable_frames;
-                target_memory.temporary_lost_armed = false;
+                target_memory.consecutive_instable_frames = 0;
+                target_memory.temporary_lost_armed        = false;
                 continue;
+            }
+
+            if (observed_ids.contains(id)) {
+                ++target_memory.consecutive_instable_frames;
+                if (target_memory.consecutive_instable_frames < kReleaseAfterFrames) {
+                    continue;
+                }
             }
 
             target_memory.consecutive_stable_frames = 0;
@@ -130,7 +140,7 @@ struct Decider::Impl {
 
         std::erase_if(trackers, [&](const auto& item) {
             auto memory_it        = target_memories.find(item.first);
-            auto cleanup_interval = cleanup_interval_for(item.first);
+            auto cleanup_interval = get_cleanup_interval(item.first);
             bool expired = memory_it == target_memories.end() || !memory_it->second.last_seen_time
                 || util::delta_time(t, *memory_it->second.last_seen_time) > cleanup_interval;
             if (expired) {
@@ -157,7 +167,7 @@ struct Decider::Impl {
         return Output {
             .target_id          = DeviceId::UNKNOWN,
             .snapshot           = std::nullopt,
-            .allow_takeover     = false,
+            .allow_control      = false,
             .tracking_confirmed = false,
         };
     }
@@ -190,7 +200,7 @@ struct Decider::Impl {
         return Output {
             .target_id          = device_id,
             .snapshot           = trackers.at(device_id)->get_snapshot(),
-            .allow_takeover     = allow_takeover,
+            .allow_control      = allow_takeover,
             .tracking_confirmed = confirmed,
         };
     }

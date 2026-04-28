@@ -52,8 +52,8 @@ struct AutoAimState {
 
     TimePoint timestamp { };
 
-    bool gimbal_takeover { false };
-    bool shoot_permitted = { false };
+    bool should_control { false };
+    bool should_shoot = { false };
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
@@ -62,12 +62,12 @@ struct AutoAimState {
 
     static auto kInvalid() {
         return AutoAimState {
-            .timestamp       = Clock::now(),
-            .gimbal_takeover = false,
-            .shoot_permitted = false,
-            .yaw             = std::numeric_limits<double>::quiet_NaN(),
-            .pitch           = std::numeric_limits<double>::quiet_NaN(),
-            .target          = DeviceId::UNKNOWN,
+            .timestamp      = Clock::now(),
+            .should_control = false,
+            .should_shoot   = false,
+            .yaw            = std::numeric_limits<double>::quiet_NaN(),
+            .pitch          = std::numeric_limits<double>::quiet_NaN(),
+            .target         = DeviceId::UNKNOWN,
         };
     }
 };

@@ -49,6 +49,7 @@ public:
         : x(initial_x)
         , P_(initial_P) { }
 
+    auto P() -> PMat& { return P_; }
     auto P() const -> PMat const& { return P_; }
 
     /**

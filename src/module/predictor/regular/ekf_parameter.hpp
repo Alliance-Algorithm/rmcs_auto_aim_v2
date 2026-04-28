@@ -54,7 +54,7 @@ struct EKFParameters {
         if (device == DeviceId::BASE) {
             P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 0, 0;
         } else {
-            P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1, 1, 1;
+            P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1e-2, 1e-2, 1e-2;
         }
 
         return P_dig;
