@@ -28,4 +28,4 @@ private:
     rmcs_executor::Component::InputInterface<rmcs_description::SentryTf> tf_;
 };
 
-} // namespace rmcs::adapter
+}
