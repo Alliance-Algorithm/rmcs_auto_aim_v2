@@ -18,7 +18,7 @@ namespace {
         }
 
         [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3D> override {
-            return { };
+            return {};
         }
     };
 
@@ -41,6 +41,8 @@ auto Snapshot::operator=(Snapshot&&) noexcept -> Snapshot& = default;
 Snapshot::~Snapshot() noexcept = default;
 
 auto Snapshot::time_stamp() const -> TimePoint { return backend->time_stamp(); }
+
+auto Snapshot::device_id() const -> DeviceId { return backend->device; }
 
 auto Snapshot::kinematics() const -> Kinematics { return backend->kinematics_at(time_stamp()); }
 

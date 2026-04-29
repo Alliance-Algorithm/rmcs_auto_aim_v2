@@ -6,6 +6,7 @@
 
 #include "utility/clock.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
+#include "utility/robot/id.hpp"
 #include "utility/robot/armor.hpp"
 
 namespace rmcs::predictor {
@@ -36,6 +37,7 @@ public:
     ~Snapshot() noexcept;
 
     auto time_stamp() const -> TimePoint;
+    auto device_id() const -> DeviceId;
     auto kinematics() const -> Kinematics;
     auto kinematics_at(TimePoint t) const -> Kinematics;
 

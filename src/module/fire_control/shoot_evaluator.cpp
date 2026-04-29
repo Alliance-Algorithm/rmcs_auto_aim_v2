@@ -4,13 +4,37 @@
 #include <optional>
 
 #include "utility/math/angle.hpp"
+#include "utility/serializable.hpp"
 
 using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
+    struct Config : util::Serializable {
+        double first_tolerance;  // degree
+        double second_tolerance; // degree
+        double judge_distance;   // m
+        bool auto_fire;
 
-    auto initialize(Config const& config_in) noexcept -> std::expected<void, std::string> {
-        config = config_in;
+        constexpr static std::tuple metas {
+            &Config::first_tolerance,
+            "first_tolerance",
+            &Config::second_tolerance,
+            "second_tolerance",
+            &Config::judge_distance,
+            "judge_distance",
+            &Config::auto_fire,
+            "auto_fire",
+        };
+    } config;
+
+    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
+        auto result = config.serialize(yaml);
+        if (!result.has_value()) {
+            return std::unexpected { result.error() };
+        }
+
+        config.first_tolerance  = util::deg2rad(config.first_tolerance);
+        config.second_tolerance = util::deg2rad(config.second_tolerance);
         last_command_.reset();
 
         if (!(config.first_tolerance > 0.0) || !(config.second_tolerance > 0.0))
@@ -46,8 +70,6 @@ struct ShootEvaluator::Impl {
     }
 
 private:
-    Config config {};
-
     std::optional<Command> last_command_ {};
 };
 
@@ -56,8 +78,9 @@ ShootEvaluator::ShootEvaluator() noexcept
 
 ShootEvaluator::~ShootEvaluator() noexcept = default;
 
-auto ShootEvaluator::initialize(Config const& config) noexcept -> std::expected<void, std::string> {
-    return pimpl->initialize(config);
+auto ShootEvaluator::configure_yaml(const YAML::Node& yaml) noexcept
+    -> std::expected<void, std::string> {
+    return pimpl->configure_yaml(yaml);
 }
 
 auto ShootEvaluator::evaluate(Command const& command, double current_yaw) noexcept -> bool {

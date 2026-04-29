@@ -75,30 +75,34 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
+  is_lazy_gimbal: true
+
   initial_bullet_speed: 21.0 # m/s
   shoot_delay: 0.1 # s
   yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
-  coming_angle: 60.0      # degree
-  leaving_angle: 30.0     # degree
-  outpost_coming_angle: 70.0      # degree
-  outpost_leaving_angle: 50.0     # degree
+  aim_point_provider:
+    coming_angle: 60.0      # degree
+    leaving_angle: 30.0     # degree
+    outpost_coming_angle: 70.0      # degree
+    outpost_leaving_angle: 50.0     # degree
+  mpc:
+    mpc_enable: true
+    mpc_max_yaw_acc: 50.0
+    mpc_yaw_q_angle: 9000000.0
+    mpc_yaw_q_rate: 0.0
+    mpc_yaw_r_acc: 1.0
+    mpc_max_pitch_acc: 100.0
+    mpc_pitch_q_angle: 9000000.0
+    mpc_pitch_q_rate: 0.0
+    mpc_pitch_r_acc: 1.0
 
-  mpc_enable: true
-  mpc_max_yaw_acc: 50.0
-  mpc_yaw_q_angle: 9000000.0
-  mpc_yaw_q_rate: 0.0
-  mpc_yaw_r_acc: 1.0
-  mpc_max_pitch_acc: 100.0
-  mpc_pitch_q_angle: 9000000.0
-  mpc_pitch_q_rate: 0.0
-  mpc_pitch_r_acc: 1.0
-
-  first_tolerance: 3 # 近距离射击容差，degree
-  second_tolerance: 2 # 远距离射击容差，degree
-  judge_distance: 2 #距离判断阈值
-  auto_fire: true # 是否由自瞄控制射击
+  shoot_evaluator:
+    first_tolerance: 3 # 近距离射击容差，degree
+    second_tolerance: 2 # 远距离射击容差，degree
+    judge_distance: 2 #距离判断阈值
+    auto_fire: true # 是否由自瞄控制射击
 
 visualization:
   framerate: 50
