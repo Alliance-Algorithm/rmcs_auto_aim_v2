@@ -33,10 +33,8 @@ struct TargetSolutionSolver::Impl {
                     std::chrono::duration<double>(total_predict_time));
 
             auto predicted_kinematics = snapshot.kinematics_at(t_target);
-            auto target_position      = sample_aim_point_at(snapshot, chooser, t_target);
-            if (!target_position.has_value()) continue;
-
-            auto attitude = solve_aim_attitude(*target_position, bullet_speed);
+            auto attitude =
+                AimPointSampler::sample_attitude_at(snapshot, chooser, t_target, bullet_speed);
             if (!attitude.has_value()) continue;
 
             auto const time_error = std::abs(attitude->fly_time - current_fly_time);

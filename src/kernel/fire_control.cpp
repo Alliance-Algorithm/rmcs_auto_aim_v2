@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <format>
+#include <limits>
 #include <memory>
 #include <optional>
 
@@ -27,38 +28,20 @@ struct FireControl::Impl {
     struct Config : util::Serializable {
         double initial_bullet_speed; // m/s
         double shoot_delay;          // s
-        double yaw_offset;           // rad (config in degree)
-        double pitch_offset;         // rad (config in degree)
+        bool mpc_enable;
+        double yaw_offset;   // rad (config in degree)
+        double pitch_offset; // rad (config in degree)
 
         // clang-format off
         constexpr static std::tuple metas {
             &Config::initial_bullet_speed, "initial_bullet_speed",
             &Config::shoot_delay,"shoot_delay",
+            &Config::mpc_enable,"mpc_enable",
             &Config::yaw_offset,"yaw_offset",
             &Config::pitch_offset,"pitch_offset",
         };
         // clang-format on
-    };
-
-    struct AimPointConfig : util::Serializable {
-        double coming_angle;
-        double leaving_angle;
-        double outpost_coming_angle;
-        double outpost_leaving_angle;
-
-        constexpr static std::tuple metas {
-            &AimPointConfig::coming_angle,
-            "coming_angle",
-            &AimPointConfig::leaving_angle,
-            "leaving_angle",
-            &AimPointConfig::outpost_coming_angle,
-            "outpost_coming_angle",
-            &AimPointConfig::outpost_leaving_angle,
-            "outpost_leaving_angle",
-        };
-    };
-
-    Config config;
+    } config;
 
     MpcTrajectoryPlanner mpc_trajectory_planner;
     ReferenceTrajectoryBuilder reference_trajectory_builder;
@@ -66,34 +49,23 @@ struct FireControl::Impl {
     ShootEvaluator shoot_evaluator;
     AimPointChooser aim_point_chooser;
 
-    const double kMinValidBulletSpeed { 10. };
-
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-        if (!(config.initial_bullet_speed > kMinValidBulletSpeed)) {
-            return std::unexpected { std::format(
-                "Invalid initial_bullet_speed: {}", config.initial_bullet_speed) };
+        if (!result.has_value()) return std::unexpected { result.error() };
+
+        if (!(config.initial_bullet_speed > 0.)) {
+            return std::unexpected { std::format("Initial_bullet_speed must > 0 m/s") };
         }
 
         config.yaw_offset   = util::deg2rad(config.yaw_offset);
         config.pitch_offset = util::deg2rad(config.pitch_offset);
 
-        auto chooser_source = AimPointConfig {};
-        result              = chooser_source.serialize(yaml["aim_point_provider"]);
-        if (!result.has_value()) {
+        auto chooser_result = aim_point_chooser.configure_yaml(yaml["aim_point_chooser"]);
+        if (!chooser_result.has_value()) {
             return std::unexpected {
-                std::format("Invalid fire_control.aim_point_provider: {}", result.error()),
+                std::format("aim_point_chooser init failed: {}", chooser_result.error()),
             };
         }
-        aim_point_chooser.initialize(AimPointChooser::Config {
-            .coming_angle          = util::deg2rad(chooser_source.coming_angle),
-            .leaving_angle         = util::deg2rad(chooser_source.leaving_angle),
-            .outpost_coming_angle  = util::deg2rad(chooser_source.outpost_coming_angle),
-            .outpost_leaving_angle = util::deg2rad(chooser_source.outpost_leaving_angle),
-        });
 
         auto evaluate_result = shoot_evaluator.configure_yaml(yaml["shoot_evaluator"]);
         if (!evaluate_result.has_value()) {
@@ -113,30 +85,39 @@ struct FireControl::Impl {
     struct AimCommand {
         double pitch { 0.0 };
         double yaw { 0.0 };
+        double pitch_rate { std::numeric_limits<double>::quiet_NaN() };
+        double yaw_rate { std::numeric_limits<double>::quiet_NaN() };
+        double pitch_acc { std::numeric_limits<double>::quiet_NaN() };
+        double yaw_acc { std::numeric_limits<double>::quiet_NaN() };
+        bool feedforward_valid { false };
     };
 
-    auto make_result(AimCommand const& command, Eigen::Vector3d const& center_position,
-        bool control, double current_yaw) -> Result {
+    static auto make_shoot_command(AimCommand const& command,
+        Eigen::Vector3d const& center_position, bool control) -> ShootEvaluator::Command {
         auto const center_distance = std::hypot(center_position.x(), center_position.y());
-        auto shoot_command         = ShootEvaluator::Command {
-                    .control          = control,
-                    .auto_aim_enabled = control,
-                    .yaw              = command.yaw,
-                    .distance         = center_distance,
-        };
-        auto shoot_permitted = shoot_evaluator.evaluate(shoot_command, current_yaw);
 
-        return Result {
-            .pitch           = command.pitch,
-            .yaw             = command.yaw,
-            .shoot_permitted = shoot_permitted,
+        return ShootEvaluator::Command {
+            .control          = control,
+            .auto_aim_enabled = control,
+            .yaw              = command.yaw,
+            .distance         = center_distance,
         };
     }
 
-    auto make_mpc_command(MpcTrajectoryPlanner::Plan const& plan) const -> AimCommand {
-        return AimCommand {
-            .pitch = plan.pitch,
-            .yaw   = plan.yaw,
+    auto make_result(AimCommand const& command, Eigen::Vector3d const& center_position,
+        bool control, double current_yaw) -> Result {
+        auto shoot_command   = make_shoot_command(command, center_position, control);
+        auto shoot_permitted = shoot_evaluator.evaluate(shoot_command, current_yaw);
+
+        return Result {
+            .pitch             = command.pitch,
+            .yaw               = command.yaw,
+            .pitch_rate        = command.pitch_rate,
+            .yaw_rate          = command.yaw_rate,
+            .pitch_acc         = command.pitch_acc,
+            .yaw_acc           = command.yaw_acc,
+            .feedforward_valid = command.feedforward_valid,
+            .shoot_permitted   = shoot_permitted,
         };
     }
 
@@ -146,38 +127,50 @@ struct FireControl::Impl {
         return command;
     }
 
-    auto solve_aim_command(const predictor::Snapshot& snapshot,
+    auto resolve_aim_command(const predictor::Snapshot& snapshot,
         TargetSolutionSolver::TargetSolution const& target_solution)
         -> std::expected<AimCommand, std::string> {
-        auto raw_ballistic_direction = AimCommand {
+        auto const ballistic_command = AimCommand {
             .pitch = target_solution.impact_pitch,
             .yaw   = target_solution.impact_yaw,
         };
+        auto raw_command = ballistic_command;
 
-        auto sample_attitude = [&](Clock::time_point t) -> std::expected<AimAttitude, std::string> {
-            auto aim_point = sample_aim_point_at(snapshot, aim_point_chooser, t);
-            if (!aim_point.has_value()) {
-                return std::unexpected { "aim point sample failed" };
+        if (config.mpc_enable) {
+            auto sample_attitude =
+                [&](Clock::time_point t) -> std::expected<AimAttitude, std::string> {
+                return AimPointSampler::sample_attitude_at(
+                    snapshot, aim_point_chooser, t, config.initial_bullet_speed);
+            };
+
+            auto reference =
+                reference_trajectory_builder.build(target_solution.impact_time, sample_attitude);
+            if (reference.has_value()) {
+                auto planned = mpc_trajectory_planner.plan(*reference);
+                if (planned.has_value()) {
+                    raw_command = AimCommand {
+                        .pitch             = planned->pitch,
+                        .yaw               = planned->yaw,
+                        .pitch_rate        = planned->pitch_rate,
+                        .yaw_rate          = planned->yaw_rate,
+                        .pitch_acc         = planned->pitch_acc,
+                        .yaw_acc           = planned->yaw_acc,
+                        .feedforward_valid = true,
+                    };
+                } else {
+                    constexpr int kYawRow   = 0;
+                    constexpr int kPitchRow = 2;
+                    auto const kCenterCol   = kMpcAxisHorizon / 2;
+
+                    raw_command = AimCommand {
+                        .pitch = (*reference)(kPitchRow, kCenterCol),
+                        .yaw   = util::normalize_angle((*reference)(kYawRow, kCenterCol)),
+                    };
+                }
             }
-            return solve_aim_attitude(*aim_point, config.initial_bullet_speed);
-        };
-
-        auto reference =
-            reference_trajectory_builder.build(target_solution.impact_time, sample_attitude);
-        if (!reference.has_value()) {
-            return apply_offset(raw_ballistic_direction);
         }
 
-        auto planned = mpc_trajectory_planner.plan(*reference);
-        if (planned.has_value()) {
-            return apply_offset(make_mpc_command(*planned));
-        }
-
-        auto fallback = AimCommand {
-            .pitch = (*reference)(2, kMpcAxisHorizon / 2),
-            .yaw   = util::normalize_angle((*reference)(0, kMpcAxisHorizon / 2)),
-        };
-        return apply_offset(fallback);
+        return apply_offset(raw_command);
     }
 
     auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
@@ -186,7 +179,7 @@ struct FireControl::Impl {
             snapshot, aim_point_chooser, config.initial_bullet_speed, config.shoot_delay);
         if (!target_solution.has_value()) return std::nullopt;
 
-        auto command = solve_aim_command(snapshot, *target_solution);
+        auto command = resolve_aim_command(snapshot, *target_solution);
         if (!command.has_value()) return std::nullopt;
 
         return make_result(*command, target_solution->center_position, control, current_yaw);

@@ -15,6 +15,11 @@ public:
     struct Result {
         double pitch;
         double yaw;
+        double pitch_rate;
+        double yaw_rate;
+        double pitch_acc;
+        double yaw_acc;
+        bool feedforward_valid;
         bool shoot_permitted;
     };
 

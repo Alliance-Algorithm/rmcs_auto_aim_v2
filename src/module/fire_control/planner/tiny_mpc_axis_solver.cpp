@@ -70,8 +70,8 @@ struct TinyMpcAxisSolver::Impl {
         return {};
     }
 
-    auto solve_at_step(MpcAxisTrajectory const& reference, int step)
-        -> std::expected<double, std::string> {
+    auto solve_at_step(MpcAxisTrajectory const& reference, int state_step, int input_step)
+        -> std::expected<TinyMpcAxisSolver::AngularKinematics, std::string> {
         if (!solver.has_value()) {
             return std::unexpected { "solver is not initialized" };
         }
@@ -88,7 +88,35 @@ struct TinyMpcAxisSolver::Impl {
             return std::unexpected { result.error() };
         }
 
-        return solver->state_value(0, step);
+        auto angle = solver->state_value(0, state_step);
+        if (!angle.has_value()) {
+            return std::unexpected { angle.error() };
+        }
+
+        auto rate = solver->state_value(1, state_step);
+        if (!rate.has_value()) {
+            return std::unexpected { rate.error() };
+        }
+
+        auto acc = solver->input_value(0, input_step);
+        if (!acc.has_value()) {
+            return std::unexpected { acc.error() };
+        }
+
+        return TinyMpcAxisSolver::AngularKinematics {
+            .angle = angle.value(),
+            .rate  = rate.value(),
+            .acc   = acc.value(),
+        };
+    }
+
+    auto solve_center_kinematics(MpcAxisTrajectory const& reference)
+        -> std::expected<TinyMpcAxisSolver::AngularKinematics, std::string> {
+        constexpr int kCenterStateStep = kMpcAxisHorizon / 2;
+        constexpr int kCenterInputStep =
+            (kCenterStateStep < (kMpcAxisHorizon - 1)) ? kCenterStateStep : (kMpcAxisHorizon - 2);
+
+        return solve_at_step(reference, kCenterStateStep, kCenterInputStep);
     }
 };
 
@@ -101,7 +129,7 @@ auto TinyMpcAxisSolver::initialize(Config const& config) -> std::expected<void, 
     return pimpl->initialize(config);
 }
 
-auto TinyMpcAxisSolver::solve_center(MpcAxisTrajectory const& reference)
-    -> std::expected<double, std::string> {
-    return pimpl->solve_at_step(reference, kMpcAxisHorizon / 2);
+auto TinyMpcAxisSolver::solve_center_kinematics(MpcAxisTrajectory const& reference)
+    -> std::expected<AngularKinematics, std::string> {
+    return pimpl->solve_center_kinematics(reference);
 }

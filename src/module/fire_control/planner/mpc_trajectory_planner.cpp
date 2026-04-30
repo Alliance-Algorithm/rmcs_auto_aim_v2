@@ -10,7 +10,6 @@ using namespace rmcs::fire_control;
 
 struct MpcTrajectoryPlanner::Impl {
     struct Config : util::Serializable {
-        bool mpc_enable { true };
         double mpc_max_yaw_acc { 50.0 };
         double mpc_yaw_q_angle { 9e6 };
         double mpc_yaw_q_rate { 0.0 };
@@ -21,8 +20,6 @@ struct MpcTrajectoryPlanner::Impl {
         double mpc_pitch_r_acc { 1.0 };
 
         constexpr static std::tuple metas {
-            &Config::mpc_enable,
-            "mpc_enable",
             &Config::mpc_max_yaw_acc,
             "mpc_max_yaw_acc",
             &Config::mpc_yaw_q_angle,
@@ -51,11 +48,6 @@ struct MpcTrajectoryPlanner::Impl {
             return std::unexpected { result.error() };
         }
 
-        // TODO:
-        if (!config.mpc_enable) {
-            return {};
-        }
-
         result = yaw_solver.initialize(TinyMpcAxisSolver::Config {
             .max_acc = config.mpc_max_yaw_acc,
             .q_angle = config.mpc_yaw_q_angle,
@@ -82,25 +74,25 @@ struct MpcTrajectoryPlanner::Impl {
     }
 
     auto plan(ReferenceTrajectory const& reference) -> std::expected<Plan, std::string> {
-        if (!config.mpc_enable) {
-            return std::unexpected { "mpc disabled" };
-        }
-
-        auto const yaw = yaw_solver.solve_center(
+        auto const yaw = yaw_solver.solve_center_kinematics(
             MpcAxisTrajectory { reference.template block<2, kMpcAxisHorizon>(0, 0) });
         if (!yaw.has_value()) {
             return std::unexpected { std::format("yaw solve failed: {}", yaw.error()) };
         }
 
-        auto const pitch = pitch_solver.solve_center(
+        auto const pitch = pitch_solver.solve_center_kinematics(
             MpcAxisTrajectory { reference.template block<2, kMpcAxisHorizon>(2, 0) });
         if (!pitch.has_value()) {
             return std::unexpected { std::format("pitch solve failed: {}", pitch.error()) };
         }
 
-        auto result  = Plan {};
-        result.yaw   = util::normalize_angle(yaw.value());
-        result.pitch = pitch.value();
+        auto result       = Plan {};
+        result.yaw        = util::normalize_angle(yaw->angle);
+        result.pitch      = pitch->angle;
+        result.yaw_rate   = yaw->rate;
+        result.pitch_rate = pitch->rate;
+        result.yaw_acc    = yaw->acc;
+        result.pitch_acc  = pitch->acc;
         return result;
     }
 };

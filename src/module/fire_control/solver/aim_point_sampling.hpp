@@ -17,10 +17,17 @@ struct AimAttitude {
     double fly_time { 0.0 };
 };
 
-auto sample_aim_point_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser, TimePoint t)
-    -> std::optional<Eigen::Vector3d>;
+class AimPointSampler {
+public:
+    static auto sample_attitude_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,
+        TimePoint t, double bullet_speed) -> std::expected<AimAttitude, std::string>;
 
-auto solve_aim_attitude(Eigen::Vector3d const& aim_point, double bullet_speed)
-    -> std::expected<AimAttitude, std::string>;
+private:
+    static auto sample_aim_point_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,
+        TimePoint t) -> std::optional<Eigen::Vector3d>;
+
+    static auto solve_aim_attitude(Eigen::Vector3d const& aim_point, double bullet_speed)
+        -> std::expected<AimAttitude, std::string>;
+};
 
 } // namespace rmcs::fire_control

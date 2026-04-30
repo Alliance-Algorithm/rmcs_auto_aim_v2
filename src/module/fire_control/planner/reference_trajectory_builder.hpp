@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-#include "module/fire_control/planner/mpc_trajectory_planner.hpp"
+#include "module/fire_control/planner/mpc_types.hpp"
 #include "module/fire_control/solver/aim_point_sampling.hpp"
 #include "utility/clock.hpp"
 

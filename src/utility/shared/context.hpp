@@ -57,17 +57,27 @@ struct AutoAimState {
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
+    double yaw_rate { std::numeric_limits<double>::quiet_NaN() };
+    double pitch_rate { std::numeric_limits<double>::quiet_NaN() };
+    double yaw_acc { std::numeric_limits<double>::quiet_NaN() };
+    double pitch_acc { std::numeric_limits<double>::quiet_NaN() };
+    bool feedforward_valid { false };
 
     DeviceId target { DeviceId::UNKNOWN };
 
     static auto kInvalid() {
         return AutoAimState {
-            .timestamp      = Clock::now(),
-            .should_control = false,
-            .should_shoot   = false,
-            .yaw            = std::numeric_limits<double>::quiet_NaN(),
-            .pitch          = std::numeric_limits<double>::quiet_NaN(),
-            .target         = DeviceId::UNKNOWN,
+            .timestamp        = Clock::now(),
+            .should_control   = false,
+            .should_shoot     = false,
+            .yaw              = std::numeric_limits<double>::quiet_NaN(),
+            .pitch            = std::numeric_limits<double>::quiet_NaN(),
+            .yaw_rate          = std::numeric_limits<double>::quiet_NaN(),
+            .pitch_rate        = std::numeric_limits<double>::quiet_NaN(),
+            .yaw_acc           = std::numeric_limits<double>::quiet_NaN(),
+            .pitch_acc         = std::numeric_limits<double>::quiet_NaN(),
+            .feedforward_valid = false,
+            .target           = DeviceId::UNKNOWN,
         };
     }
 };

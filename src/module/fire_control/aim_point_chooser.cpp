@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "utility/math/conversion.hpp"
+#include "utility/serializable.hpp"
 
 #include <cmath>
 #include <tuple>
@@ -13,7 +14,44 @@
 using namespace rmcs::fire_control;
 
 struct AimPointChooser::Impl {
-    auto initialize(Config const& config) noexcept -> void { config_ = config; }
+    struct Config : util::Serializable {
+        double coming_angle;
+        double leaving_angle;
+        double outpost_coming_angle;
+        double outpost_leaving_angle;
+
+        constexpr static std::tuple metas {
+            &Config::coming_angle,
+            "coming_angle",
+            &Config::leaving_angle,
+            "leaving_angle",
+            &Config::outpost_coming_angle,
+            "outpost_coming_angle",
+            &Config::outpost_leaving_angle,
+            "outpost_leaving_angle",
+        };
+    } config;
+
+    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
+        auto result = config.serialize(yaml);
+        if (!result.has_value()) return std::unexpected { result.error() };
+
+        config.coming_angle          = util::deg2rad(config.coming_angle);
+        config.leaving_angle         = util::deg2rad(config.leaving_angle);
+        config.outpost_coming_angle  = util::deg2rad(config.outpost_coming_angle);
+        config.outpost_leaving_angle = util::deg2rad(config.outpost_leaving_angle);
+        last_chosen_armor_id.reset();
+
+        if (!(config.coming_angle > 0.0) || !(config.leaving_angle > 0.0)
+            || !(config.outpost_coming_angle > 0.0) || !(config.outpost_leaving_angle > 0.0)) {
+            return std::unexpected {
+                "coming_angle, leaving_angle, outpost_coming_angle and outpost_leaving_angle "
+                "must be > 0",
+            };
+        }
+
+        return {};
+    }
 
     auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
         double angular_velocity) -> std::optional<Armor3D> {
@@ -25,9 +63,9 @@ struct AimPointChooser::Impl {
 
         const auto center_yaw    = std::atan2(center_position.y(), center_position.x());
         const auto is_outpost    = armors.front().genre == DeviceId::OUTPOST;
-        auto const active_coming = is_outpost ? config_.outpost_coming_angle : config_.coming_angle;
+        auto const active_coming = is_outpost ? config.outpost_coming_angle : config.coming_angle;
         auto const active_leaving =
-            is_outpost ? config_.outpost_leaving_angle : config_.leaving_angle;
+            is_outpost ? config.outpost_leaving_angle : config.leaving_angle;
 
         auto candidate_evals = std::vector<CandidateEval>(armors.size());
 
@@ -128,8 +166,6 @@ struct AimPointChooser::Impl {
     }
 
 private:
-    Config config_ {};
-
     struct CandidateEval {
         double delta_yaw { 0.0 };
         bool in_window { false };
@@ -144,8 +180,9 @@ AimPointChooser::AimPointChooser() noexcept
 
 AimPointChooser::~AimPointChooser() noexcept = default;
 
-auto AimPointChooser::initialize(Config const& config) noexcept -> void {
-    return pimpl->initialize(config);
+auto AimPointChooser::configure_yaml(const YAML::Node& yaml) noexcept
+    -> std::expected<void, std::string> {
+    return pimpl->configure_yaml(yaml);
 }
 
 auto AimPointChooser::choose_armor(std::span<Armor3D const> armors,
