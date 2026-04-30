@@ -63,6 +63,12 @@ struct AutoAimState {
     double pitch_acc { std::numeric_limits<double>::quiet_NaN() };
     bool feedforward_valid { false };
 
+    Translation robot_center {
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+    };
+
     DeviceId target { DeviceId::UNKNOWN };
 
     static auto kInvalid() {
@@ -77,7 +83,13 @@ struct AutoAimState {
             .yaw_acc           = std::numeric_limits<double>::quiet_NaN(),
             .pitch_acc         = std::numeric_limits<double>::quiet_NaN(),
             .feedforward_valid = false,
-            .target           = DeviceId::UNKNOWN,
+            .robot_center =
+                Translation {
+                    std::numeric_limits<double>::quiet_NaN(),
+                    std::numeric_limits<double>::quiet_NaN(),
+                    std::numeric_limits<double>::quiet_NaN(),
+                },
+            .target = DeviceId::UNKNOWN,
         };
     }
 };

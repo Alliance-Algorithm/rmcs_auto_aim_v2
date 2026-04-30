@@ -17,6 +17,7 @@ struct TargetSolutionSolver::Impl {
             AimAttitude attitude;
             TimePoint impact_time;
             Eigen::Vector3d center_position;
+            Eigen::Vector3d aim_point;
         };
 
         // 使用整车坐标计算飞行时间初值
@@ -33,16 +34,16 @@ struct TargetSolutionSolver::Impl {
                     std::chrono::duration<double>(total_predict_time));
 
             auto predicted_kinematics = snapshot.kinematics_at(t_target);
-            auto attitude =
-                AimPointSampler::sample_attitude_at(snapshot, chooser, t_target, bullet_speed);
-            if (!attitude.has_value()) continue;
+            auto sample = AimPointSampler::sample_at(snapshot, chooser, t_target, bullet_speed);
+            if (!sample.has_value()) continue;
 
-            auto const time_error = std::abs(attitude->fly_time - current_fly_time);
-            current_fly_time      = attitude->fly_time;
+            auto const time_error = std::abs(sample->attitude.fly_time - current_fly_time);
+            current_fly_time      = sample->attitude.fly_time;
             best_candidate        = BestCandidate {
-                       .attitude        = *attitude,
+                       .attitude        = sample->attitude,
                        .impact_time     = t_target,
                        .center_position = predicted_kinematics.center_position,
+                       .aim_point       = sample->aim_point,
             };
             if (time_error < kMaxFlyTimeThreshold) break;
         }
@@ -56,6 +57,7 @@ struct TargetSolutionSolver::Impl {
             .impact_yaw      = best_candidate->attitude.yaw,
             .impact_pitch    = best_candidate->attitude.pitch,
             .center_position = best_candidate->center_position,
+            .aim_point       = best_candidate->aim_point,
         };
     }
 };

@@ -17,10 +17,15 @@ struct AimAttitude {
     double fly_time { 0.0 };
 };
 
+struct AimSample {
+    AimAttitude attitude;
+    Eigen::Vector3d aim_point { Eigen::Vector3d::Zero() };
+};
+
 class AimPointSampler {
 public:
-    static auto sample_attitude_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,
-        TimePoint t, double bullet_speed) -> std::expected<AimAttitude, std::string>;
+    static auto sample_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,
+        TimePoint t, double bullet_speed) -> std::expected<AimSample, std::string>;
 
 private:
     static auto sample_aim_point_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,

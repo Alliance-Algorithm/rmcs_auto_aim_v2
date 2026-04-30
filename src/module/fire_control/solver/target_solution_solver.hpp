@@ -19,6 +19,7 @@ public:
         double impact_yaw { 0.0 };
         double impact_pitch { 0.0 };
         Eigen::Vector3d center_position { Eigen::Vector3d::Zero() };
+        Eigen::Vector3d aim_point { Eigen::Vector3d::Zero() };
     };
 
     auto solve(predictor::Snapshot const& snapshot, AimPointChooser& chooser, double bullet_speed,

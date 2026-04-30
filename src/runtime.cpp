@@ -181,6 +181,7 @@ auto main() -> int {
                 command.should_shoot   = result->shoot_permitted;
                 command.yaw            = result->yaw;
                 command.pitch          = result->pitch;
+                command.robot_center      = Translation { result->center_position };
             }
         }
 

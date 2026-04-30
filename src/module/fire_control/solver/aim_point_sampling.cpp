@@ -7,15 +7,23 @@
 
 using namespace rmcs::fire_control;
 
-auto rmcs::fire_control::AimPointSampler::sample_attitude_at(
+auto rmcs::fire_control::AimPointSampler::sample_at(
     predictor::Snapshot const& snapshot, AimPointChooser& chooser, TimePoint t, double bullet_speed)
-    -> std::expected<AimAttitude, std::string> {
+    -> std::expected<AimSample, std::string> {
     auto aim_point = sample_aim_point_at(snapshot, chooser, t);
     if (!aim_point.has_value()) {
         return std::unexpected { "aim point sample failed" };
     }
 
-    return solve_aim_attitude(*aim_point, bullet_speed);
+    auto attitude = solve_aim_attitude(*aim_point, bullet_speed);
+    if (!attitude.has_value()) {
+        return std::unexpected { attitude.error() };
+    }
+
+    return AimSample {
+        .attitude  = *attitude,
+        .aim_point = *aim_point,
+    };
 }
 
 auto rmcs::fire_control::AimPointSampler::sample_aim_point_at(predictor::Snapshot const& snapshot,

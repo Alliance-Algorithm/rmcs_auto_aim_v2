@@ -10,20 +10,23 @@ using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
     struct Config : util::Serializable {
-        double first_tolerance;  // degree
-        double second_tolerance; // degree
-        double judge_distance;   // m
+        double near_angle_tolerance; // degree
+        double far_angle_tolerance;  // degree
+        double split_distance;       // m
         bool auto_fire;
+        bool is_lazy_gimbal;
 
         constexpr static std::tuple metas {
-            &Config::first_tolerance,
-            "first_tolerance",
-            &Config::second_tolerance,
-            "second_tolerance",
-            &Config::judge_distance,
-            "judge_distance",
+            &Config::near_angle_tolerance,
+            "near_angle_tolerance",
+            &Config::far_angle_tolerance,
+            "far_angle_tolerance",
+            &Config::split_distance,
+            "split_distance",
             &Config::auto_fire,
             "auto_fire",
+            &Config::is_lazy_gimbal,
+            "is_lazy_gimbal",
         };
     } config;
 
@@ -33,14 +36,17 @@ struct ShootEvaluator::Impl {
             return std::unexpected { result.error() };
         }
 
-        config.first_tolerance  = util::deg2rad(config.first_tolerance);
-        config.second_tolerance = util::deg2rad(config.second_tolerance);
+        config.near_angle_tolerance = util::deg2rad(config.near_angle_tolerance);
+        config.far_angle_tolerance  = util::deg2rad(config.far_angle_tolerance);
         last_command_.reset();
 
-        if (!(config.first_tolerance > 0.0) || !(config.second_tolerance > 0.0))
-            return std::unexpected { "first_tolerance and second_tolerance must be > 0" };
+        if (!(config.near_angle_tolerance > 0.0) || !(config.far_angle_tolerance > 0.0)) {
+            return std::unexpected {
+                "near_angle_tolerance and far_angle_tolerance must be > 0",
+            };
+        }
 
-        if (config.judge_distance < 0.0) return std::unexpected { "judge_distance must be >= 0" };
+        if (config.split_distance < 0.0) return std::unexpected { "split_distance must be >= 0" };
 
         return {};
     }
@@ -53,8 +59,22 @@ struct ShootEvaluator::Impl {
             return false;
         }
 
-        const auto tolerance = (command.distance > config.judge_distance) ? config.second_tolerance
-                                                                          : config.first_tolerance;
+        if (config.is_lazy_gimbal) {
+            auto const aim_point_yaw =
+                std::atan2(command.aim_point_position.y(), command.aim_point_position.x());
+            const auto aim_delta  = std::abs(util::normalize_angle(current_yaw - aim_point_yaw));
+            const auto is_overlap = aim_delta < config.near_angle_tolerance;
+            if (!is_overlap) {
+                last_command_ = command;
+                return false;
+            }
+        }
+
+        auto const center_distance =
+            std::hypot(command.center_position.x(), command.center_position.y());
+        const auto tolerance = (center_distance > config.split_distance)
+            ? config.far_angle_tolerance
+            : config.near_angle_tolerance;
 
         if (last_command_.has_value() && command.auto_aim_enabled) {
             const auto yaw_delta =

@@ -97,9 +97,10 @@ fire_control:
     mpc_pitch_r_acc: 1.0
 
   shoot_evaluator:
-    first_tolerance: 3 # 近距离射击容差，degree
-    second_tolerance: 2 # 远距离射击容差，degree
-    judge_distance: 2 #距离判断阈值
+    is_lazy_gimbal: true
+    near_angle_tolerance: 3 # 近距离射击容差，degree
+    far_angle_tolerance: 2 # 远距离射击容差，degree
+    split_distance: 2 # 距离切换阈值,m
     auto_fire: true # 是否由自瞄控制射击
 
 visualization:
