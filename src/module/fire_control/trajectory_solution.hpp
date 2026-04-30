@@ -1,19 +1,19 @@
 #pragma once
 
+#include <eigen3/Eigen/Dense>
 #include <optional>
 #include <tuple>
 
 namespace rmcs::fire_control {
 struct TrajectorySolution {
-
     struct Input {
         double v0 { 0. };
-        double target_d { 0. };
-        double target_h { 0. };
+        Eigen::Vector3d target_position { 0.0, 0.0, 0.0 };
     } input;
 
     struct Output {
         double fly_time { 0. }; // s
+        double yaw { 0. };      // rad
         double pitch { 0. };    // rad
     } result;
 

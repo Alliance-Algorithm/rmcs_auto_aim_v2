@@ -2,34 +2,31 @@
 
 #include <eigen3/Eigen/Dense>
 #include <expected>
-#include <functional>
-#include <optional>
 #include <yaml-cpp/yaml.h>
 
-#include "utility/clock.hpp"
+#include "module/fire_control/planner/tiny_mpc_axis_solver.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::fire_control {
+
+// row 0: yaw angle (rad)
+// row 1: yaw angular velocity (rad/s)
+// row 2: pitch angle (rad)
+// row 3: pitch angular velocity (rad/s)
+using ReferenceTrajectory = Eigen::Matrix<double, 4, kMpcAxisHorizon>;
 
 class MpcTrajectoryPlanner {
     RMCS_PIMPL_DEFINITION(MpcTrajectoryPlanner)
 
 public:
-    using AimPointSampler = std::function<std::optional<Eigen::Vector3d>(TimePoint)>;
-
     struct Plan {
-        // 未约束的理想值
-        double target_yaw { 0.0 };
-        double target_pitch { 0.0 };
-        // 有约束的最优值
         double yaw { 0.0 };
         double pitch { 0.0 };
     };
 
     auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
-    auto plan(TimePoint center_time, double bullet_speed, double yaw_offset, double pitch_offset,
-        AimPointSampler const& sample_aim_point) -> std::optional<Plan>;
+    auto plan(ReferenceTrajectory const& reference) -> std::expected<Plan, std::string>;
 };
 
 } // namespace rmcs::fire_control

@@ -15,7 +15,6 @@ public:
     struct Result {
         double pitch;
         double yaw;
-        double horizon_distance;
         bool shoot_permitted;
     };
 

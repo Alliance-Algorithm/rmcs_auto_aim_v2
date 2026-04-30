@@ -75,8 +75,6 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  is_lazy_gimbal: true
-
   initial_bullet_speed: 21.0 # m/s
   shoot_delay: 0.1 # s
   yaw_offset: 0.0 # degree

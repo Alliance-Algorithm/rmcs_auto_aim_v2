@@ -6,31 +6,35 @@ using namespace rmcs::fire_control;
 /**
  * @brief 弹道解算 (考虑空气阻力迭代)
  * @param v0 子弹初速度 (m/s)
- * @param target_d 水平距离 (m)
- * @param target_h 目标竖直高度 (m) - 目标在枪口上方为正
+ * @param target_position 目标位置 (m)
  * @param g 重力加速度
  * @param params 系数
  * 参考资料：https://zhuanlan.zhihu.com/p/1970271417149920247
  */
 auto TrajectorySolution::solve() const -> std::optional<Output> {
-    if (input.v0 <= 0 || input.target_d <= 0) return std::nullopt;
+    auto const target_d = std::hypot(input.target_position.x(), input.target_position.y());
+    auto const target_h = input.target_position.z();
 
-    double pitch = std::atan2(input.target_h, input.target_d);
+    if (input.v0 <= 0 || target_d <= 0) return std::nullopt;
+
+    double pitch   = std::atan2(target_h, target_d);
+    auto const yaw = std::atan2(input.target_position.y(), input.target_position.x());
 
     for (int i = 0; i < kMaxIterateCount; ++i) {
-        auto [actual_h, t] = Estimate(input.v0, pitch, input.target_d, kAirResistanceCoefficient);
+        auto [actual_h, t] = Estimate(input.v0, pitch, target_d, kAirResistanceCoefficient);
 
-        auto h_error = input.target_h - actual_h;
+        auto h_error = target_h - actual_h;
         if (std::abs(h_error) < kHeightErrorThreold) {
             auto result     = Output {};
             result.fly_time = t;
+            result.yaw      = yaw;
             result.pitch    = pitch;
             return result;
         }
 
         // 修正角度：利用线性近似提高收敛速度
         // Δpitch ≈ Δh / d
-        pitch += std::atan2(h_error, input.target_d);
+        pitch += std::atan2(h_error, target_d);
 
         if (std::abs(pitch) > kMaxPitchThreold) break; // 仰角过大保护
     }

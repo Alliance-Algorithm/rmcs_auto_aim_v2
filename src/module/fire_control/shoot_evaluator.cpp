@@ -56,7 +56,7 @@ struct ShootEvaluator::Impl {
         const auto tolerance = (command.distance > config.judge_distance) ? config.second_tolerance
                                                                           : config.first_tolerance;
 
-        if (last_command_.has_value() && command.auto_aim_enabled && command.aim_point_valid) {
+        if (last_command_.has_value() && command.auto_aim_enabled) {
             const auto yaw_delta =
                 std::abs(util::normalize_angle(last_command_->yaw - command.yaw));
             const auto track_delta =

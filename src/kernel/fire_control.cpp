@@ -1,17 +1,16 @@
 #include "fire_control.hpp"
 
-#include <chrono>
 #include <cmath>
 #include <format>
 #include <memory>
 #include <optional>
 
+#include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/planner/mpc_trajectory_planner.hpp"
+#include "module/fire_control/planner/reference_trajectory_builder.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
-#include "module/fire_control/strategy/aim_point_provider.hpp"
-#include "module/fire_control/strategy/fire_control_adapter.hpp"
-#include "module/fire_control/strategy/fire_gate_evaluator.hpp"
-#include "module/fire_control/trajectory_solution.hpp"
+#include "module/fire_control/solver/aim_point_sampling.hpp"
+#include "module/fire_control/solver/target_solution_solver.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
@@ -30,7 +29,6 @@ struct FireControl::Impl {
         double shoot_delay;          // s
         double yaw_offset;           // rad (config in degree)
         double pitch_offset;         // rad (config in degree)
-        bool is_lazy_gimbal;
 
         // clang-format off
         constexpr static std::tuple metas {
@@ -38,18 +36,35 @@ struct FireControl::Impl {
             &Config::shoot_delay,"shoot_delay",
             &Config::yaw_offset,"yaw_offset",
             &Config::pitch_offset,"pitch_offset",
-            &Config::is_lazy_gimbal,"is_lazy_gimbal",
         };
         // clang-format on
+    };
+
+    struct AimPointConfig : util::Serializable {
+        double coming_angle;
+        double leaving_angle;
+        double outpost_coming_angle;
+        double outpost_leaving_angle;
+
+        constexpr static std::tuple metas {
+            &AimPointConfig::coming_angle,
+            "coming_angle",
+            &AimPointConfig::leaving_angle,
+            "leaving_angle",
+            &AimPointConfig::outpost_coming_angle,
+            "outpost_coming_angle",
+            &AimPointConfig::outpost_leaving_angle,
+            "outpost_leaving_angle",
+        };
     };
 
     Config config;
 
     MpcTrajectoryPlanner mpc_trajectory_planner;
+    ReferenceTrajectoryBuilder reference_trajectory_builder;
+    TargetSolutionSolver target_solution_solver;
     ShootEvaluator shoot_evaluator;
-    AimPointProvider aim_point_provider;
-    FireControlAdapter fire_control_adapter;
-    FireGateEvaluator fire_gate_evaluator;
+    AimPointChooser aim_point_chooser;
 
     const double kMinValidBulletSpeed { 10. };
 
@@ -65,14 +80,20 @@ struct FireControl::Impl {
 
         config.yaw_offset   = util::deg2rad(config.yaw_offset);
         config.pitch_offset = util::deg2rad(config.pitch_offset);
-        fire_control_adapter.initialize(config.is_lazy_gimbal);
 
-        auto provider_result = aim_point_provider.configure_yaml(yaml["aim_point_provider"]);
-        if (!provider_result.has_value()) {
+        auto chooser_source = AimPointConfig {};
+        result              = chooser_source.serialize(yaml["aim_point_provider"]);
+        if (!result.has_value()) {
             return std::unexpected {
-                std::format("Invalid fire_control.aim_point_provider: {}", provider_result.error()),
+                std::format("Invalid fire_control.aim_point_provider: {}", result.error()),
             };
         }
+        aim_point_chooser.initialize(AimPointChooser::Config {
+            .coming_angle          = util::deg2rad(chooser_source.coming_angle),
+            .leaving_angle         = util::deg2rad(chooser_source.leaving_angle),
+            .outpost_coming_angle  = util::deg2rad(chooser_source.outpost_coming_angle),
+            .outpost_leaving_angle = util::deg2rad(chooser_source.outpost_leaving_angle),
+        });
 
         auto evaluate_result = shoot_evaluator.configure_yaml(yaml["shoot_evaluator"]);
         if (!evaluate_result.has_value()) {
@@ -85,166 +106,90 @@ struct FireControl::Impl {
             return std::unexpected { std::format(
                 "mpc_trajectory_planner init failed: {}", planner_result.error()) };
         }
+
         return {};
     }
 
-    const int kMaxIterateCount { 5 };
-    const double kMaxFlyTimeThreshold { 0.001 };
-
     struct AimCommand {
-        double pitch;
-        double yaw;
-        double horizon_distance;
+        double pitch { 0.0 };
+        double yaw { 0.0 };
     };
 
-    struct ImpactTarget {
-        TimePoint sample_time;
-        Eigen::Vector3d aim_position;
-        Clock::time_point impact_time;
-    };
-
-    auto make_command(Eigen::Vector3d const& aim_position) const -> std::optional<AimCommand> {
-        auto target_d =
-            std::sqrt(aim_position.x() * aim_position.x() + aim_position.y() * aim_position.y());
-        auto target_h = aim_position.z();
-        if (!(target_d > 0.0)) {
-            return std::nullopt;
-        }
-
-        auto solution           = TrajectorySolution { };
-        solution.input.v0       = config.initial_bullet_speed;
-        solution.input.target_d = target_d;
-        solution.input.target_h = target_h;
-
-        auto trajectory_result = solution.solve();
-        if (!trajectory_result) {
-            return std::nullopt;
-        }
-
-        auto final_yaw = std::atan2(aim_position.y(), aim_position.x());
-        final_yaw += config.yaw_offset;
-
-        return AimCommand {
-            .pitch            = trajectory_result->pitch + config.pitch_offset,
-            .yaw              = final_yaw,
-            .horizon_distance = target_d,
-        };
-    }
-
-    auto make_result(const predictor::Snapshot& snapshot, AimCommand const& command, bool control,
-        double current_yaw, TimePoint sample_time, Eigen::Vector3d const& aim_position,
-        GateMode gate_mode) -> Result {
-        auto fire_context = FireGateContext {
-            .snapshot     = snapshot,
-            .sample_time  = sample_time,
-            .aim_position = aim_position,
-            .control      = control,
-        };
-        auto fire_gate = fire_gate_evaluator.evaluate(gate_mode, fire_context);
-
-        auto shoot_command = ShootEvaluator::Command {
-            .control          = control,
-            .auto_aim_enabled = control,
-            .aim_point_valid  = fire_gate.allowed,
-            .yaw              = command.yaw,
-            .distance         = command.horizon_distance,
+    auto make_result(AimCommand const& command, Eigen::Vector3d const& center_position,
+        bool control, double current_yaw) -> Result {
+        auto const center_distance = std::hypot(center_position.x(), center_position.y());
+        auto shoot_command         = ShootEvaluator::Command {
+                    .control          = control,
+                    .auto_aim_enabled = control,
+                    .yaw              = command.yaw,
+                    .distance         = center_distance,
         };
         auto shoot_permitted = shoot_evaluator.evaluate(shoot_command, current_yaw);
 
         return Result {
-            .pitch            = command.pitch,
-            .yaw              = command.yaw,
-            .horizon_distance = command.horizon_distance,
-            .shoot_permitted  = shoot_permitted,
+            .pitch           = command.pitch,
+            .yaw             = command.yaw,
+            .shoot_permitted = shoot_permitted,
         };
     }
 
-    auto solve_target(const predictor::Snapshot& snapshot, AimPointProvider::Mode mode)
-        -> std::optional<ImpactTarget> {
-        auto target_kinematics = snapshot.kinematics();
+    auto make_mpc_command(MpcTrajectoryPlanner::Plan const& plan) const -> AimCommand {
+        return AimCommand {
+            .pitch = plan.pitch,
+            .yaw   = plan.yaw,
+        };
+    }
 
-        // 以整车位置来初步迭代飞行时间
-        auto target_position_in_world = target_kinematics.center_position;
+    auto apply_offset(AimCommand command) const -> AimCommand {
+        command.yaw   = util::normalize_angle(command.yaw + config.yaw_offset);
+        command.pitch = command.pitch + config.pitch_offset;
+        return command;
+    }
 
-        const double bullet_speed = config.initial_bullet_speed;
-        auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
+    auto solve_aim_command(const predictor::Snapshot& snapshot,
+        TargetSolutionSolver::TargetSolution const& target_solution)
+        -> std::expected<AimCommand, std::string> {
+        auto raw_ballistic_direction = AimCommand {
+            .pitch = target_solution.impact_pitch,
+            .yaw   = target_solution.impact_yaw,
+        };
 
-        auto best_target_opt  = std::optional<Eigen::Vector3d> {};
-        auto best_sample_time = snapshot.time_stamp();
-
-        for (int i = 0; i < kMaxIterateCount; ++i) {
-            // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
-            double total_predict_time = current_fly_time + config.shoot_delay;
-            auto t_target             = snapshot.time_stamp()
-                + std::chrono::duration_cast<Clock::duration>(
-                    std::chrono::duration<double>(total_predict_time));
-
-            auto target_opt = aim_point_provider.aim_point_at(snapshot, t_target, mode);
-            if (!target_opt) {
-                continue;
+        auto sample_attitude = [&](Clock::time_point t) -> std::expected<AimAttitude, std::string> {
+            auto aim_point = sample_aim_point_at(snapshot, aim_point_chooser, t);
+            if (!aim_point.has_value()) {
+                return std::unexpected { "aim point sample failed" };
             }
-            best_target_opt  = target_opt;
-            best_sample_time = t_target;
+            return solve_aim_attitude(*aim_point, config.initial_bullet_speed);
+        };
 
-            auto const& aim_position = *best_target_opt;
-
-            auto target_d = std::sqrt(
-                aim_position.x() * aim_position.x() + aim_position.y() * aim_position.y());
-            if (!(target_d > 0.0)) {
-                continue;
-            }
-
-            auto solution           = TrajectorySolution { };
-            solution.input.v0       = bullet_speed;
-            solution.input.target_d = target_d;
-            solution.input.target_h = aim_position.z();
-
-            auto result = solution.solve();
-            if (!result) {
-                continue;
-            }
-
-            auto time_error  = std::abs(result->fly_time - current_fly_time);
-            current_fly_time = result->fly_time;
-            if (time_error < kMaxFlyTimeThreshold) break;
+        auto reference =
+            reference_trajectory_builder.build(target_solution.impact_time, sample_attitude);
+        if (!reference.has_value()) {
+            return apply_offset(raw_ballistic_direction);
         }
 
-        if (!best_target_opt) return std::nullopt;
+        auto planned = mpc_trajectory_planner.plan(*reference);
+        if (planned.has_value()) {
+            return apply_offset(make_mpc_command(*planned));
+        }
 
-        auto const impact_time = snapshot.time_stamp()
-            + std::chrono::duration_cast<Clock::duration>(
-                std::chrono::duration<double>(current_fly_time + config.shoot_delay));
-
-        return ImpactTarget {
-            .sample_time  = best_sample_time,
-            .aim_position = *best_target_opt,
-            .impact_time  = impact_time,
+        auto fallback = AimCommand {
+            .pitch = (*reference)(2, kMpcAxisHorizon / 2),
+            .yaw   = util::normalize_angle((*reference)(0, kMpcAxisHorizon / 2)),
         };
+        return apply_offset(fallback);
     }
 
     auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
         -> std::optional<Result> {
-        auto const policy  = fire_control_adapter.resolve(snapshot);
-        auto impact_target = solve_target(snapshot, policy.aim_mode);
-        if (!impact_target) return std::nullopt;
+        auto target_solution = target_solution_solver.solve(
+            snapshot, aim_point_chooser, config.initial_bullet_speed, config.shoot_delay);
+        if (!target_solution.has_value()) return std::nullopt;
 
-        auto direct_command = make_command(impact_target->aim_position);
-        if (!direct_command) return std::nullopt;
+        auto command = solve_aim_command(snapshot, *target_solution);
+        if (!command.has_value()) return std::nullopt;
 
-        auto final_command    = *direct_command;
-        auto sample_aim_point = [&](TimePoint t) {
-            return aim_point_provider.aim_point_at(snapshot, t, policy.aim_mode);
-        };
-
-        if (auto planned =
-                mpc_trajectory_planner.plan(impact_target->impact_time, config.initial_bullet_speed,
-                    config.yaw_offset, config.pitch_offset, sample_aim_point)) {
-            final_command.yaw   = planned->yaw;
-            final_command.pitch = planned->pitch;
-        }
-
-        return make_result(snapshot, final_command, control, current_yaw,
-            impact_target->sample_time, impact_target->aim_position, policy.gate_mode);
+        return make_result(*command, target_solution->center_position, control, current_yaw);
     }
 };
 

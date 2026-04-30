@@ -135,7 +135,7 @@ private:
         bool in_window { false };
     };
 
-    const double min_switch_improvement_angle { util::deg2rad(7.0) };
+    const double min_switch_improvement_angle { util::deg2rad(8) };
     std::optional<int> last_chosen_armor_id {};
 };
 

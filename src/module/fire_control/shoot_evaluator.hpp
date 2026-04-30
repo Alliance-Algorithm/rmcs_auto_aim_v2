@@ -15,7 +15,6 @@ public:
     struct Command {
         bool control { false };
         bool auto_aim_enabled { false };
-        bool aim_point_valid { false };
         double yaw { 0. };
         double distance { 0. };
     };
