@@ -3,7 +3,6 @@
 #include "module/debug/action_throttler.hpp"
 #include "module/debug/framerate.hpp"
 #include "utility/rclcpp/node.hpp"
-#include "utility/rclcpp/visual/transform.hpp"
 #include "utility/shared/context.hpp"
 
 #include <chrono>
@@ -23,21 +22,12 @@ public:
         : adapter { *this }
         , rclcpp { get_component_name() } {
 
-        register_output("/gimbal/auto_aim/auto_aim_enabled", should_control, false);
-        register_output(
-            "/gimbal/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
-        register_output("/gimbal/auto_aim/shoot_enable", should_shoot, false);
+        register_output("/auto_aim/should_control", should_control, false);
+        register_output("/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
+        register_output("/auto_aim/should_shoot", should_shoot, false);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
-
-        const auto config = visual::Transform::Config {
-            .rclcpp       = rclcpp,
-            .topic        = "odom_to_camera_transform",
-            .parent_frame = Adapter::kParentFrame,
-            .child_frame  = "camera_link",
-        };
-        visual_odom_to_camera = std::make_unique<visual::Transform>(config);
 
         action_throttler.register_action("adapter");
         action_throttler.register_action("feishu");
@@ -89,7 +79,6 @@ private:
     double current_gimbal_pitch { std::numeric_limits<double>::quiet_NaN() };
 
     RclcppNode rclcpp;
-    std::unique_ptr<visual::Transform> visual_odom_to_camera;
 
     Feishu<ControlState, AutoAimState> feishu;
 
@@ -100,7 +89,6 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-    std::uint8_t publish_count = 0;
     auto make_context() -> ControlState {
         auto context = ControlState { };
 
@@ -110,17 +98,9 @@ private:
         current_gimbal_yaw   = std::atan2(dir.y(), dir.x());
         current_gimbal_pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
-        auto iso                                     = adapter.camera_transform();
-        context.odom_to_camera_transform.position    = iso.translation();
-        context.odom_to_camera_transform.orientation = Eigen::Quaterniond(iso.rotation());
-
-        visual_odom_to_camera->move(context.odom_to_camera_transform.position,
-            context.odom_to_camera_transform.orientation);
-
-        if (publish_count++ > 100) {
-            publish_count = 0;
-            visual_odom_to_camera->update();
-        }
+        auto iso                             = adapter.camera_transform();
+        context.camera_transform.position    = iso.translation();
+        context.camera_transform.orientation = Eigen::Quaterniond(iso.rotation());
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         context.invincible_devices = DeviceIds::None();

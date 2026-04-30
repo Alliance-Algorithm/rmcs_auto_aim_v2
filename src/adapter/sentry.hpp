@@ -8,8 +8,6 @@ namespace rmcs {
 
 class Adapter {
 public:
-    static constexpr const char* kParentFrame = "odom_imu_link";
-
     explicit Adapter(rmcs_executor::Component& component) { component.register_input("/tf", tf_); }
 
     [[nodiscard]] auto ready() const -> bool { return tf_.ready(); }

@@ -85,7 +85,7 @@ struct ControlState {
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
 
-    Transform odom_to_camera_transform { };
+    Transform camera_transform { }; // Imu Odom Link
 
     struct {
         TimePoint timestamp = Clock::now();
@@ -98,24 +98,24 @@ struct ControlState {
 
     static auto kInvalid() {
         return ControlState {
-            .timestamp                = Clock::now(),
-            .shoot_mode               = ShootMode::STOPPING,
-            .yaw                      = std::numeric_limits<double>::quiet_NaN(),
-            .pitch                    = std::numeric_limits<double>::quiet_NaN(),
-            .odom_to_camera_transform = Transform::kNaN(),
-            .capture_signals          = { },
-            .invincible_devices       = DeviceIds::None(),
+            .timestamp          = Clock::now(),
+            .shoot_mode         = ShootMode::STOPPING,
+            .yaw                = std::numeric_limits<double>::quiet_NaN(),
+            .pitch              = std::numeric_limits<double>::quiet_NaN(),
+            .camera_transform   = Transform::kNaN(),
+            .capture_signals    = { },
+            .invincible_devices = DeviceIds::None(),
         };
     }
     static auto kIdentity() {
         return ControlState {
-            .timestamp                = Clock::now(),
-            .shoot_mode               = ShootMode::BATTLE,
-            .yaw                      = 0,
-            .pitch                    = 0,
-            .odom_to_camera_transform = Transform::kIdentity(),
-            .capture_signals          = { },
-            .invincible_devices       = DeviceIds::None(),
+            .timestamp          = Clock::now(),
+            .shoot_mode         = ShootMode::BATTLE,
+            .yaw                = 0,
+            .pitch              = 0,
+            .camera_transform   = Transform::kIdentity(),
+            .capture_signals    = { },
+            .invincible_devices = DeviceIds::None(),
         };
     }
 };
