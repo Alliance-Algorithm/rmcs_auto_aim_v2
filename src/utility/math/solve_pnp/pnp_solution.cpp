@@ -2,9 +2,9 @@
 
 #include "pnp_solution.hpp"
 #include "utility/math/conversion.hpp"
-#include "utility/math/solve_pnp/solve_pnp.hpp"
 
 #include <eigen3/Eigen/Geometry>
+#include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 
 #include <ranges>
@@ -12,8 +12,8 @@
 using namespace rmcs::util;
 auto PnpSolution::solve() -> bool {
     try {
-        const auto camera_matrix = cast_opencv_matrix(input.camera_matrix);
-        const auto distort_coeff = cast_opencv_matrix(input.distort_coeff);
+        const auto camera_matrix = input.camera.intrinsic();
+        const auto distort_coeff = input.camera.distortion();
 
         const auto armor_shape = std::ranges::to<std::vector>(input.armor_shape
             | std::views::transform(

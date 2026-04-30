@@ -1,33 +1,29 @@
 #include "decider.hpp"
-
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include "module/predictor/robot_state.hpp"
 #include "utility/serializable.hpp"
 #include "utility/time.hpp"
+
+#include <cmath>
+#include <limits>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 using namespace rmcs::tracker;
 using namespace rmcs::predictor;
 using namespace std::chrono_literals;
 
 struct Decider::Impl {
-    static constexpr auto kDefaultCleanupInterval    = 1s;
-    static constexpr auto kOutpostCleanupInterval    = 1.5s;
-    static constexpr double kPriorityScoreBase       = 10.0;
-    static constexpr double kDistanceScoreWeight     = 5.0;
-    static constexpr double kDistanceScoreBias       = 1.0;
-    static constexpr double kConvergedScoreBonus     = 4.0;
-    static constexpr double kPrimaryTargetScoreBonus = 2.0;
+    static constexpr auto kDefaultCleanupInterval = 1.0s;
+    static constexpr auto kOutpostCleanupInterval = 1.5s;
+    static constexpr auto kReleaseAfterFrames     = std::size_t { 3 };
 
     struct TargetMemory {
         std::optional<TimePoint> last_seen_time { };
         std::size_t consecutive_missing_frames { 0 };
         std::size_t consecutive_stable_frames { 0 };
+        std::size_t consecutive_instable_frames { 0 };
         bool temporary_lost_armed { false };
     };
 
@@ -46,6 +42,15 @@ struct Decider::Impl {
         };
     };
 
+    static constexpr auto get_cleanup_interval(DeviceId device_id) {
+        switch (device_id) {
+        case DeviceId::OUTPOST:
+            return kOutpostCleanupInterval;
+        default:
+            return kDefaultCleanupInterval;
+        }
+    }
+
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
@@ -62,19 +67,12 @@ struct Decider::Impl {
             return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
         }
 
+        if (priority_mode.empty()) priority_mode = mode2;
+
         return { };
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
-
-    static auto cleanup_interval_for(DeviceId device_id) -> std::chrono::duration<double> {
-        switch (device_id) {
-        case DeviceId::OUTPOST:
-            return kOutpostCleanupInterval;
-        default:
-            return kDefaultCleanupInterval;
-        }
-    }
 
     auto update(std::span<Armor3D const> armors, TimePoint t) -> Output {
         // 推进所有现有追踪器的时间轴
@@ -110,14 +108,23 @@ struct Decider::Impl {
         // 1. unconfirmed: 已有 tracker，但还没稳定到可接管；
         // 2. confirmed: 连续稳定若干帧后允许控制接管；
         // 3. temporary lost: confirmed 目标短暂丢失时，保留控制输出窗口。
+        // 4. confirmed → unconfirmed: 需要连续不稳定 kReleaseAfterFrames 帧才释放
         for (const auto& [id, tracker] : trackers) {
             auto& target_memory         = target_memories[id];
             auto was_tracking_confirmed = tracking_confirmed(id);
 
             if (observed_ids.contains(id) && tracker->is_converged()) {
                 ++target_memory.consecutive_stable_frames;
-                target_memory.temporary_lost_armed = false;
+                target_memory.consecutive_instable_frames = 0;
+                target_memory.temporary_lost_armed        = false;
                 continue;
+            }
+
+            if (observed_ids.contains(id)) {
+                ++target_memory.consecutive_instable_frames;
+                if (target_memory.consecutive_instable_frames < kReleaseAfterFrames) {
+                    continue;
+                }
             }
 
             target_memory.consecutive_stable_frames = 0;
@@ -133,7 +140,7 @@ struct Decider::Impl {
 
         std::erase_if(trackers, [&](const auto& item) {
             auto memory_it        = target_memories.find(item.first);
-            auto cleanup_interval = cleanup_interval_for(item.first);
+            auto cleanup_interval = get_cleanup_interval(item.first);
             bool expired = memory_it == target_memories.end() || !memory_it->second.last_seen_time
                 || util::delta_time(t, *memory_it->second.last_seen_time) > cleanup_interval;
             if (expired) {
@@ -160,22 +167,24 @@ struct Decider::Impl {
         return Output {
             .target_id          = DeviceId::UNKNOWN,
             .snapshot           = std::nullopt,
-            .allow_takeover     = false,
+            .allow_control      = false,
             .tracking_confirmed = false,
         };
     }
 
     auto arbitrate(const std::unordered_set<DeviceId>& observed_ids) -> DeviceId {
-        auto candidates = trackers | std::views::filter([&](const auto& pair) {
-            return observed_ids.contains(pair.first);
-        });
+        auto best_target_id = DeviceId::UNKNOWN;
 
-        if (std::ranges::empty(candidates)) return DeviceId::UNKNOWN;
+        for (const auto& [device_id, _] : trackers) {
+            if (!observed_ids.contains(device_id)) continue;
 
-        auto it = std::ranges::max_element(candidates, { },
-            [&](const auto& pair) { return calculate_score(pair.first, *pair.second); });
+            if (best_target_id == DeviceId::UNKNOWN
+                || is_better_target(device_id, best_target_id)) {
+                best_target_id = device_id;
+            }
+        }
 
-        return it->first;
+        return best_target_id;
     }
 
     auto tracking_confirmed(DeviceId device_id) const -> bool {
@@ -191,7 +200,7 @@ struct Decider::Impl {
         return Output {
             .target_id          = device_id,
             .snapshot           = trackers.at(device_id)->get_snapshot(),
-            .allow_takeover     = allow_takeover,
+            .allow_control      = allow_takeover,
             .tracking_confirmed = confirmed,
         };
     }
@@ -229,28 +238,30 @@ struct Decider::Impl {
         return memory_it->second.consecutive_missing_frames <= max_missing_frames;
     }
 
-    // TODO:需要进一步确定
-    //  评分函数：结合优先级模式、距离、收敛情况
-    auto calculate_score(DeviceId device, RobotState const& tracker) const -> double {
-        double score = 0.0;
-
-        // 基础优先级评分
-        if (priority_mode.contains(device)) {
-            // RobotPriority 枚举值越小，优先级越高
-            score += (kPriorityScoreBase - static_cast<double>(priority_mode.at(device)));
+    auto priority_of(DeviceId device_id) const -> int {
+        if (auto it = priority_mode.find(device_id); it != priority_mode.end()) {
+            return it->second;
         }
+        return std::numeric_limits<int>::max();
+    }
 
-        // 距离加权：优先锁定近处的目标 (简单的 1/dist)
-        double dist = tracker.distance();
-        score += kDistanceScoreWeight / (dist + kDistanceScoreBias);
+    auto is_better_target(DeviceId lhs, DeviceId rhs) const -> bool {
+        auto rank = [&](DeviceId device_id) {
+            auto const& tracker = *trackers.at(device_id);
+            auto distance       = tracker.distance();
+            auto safe_distance =
+                std::isfinite(distance) ? distance : std::numeric_limits<double>::infinity();
 
-        // 优先延续已经收敛的目标，避免频繁切到未收敛目标导致停留 Detecting。
-        if (tracker.is_converged()) score += kConvergedScoreBonus;
+            // 比较顺序：优先级 -> 收敛状态 -> 距离 -> 固定 ID 兜底。
+            return std::tuple {
+                priority_of(device_id),    // 数值越小，优先级越高。
+                !tracker.is_converged(),   // 收敛目标映射为 0，未收敛目标映射为 1。
+                safe_distance,             // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
+                rmcs::to_index(device_id), // 完全相同时按固定顺序兜底，避免容器遍历顺序抖动。
+            };
+        };
 
-        // 粘滞性：如果已经是主目标，额外加分防止“摇头”
-        if (device == primary_target_id) score += kPrimaryTargetScoreBonus;
-
-        return score;
+        return rank(lhs) < rank(rhs);
     }
 
     DeviceId primary_target_id { DeviceId::UNKNOWN };
@@ -265,9 +276,9 @@ struct Decider::Impl {
         { DeviceId::ENGINEER, 4 },
         { DeviceId::INFANTRY_3, 1 },
         { DeviceId::INFANTRY_4, 1 },
-        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::INFANTRY_5, 5 },
         { DeviceId::SENTRY, 3 },
-        { DeviceId::OUTPOST, 5 },
+        { DeviceId::OUTPOST, 2 },
         { DeviceId::BASE, 5 },
         { DeviceId::UNKNOWN, 5 },
     };
@@ -276,10 +287,10 @@ struct Decider::Impl {
         { DeviceId::HERO, 1 },
         { DeviceId::ENGINEER, 2 },
         { DeviceId::INFANTRY_3, 1 },
-        { DeviceId::INFANTRY_4, 2 },
-        { DeviceId::INFANTRY_5, 3 },
+        { DeviceId::INFANTRY_4, 1 },
+        { DeviceId::INFANTRY_5, 5 },
         { DeviceId::SENTRY, 3 },
-        { DeviceId::OUTPOST, 5 },
+        { DeviceId::OUTPOST, 1 },
         { DeviceId::BASE, 5 },
         { DeviceId::UNKNOWN, 5 },
     };

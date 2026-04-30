@@ -21,7 +21,7 @@ public:
     struct Output {
         DeviceId target_id;
         std::optional<predictor::Snapshot> snapshot;
-        bool allow_takeover { false };
+        bool allow_control { false };
         bool tracking_confirmed { false };
     };
 

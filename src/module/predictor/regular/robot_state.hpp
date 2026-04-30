@@ -1,19 +1,22 @@
 #pragma once
-
-#include <chrono>
-#include <span>
-
 #include "module/predictor/regular/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/pimpl.hpp"
 
+#include <span>
+
 namespace rmcs::predictor {
 
 class RegularRobotState {
+    RMCS_PIMPL_DEFINITION(RegularRobotState)
+
 public:
     using EKF = EKFParameters::EKF;
 
     explicit RegularRobotState(TimePoint stamp) noexcept;
+    RegularRobotState(RegularRobotState&&) noexcept;
+
+    auto operator=(RegularRobotState&&) noexcept -> RegularRobotState&;
 
     auto initialize(Armor3D const& armor, TimePoint t) -> void;
     auto predict(TimePoint t) -> void;
@@ -23,11 +26,6 @@ public:
     auto is_converged() const -> bool;
     auto get_snapshot() const -> Snapshot;
     auto distance() const -> double;
-
-    RMCS_PIMPL_DEFINITION(RegularRobotState)
-public:
-    RegularRobotState(RegularRobotState&&) noexcept;
-    auto operator=(RegularRobotState&&) noexcept -> RegularRobotState&;
 };
 
 } // namespace rmcs::predictor

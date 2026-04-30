@@ -7,7 +7,6 @@
 namespace rmcs::debug {
 
 class ArmorVisualizer {
-
     RMCS_PIMPL_DEFINITION(ArmorVisualizer)
 
 public:

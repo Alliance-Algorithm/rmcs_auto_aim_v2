@@ -20,7 +20,7 @@ struct Capturer::Impl {
     std::unique_ptr<Interface> interface;
 
     Printer log { "Capturer" };
-    FramerateCounter loss_image_framerate {};
+    FramerateCounter loss_image_framerate { };
 
     std::chrono::milliseconds reconnect_wait_interval { 500 };
 
@@ -45,7 +45,7 @@ struct Capturer::Impl {
                 instantitation_result = std::unexpected { result.error() };
                 return;
             }
-            instantitation_result = {};
+            instantitation_result = { };
 
             interface = std::move(instance);
         };
@@ -74,7 +74,7 @@ struct Capturer::Impl {
         runtime_thread = std::jthread {
             [this](const auto& t) { runtime_task(t); },
         };
-        return {};
+        return { };
 
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
@@ -87,10 +87,14 @@ struct Capturer::Impl {
         }
     }
 
+    // 为了实时性，一般取最新的帧
     auto fetch_image() noexcept -> ImageUnique {
-        auto raw = RawImage { nullptr };
-        capture_queue.pop(raw);
-        return std::unique_ptr<Image> { raw };
+        auto result = ImageUnique { nullptr };
+        auto image  = RawImage { };
+        while (capture_queue.pop(image)) {
+            result = ImageUnique { image };
+        }
+        return result;
     }
 
     auto runtime_task(const std::stop_token& token) noexcept -> void {

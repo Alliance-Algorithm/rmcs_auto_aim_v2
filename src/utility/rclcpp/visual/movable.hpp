@@ -11,8 +11,8 @@ struct Movable {
     auto move(this auto& self, const std::tuple<Translation, Orientation>& tuple) noexcept {
         self.impl_move(std::get<0>(tuple), std::get<1>(tuple));
     }
-    auto move(this auto& self, const translation_trait auto& t,
-        const orientation_trait auto& q) noexcept {
+    auto move(this auto& self, const scalar3d_trait auto& t,
+        const scalar4d_trait auto& q) noexcept {
         self.impl_move(Translation { t }, Orientation { q });
     }
 };

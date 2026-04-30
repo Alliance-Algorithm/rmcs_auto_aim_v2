@@ -1,16 +1,15 @@
 #include "fire_control.hpp"
-
-#include <chrono>
-#include <cmath>
-#include <format>
-#include <optional>
-
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
 #include "module/fire_control/trajectory_solution.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <format>
+#include <optional>
 
 using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
@@ -22,11 +21,10 @@ struct FireControl::Impl {
         double yaw_offset;           // rad (config in degree)
         double pitch_offset;         // rad (config in degree)
 
-        double coming_angle;               // rad
-        double leaving_angle;              // rad
-        double outpost_coming_angle;       // rad
-        double outpost_leaving_angle;      // rad
-        double angular_velocity_threshold; // rad/s
+        double coming_angle;          // rad
+        double leaving_angle;         // rad
+        double outpost_coming_angle;  // rad
+        double outpost_leaving_angle; // rad
 
         // clang-format off
         constexpr static std::tuple metas {
@@ -39,7 +37,6 @@ struct FireControl::Impl {
             &Config::leaving_angle,"leaving_angle",
             &Config::outpost_coming_angle,"outpost_coming_angle",
             &Config::outpost_leaving_angle,"outpost_leaving_angle",
-            &Config::angular_velocity_threshold,"angular_velocity_threshold",
         };
         // clang-format on
     };
@@ -61,20 +58,18 @@ struct FireControl::Impl {
                 "Invalid initial_bullet_speed: {}", config.initial_bullet_speed) };
         }
 
-        config.yaw_offset                 = util::deg2rad(config.yaw_offset);
-        config.pitch_offset               = util::deg2rad(config.pitch_offset);
-        config.coming_angle               = util::deg2rad(config.coming_angle);
-        config.leaving_angle              = util::deg2rad(config.leaving_angle);
-        config.outpost_coming_angle       = util::deg2rad(config.outpost_coming_angle);
-        config.outpost_leaving_angle      = util::deg2rad(config.outpost_leaving_angle);
-        config.angular_velocity_threshold = util::deg2rad(config.angular_velocity_threshold);
+        config.yaw_offset            = util::deg2rad(config.yaw_offset);
+        config.pitch_offset          = util::deg2rad(config.pitch_offset);
+        config.coming_angle          = util::deg2rad(config.coming_angle);
+        config.leaving_angle         = util::deg2rad(config.leaving_angle);
+        config.outpost_coming_angle  = util::deg2rad(config.outpost_coming_angle);
+        config.outpost_leaving_angle = util::deg2rad(config.outpost_leaving_angle);
 
         auto chooser_config = AimPointChooser::Config {
-            .coming_angle               = config.coming_angle,
-            .leaving_angle              = config.leaving_angle,
-            .angular_velocity_threshold = config.angular_velocity_threshold,
-            .outpost_coming_angle       = config.outpost_coming_angle,
-            .outpost_leaving_angle      = config.outpost_leaving_angle,
+            .coming_angle          = config.coming_angle,
+            .leaving_angle         = config.leaving_angle,
+            .outpost_coming_angle  = config.outpost_coming_angle,
+            .outpost_leaving_angle = config.outpost_leaving_angle,
         };
         aim_point_chooser.initialize(chooser_config);
 
@@ -83,7 +78,7 @@ struct FireControl::Impl {
             return std::unexpected { std::format(
                 "shoot_evaluator init failed: {}", evaluate_result.error()) };
         }
-        return {};
+        return { };
     }
 
     const int kMaxIterateCount { 5 };
@@ -91,7 +86,7 @@ struct FireControl::Impl {
 
     auto make_result(const Armor3D& armor, bool control, double current_yaw)
         -> std::optional<Result> {
-        auto armor_position_in_world = Eigen::Vector3d {};
+        auto armor_position_in_world = Eigen::Vector3d { };
         armor.translation.copy_to(armor_position_in_world);
 
         auto target_d = std::sqrt(armor_position_in_world.x() * armor_position_in_world.x()
@@ -101,7 +96,7 @@ struct FireControl::Impl {
             return std::nullopt;
         }
 
-        auto solution           = TrajectorySolution {};
+        auto solution           = TrajectorySolution { };
         solution.input.v0       = config.initial_bullet_speed;
         solution.input.target_d = target_d;
         solution.input.target_h = target_h;
@@ -142,7 +137,7 @@ struct FireControl::Impl {
         const double bullet_speed = config.initial_bullet_speed;
         auto current_fly_time     = target_position_in_world.norm() / bullet_speed;
 
-        auto best_armor_opt = std::optional<Armor3D> {};
+        auto best_armor_opt = std::optional<Armor3D> { };
 
         for (int i = 0; i < kMaxIterateCount; ++i) {
             // 计算预测的时间点 = 子弹飞行时间 + 系统响应延迟
@@ -161,7 +156,7 @@ struct FireControl::Impl {
             }
             best_armor_opt = chosen_armor_opt;
 
-            auto armor_position_in_world = Eigen::Vector3d {};
+            auto armor_position_in_world = Eigen::Vector3d { };
             best_armor_opt->translation.copy_to(armor_position_in_world);
 
             auto target_d = std::sqrt(armor_position_in_world.x() * armor_position_in_world.x()
@@ -170,7 +165,7 @@ struct FireControl::Impl {
                 continue;
             }
 
-            auto solution           = TrajectorySolution {};
+            auto solution           = TrajectorySolution { };
             solution.input.v0       = bullet_speed;
             solution.input.target_d = target_d;
             solution.input.target_h = armor_position_in_world.z();

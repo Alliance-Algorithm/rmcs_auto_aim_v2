@@ -38,6 +38,12 @@ struct Transform {
             },
         };
     };
+    static constexpr auto kIdentity() {
+        return Transform {
+            Translation { 0, 0, 0 },
+            Orientation { 0, 0, 0, 1 },
+        };
+    }
 };
 
 struct AutoAimState {
@@ -46,8 +52,8 @@ struct AutoAimState {
 
     TimePoint timestamp { };
 
-    bool gimbal_takeover { false };
-    bool shoot_permitted = { false };
+    bool should_control { false };
+    bool should_shoot = { false };
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
@@ -56,12 +62,12 @@ struct AutoAimState {
 
     static auto kInvalid() {
         return AutoAimState {
-            .timestamp       = Clock::now(),
-            .gimbal_takeover = false,
-            .shoot_permitted = false,
-            .yaw             = std::numeric_limits<double>::quiet_NaN(),
-            .pitch           = std::numeric_limits<double>::quiet_NaN(),
-            .target          = DeviceId::UNKNOWN,
+            .timestamp      = Clock::now(),
+            .should_control = false,
+            .should_shoot   = false,
+            .yaw            = std::numeric_limits<double>::quiet_NaN(),
+            .pitch          = std::numeric_limits<double>::quiet_NaN(),
+            .target         = DeviceId::UNKNOWN,
         };
     }
 };
@@ -79,7 +85,7 @@ struct ControlState {
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
 
-    Transform odom_to_camera_transform { };
+    Transform camera_transform { }; // Imu Odom Link
 
     struct {
         TimePoint timestamp = Clock::now();
@@ -92,13 +98,24 @@ struct ControlState {
 
     static auto kInvalid() {
         return ControlState {
-            .timestamp                = Clock::now(),
-            .shoot_mode               = ShootMode::STOPPING,
-            .yaw                      = std::numeric_limits<double>::quiet_NaN(),
-            .pitch                    = std::numeric_limits<double>::quiet_NaN(),
-            .odom_to_camera_transform = Transform::kNaN(),
-            .capture_signals          = { },
-            .invincible_devices       = DeviceIds::None(),
+            .timestamp          = Clock::now(),
+            .shoot_mode         = ShootMode::STOPPING,
+            .yaw                = std::numeric_limits<double>::quiet_NaN(),
+            .pitch              = std::numeric_limits<double>::quiet_NaN(),
+            .camera_transform   = Transform::kNaN(),
+            .capture_signals    = { },
+            .invincible_devices = DeviceIds::None(),
+        };
+    }
+    static auto kIdentity() {
+        return ControlState {
+            .timestamp          = Clock::now(),
+            .shoot_mode         = ShootMode::BATTLE,
+            .yaw                = 0,
+            .pitch              = 0,
+            .camera_transform   = Transform::kIdentity(),
+            .capture_signals    = { },
+            .invincible_devices = DeviceIds::None(),
         };
     }
 };

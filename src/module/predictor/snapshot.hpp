@@ -14,10 +14,8 @@ struct ISnapshotBackend;
 class Snapshot;
 
 namespace detail {
-
     auto make_snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept -> Snapshot;
-
-} // namespace detail
+}
 
 class Snapshot {
 public:
@@ -41,6 +39,8 @@ public:
     auto kinematics() const -> Kinematics;
     auto kinematics_at(TimePoint t) const -> Kinematics;
 
+    auto predicted_armors() const { return predicted_armors(Clock::now()); }
+
     auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
 
 private:
@@ -52,4 +52,4 @@ private:
         -> Snapshot;
 };
 
-} // namespace rmcs::predictor
+}

@@ -56,13 +56,20 @@ private:
     auto streaming_thread(const std::stop_token& token) noexcept -> void {
         notifier("Streaming thread starts");
 
-        while (!token.stop_requested()) {
+        // 按照帧率循环，每次只取最新的 Frame
+        auto interval = std::chrono::nanoseconds {
+            static_cast<long long>(std::round(1.0 / context->video_format().hz * 1e9)),
+        };
 
-            auto current_frame = cv::Mat {};
-            if (buffer.pop(current_frame)) {
-                context->write(current_frame);
+        while (!token.stop_requested()) {
+            auto now = std::chrono::steady_clock::now();
+
+            auto latest = cv::Mat { };
+            while (buffer.pop(latest)) { }
+            if (!latest.empty()) {
+                context->write(latest);
             }
-            std::this_thread::yield();
+            std::this_thread::sleep_until(now + interval);
         }
         notifier("Streaming thread stops");
     }
@@ -92,7 +99,7 @@ private:
     static auto get_same_subnet_ipv4(std::string_view target_ip_str)
         -> std::expected<std::string, std::string> {
 
-        auto target_addr = in_addr {};
+        auto target_addr = in_addr { };
         if (inet_pton(AF_INET, target_ip_str.data(), &target_addr) != 1) {
             return std::unexpected(std::format("Invalid target IP address: {}", target_ip_str));
         }

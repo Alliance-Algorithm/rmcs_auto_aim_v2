@@ -1,15 +1,15 @@
 #pragma once
-
-#include <chrono>
-#include <span>
-
 #include "module/predictor/snapshot.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 
+#include <span>
+
 namespace rmcs::predictor {
+
 struct RobotState {
     RMCS_PIMPL_DEFINITION(RobotState)
+
 public:
     auto initialize(Armor3D const&, TimePoint) -> void;
 
@@ -23,4 +23,5 @@ public:
 
     auto distance() const -> double;
 };
+
 }

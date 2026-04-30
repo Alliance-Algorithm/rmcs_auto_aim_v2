@@ -15,7 +15,7 @@ public:
     static constexpr auto get_prefix() noexcept { return "visualization"; }
 
     auto operator<<(const Image& image) noexcept -> Visualization& {
-        return send_image(image), *this;
+        return update_image(image), *this;
     }
 
 public:
@@ -24,10 +24,15 @@ public:
 
     auto initialized() const noexcept -> bool;
 
-    auto send_image(const Image& image) noexcept -> bool;
+    auto update_image(const Image& image) noexcept -> bool;
 
-    auto solved_pnp_armors(std::span<Armor3D const> armors) const -> bool;
-    auto predicted_armors(std::span<Armor3D const> armors) const -> bool;
+    auto update_visible_armors(std::span<Armor3D const> armors) const -> bool;
+
+    auto update_visible_robot(std::span<Armor3D const> armors) const -> bool;
+
+    auto update_aiming_direction(double yaw, double pitch) const -> void;
+
+    auto update_camera_pose(const Orientation&) const -> void;
 };
 
 }

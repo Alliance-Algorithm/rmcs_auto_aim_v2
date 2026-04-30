@@ -83,6 +83,7 @@ if(HIKCAMERA_AVAILABLE)
     add_executable(
         hikcamera
         ${TOOL_DIR}/hikcamera.cpp
+        ${RMCS_SRC_DIR}/utility/image/recorder.cpp
     )
     target_link_libraries(
         hikcamera

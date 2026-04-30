@@ -15,7 +15,7 @@
 #include "assets_manager.hpp"
 #include "module/identifier/armor_detection.hpp"
 #include "utility/image/image.details.hpp"
-#include "utility/math/point.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/robot/armor.hpp"
 
@@ -61,12 +61,12 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
 
     auto distort_coeff = std::array<double, 5> { k1, k2, 0, 0, k3 };
     PnpSolution::Input input {};
-    input.camera_matrix = { {
+    input.camera.camera_matrix = { {
         { fx, 0.0, cx },
         { 0.0, fy, cy },
         { 0.0, 0.0, 1.0 },
     } };
-    input.distort_coeff = distort_coeff;
+    input.camera.distort_coeff = distort_coeff;
 
     return input;
 }

@@ -6,6 +6,7 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/panic.hpp"
@@ -100,87 +101,91 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
+    auto framerate = FramerateCounter { };
+    framerate.set_interval(std::chrono::seconds { 5 });
+
     while (util::get_running()) {
         node.spin_once();
 
-        auto updated = feishu.heartbeat();
+        if (!without_rmcs && !feishu.heartbeat()) continue;
 
         auto image = capturer.fetch_image();
         if (!image) continue;
 
-        [[maybe_unused]] auto _ = std::experimental::scope_exit { [&] {
-            if (visualization.initialized()) {
-                visualization.send_image(*image);
-            }
-        } };
+        auto context = ControlState::kIdentity();
+        if (!without_rmcs) {
+            using namespace std::chrono_literals;
+            auto closest_state = feishu.search(image->get_timestamp(), 50ms);
+            if (!closest_state) continue;
 
-        auto received = ControlState::kInvalid();
-        if (!without_rmcs && updated) {
-            received = *feishu.latest();
+            context = *closest_state;
         }
+        visualization.update_camera_pose(context.camera_transform.orientation);
+
+        if (framerate.tick()) {
+            node.info("Autoaim Framerate: {}", framerate.fps());
+        }
+
+        // 结束流程后发送串流帧
+        [[maybe_unused]] auto _ =
+            std::experimental::scope_exit { [&] { visualization.update_image(*image); } };
 
         /// 1. Identify Armor
         ///
         auto armors_2d = Armor2Ds { };
-        auto result    = identifier.sync_identify(*image);
-        if (!result.has_value()) {
-            logging.error("detection", "Armor detection failed");
-        } else {
+        {
+            auto result = identifier.sync_identify(*image);
+            if (!result.has_value()) {
+                logging.error("detection", "Something wrong happend in identifier");
+                continue; // 一般不会推理出错喵~
+            }
+            if (use_painted_image) {
+                for (const auto& armor : *result)
+                    util::draw(*image, armor);
+            }
             logging.reset("detection", 5);
 
-            tracker.set_invincible_armors(received.invincible_devices);
-            auto filtered = tracker.filter_armors(*result);
-            if (use_painted_image) {
-                for (const auto& armor_2d : filtered)
-                    util::draw(*image, armor_2d);
-            }
+            tracker.set_invincible_armors(context.invincible_devices);
+            armors_2d = tracker.filter_armors(*result);
 
-            armors_2d = std::move(filtered);
+            if (armors_2d.empty()) continue;
         }
 
         /// 2. Transform 2d to 3d
         ///
         auto armors_3d = Armor3Ds { };
-        if (!armors_2d.empty()) {
-            auto solved_armors_3d = pose_estimator.solve_pnp(armors_2d);
-            if (solved_armors_3d && visualization.initialized()) {
-                std::ignore = visualization.solved_pnp_armors(*solved_armors_3d);
-            }
+        {
+            pose_estimator.update_camera_transform(context.camera_transform);
+            if (auto result = pose_estimator.solve_pnp(armors_2d)) {
+                armors_3d = pose_estimator.odom_to_camera(*result);
 
-            if (solved_armors_3d) {
-                pose_estimator.set_odom_to_camera_transform(received.odom_to_camera_transform);
-                armors_3d = pose_estimator.odom_to_camera(*solved_armors_3d);
+                visualization.update_visible_armors(*result);
             }
+            if (armors_3d.empty()) continue;
         }
 
         /// 3. Apply Tracker
         ///
-        auto target    = tracker.decide(armors_3d, image->get_timestamp());
-        auto target_id = target.target_id;
-        auto snapshot  = std::move(target.snapshot);
+        auto target = tracker.decide(armors_3d, image->get_timestamp());
 
-        auto command = AutoAimState::kInvalid();
-        if (target.allow_takeover) {
-            command.timestamp       = Clock::now();
-            command.gimbal_takeover = true;
-            command.shoot_permitted = false;
-            command.yaw             = received.yaw;
-            command.pitch           = received.pitch;
-            command.target          = target_id;
-        }
+        if (!target.snapshot) continue;
 
-        if (target.allow_takeover && snapshot) {
-            if (auto result =
-                    fire_control.solve(*snapshot, target.tracking_confirmed, received.yaw)) {
-                command.shoot_permitted = result->shoot_permitted;
-                command.yaw             = result->yaw;
-                command.pitch           = result->pitch;
+        auto& snapshot = target.snapshot;
+        auto command   = AutoAimState::kInvalid();
+        if (target.allow_control) {
+            const auto control = target.tracking_confirmed;
+            const auto yaw     = context.yaw;
+            if (auto result = fire_control.solve(*snapshot, control, yaw)) {
+                command.should_control = true;
+                command.target         = target.target_id;
+                command.should_shoot   = result->shoot_permitted;
+                command.yaw            = result->yaw;
+                command.pitch          = result->pitch;
             }
         }
 
-        if (visualization.initialized() && snapshot) {
-            visualization.predicted_armors(snapshot->predicted_armors(Clock::now()));
-        }
+        auto armors = snapshot->predicted_armors(Clock::now());
+        visualization.update_visible_robot(armors);
 
         /// 4. Transmit State
         ///

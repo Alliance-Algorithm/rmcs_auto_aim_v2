@@ -77,11 +77,24 @@ ament_add_gtest(
     ${TEST_DIR}/device_id.cpp
 )
 
+# Image Recorder
+ament_add_gtest(
+    test_image_recorder
+    ${TEST_DIR}/image_recorder.cpp
+    ${RMCS_SRC_DIR}/utility/image/recorder.cpp
+)
+target_link_libraries(
+    test_image_recorder
+    ${OpenCV_LIBRARIES}
+)
+
 # Solve pnp
 ament_add_gtest(
     test_solve_pnp
     ${TEST_DIR}/solve_pnp.cpp
     ${RMCS_SRC_DIR}/utility/math/solve_pnp/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp/yaw_optimizer.cpp
+    ${RMCS_SRC_DIR}/utility/math/camera.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
     ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
@@ -120,4 +133,3 @@ ament_add_gtest(
     test_feishu
     ${TEST_DIR}/feishu_test.cpp
 )
-
