@@ -101,7 +101,7 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
-    auto framerate = FramerateCounter { };
+    auto framerate = FramerateCounter {};
     framerate.set_interval(std::chrono::seconds { 5 });
 
     while (util::get_running()) {
@@ -132,7 +132,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds { };
+        auto armors_2d = Armor2Ds {};
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) {
@@ -153,7 +153,7 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds { };
+        auto armors_3d = Armor3Ds {};
         {
             pose_estimator.update_camera_transform(context.camera_transform);
             if (auto result = pose_estimator.solve_pnp(armors_2d)) {
@@ -176,11 +176,16 @@ auto main() -> int {
             const auto control = target.tracking_confirmed;
             const auto yaw     = context.yaw;
             if (auto result = fire_control.solve(*snapshot, control, yaw)) {
-                command.should_control = true;
-                command.target         = target.target_id;
-                command.should_shoot   = result->shoot_permitted;
-                command.yaw            = result->yaw;
-                command.pitch          = result->pitch;
+                command.should_control    = true;
+                command.target            = target.target_id;
+                command.should_shoot      = result->shoot_permitted;
+                command.yaw               = result->yaw;
+                command.pitch             = result->pitch;
+                command.yaw_rate          = result->yaw_rate;
+                command.pitch_rate        = result->pitch_rate;
+                command.yaw_acc           = result->yaw_acc;
+                command.pitch_acc         = result->pitch_acc;
+                command.feedforward_valid = result->feedforward_valid;
                 command.robot_center      = Translation { result->center_position };
             }
         }
