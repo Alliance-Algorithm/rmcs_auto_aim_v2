@@ -7,6 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
+include(FetchContent)
+
+if(NOT TARGET tinympcstatic)
+    FetchContent_Declare(
+        tinympc
+        GIT_REPOSITORY https://github.com/Alliance-Algorithm/TinyMPC.git
+        GIT_TAG main
+        SOURCE_SUBDIR src/tinympc
+    )
+    FetchContent_MakeAvailable(tinympc)
+    if(TARGET tinympcstatic AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(tinympcstatic PRIVATE -w)
+    endif()
+endif()
+
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
