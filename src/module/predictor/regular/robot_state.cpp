@@ -6,22 +6,16 @@
 #include <vector>
 
 #include "module/predictor/regular/snapshot.hpp"
-#include "utility/math/mahalanobis.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::predictor;
 
 struct RegularRobotState::Impl {
-
     struct MatchResult {
         int armor_id;
         double error;
         bool is_valid;
     };
-
-    static constexpr auto kResetInterval       = std::chrono::duration<double> { 1.0 };
-    static constexpr auto kAngleErrorThreshold = double { 0.35 };
-    static constexpr auto kChi2Gate           = double { 13.277 };
 
     DeviceId device { DeviceId::UNKNOWN };
     CampColor color { CampColor::UNKNOWN };
@@ -32,7 +26,9 @@ struct RegularRobotState::Impl {
 
     bool initialized { false };
     int update_count { 0 };
-    int nis_fail_count { 0 };
+
+    const std::chrono::duration<double> reset_interval { 1.0 };
+    const double angle_error_threshold { 0.65 };
 
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
@@ -43,19 +39,19 @@ struct RegularRobotState::Impl {
         armor_num      = EKFParameters::armor_num(armor.genre);
         time_stamp     = t;
         update_count   = 0;
-        nis_fail_count = 0;
         ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
         initialized = true;
     }
 
     auto predict(TimePoint t) -> void {
+        if (t <= time_stamp) return;
+
         if (initialized) {
             auto dt = util::delta_time(t, time_stamp);
-            if (dt > kResetInterval) {
-                initialized    = false;
-                update_count   = 0;
-                nis_fail_count = 0;
-                time_stamp     = t;
+            if (dt > reset_interval) {
+                initialized  = false;
+                update_count = 0;
+                time_stamp   = t;
                 return;
             }
 
@@ -114,32 +110,25 @@ private:
         auto const ypr_in_world = util::eulers(orientation);
         auto const ypd_in_world = util::xyz2ypd(xyz);
 
-        auto get_error = [&](auto const& pred) {
-            auto ypd_pred = util::xyz2ypd(pred.template head<3>());
-            return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
+        auto it =
+            std::ranges::min_element(armors_xyza, [&](auto const& a_xyza, auto const& b_xyza) {
+                auto get_error = [&](auto const& pred) {
+                    auto ypd_pred = util::xyz2ypd(pred.template head<3>());
+                    return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
+                        + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
+                };
+
+                return get_error(a_xyza) < get_error(b_xyza);
+            });
+
+        auto const best_id   = static_cast<int>(std::distance(armors_xyza.begin(), it));
+        auto const min_error = [&] {
+            auto ypd_pred = util::xyz2ypd(it->template head<3>());
+            return std::abs(util::normalize_angle(ypr_in_world[0] - (*it)[3]))
                 + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
-        };
+        }();
 
-        auto ranked = std::vector<std::pair<int, double>> { };
-        ranked.reserve(armors_xyza.size());
-        for (int id = 0; id < static_cast<int>(armors_xyza.size()); ++id)
-            ranked.emplace_back(id, (armors_xyza[id].template head<3>() - xyz).norm());
-        std::ranges::sort(ranked, { }, &std::pair<int, double>::second);
-
-        auto const kMaxCandidates { 3 };
-        auto best_id    = int { -1 };
-        auto best_error = double { std::numeric_limits<double>::max() };
-
-        for (auto id = 0; id < std::min(kMaxCandidates, static_cast<int>(ranked.size())); ++id) {
-            auto candidate_id    = ranked[id].first;
-            auto candidate_error = get_error(armors_xyza[candidate_id]);
-            if (candidate_error < best_error) {
-                best_error = candidate_error;
-                best_id    = candidate_id;
-            }
-        }
-
-        return { best_id, best_error, best_error < kAngleErrorThreshold };
+        return { best_id, min_error, min_error < angle_error_threshold };
     }
 
     auto update_single(Armor3D const& armor) -> bool {
@@ -160,41 +149,17 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto id = match_result.armor_id;
-        auto z  = EKF::ZVec { };
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], ypr[0];
-
-        auto r      = EKFParameters::R(xyz, ypr, ypd);
-        auto z_pred = EKFParameters::h(device, ekf.x, id, armor_num);
-        auto h_jac  = EKFParameters::H(device, ekf.x, id, armor_num);
-        auto y      = EKFParameters::z_subtract(z, z_pred);
-        auto s      = h_jac * ekf.P() * h_jac.transpose() + r;
-        auto nis    = util::mahalanobis_distance(y, s);
-        if (!nis.has_value() || *nis > kChi2Gate) {
-            ++nis_fail_count;
-            return false;
-        }
-
-        auto x_pre  = ekf.x;
-        auto P_pre  = ekf.P();
 
         ekf.update(
             z,
-            [id, this](EKF::XVec const& x) { return EKFParameters::h(device, x, id, armor_num); },
-            [id, this](EKF::XVec const& x) { return EKFParameters::H(device, x, id, armor_num); },
-            r, EKFParameters::x_add, EKFParameters::z_subtract);
+            [id = match_result.armor_id, this](
+                EKF::XVec const& x) { return EKFParameters::h(device, x, id, armor_num); },
+            [id = match_result.armor_id, this](
+                EKF::XVec const& x) { return EKFParameters::H(device, x, id, armor_num); },
+            EKFParameters::R(xyz, ypr, ypd), EKFParameters::x_add, EKFParameters::z_subtract);
 
-        auto const r_ok = ekf.x[8] > 0.05 && ekf.x[8] < 0.5;
-        auto const l_ok =
-            (ekf.x[8] + ekf.x[9]) > 0.05 && (ekf.x[8] + ekf.x[9]) < 0.5;
-        if (!r_ok || !l_ok) {
-            ekf.x  = x_pre;
-            ekf.P() = P_pre;
-            ++nis_fail_count;
-            return false;
-        }
-
-        nis_fail_count = 0;
         return true;
     }
 

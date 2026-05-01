@@ -10,6 +10,7 @@
 #include <limits>
 
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/switch.hpp>
 
 namespace rmcs {
 
@@ -25,6 +26,8 @@ public:
         register_output("/auto_aim/should_control", should_control, false);
         register_output("/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
         register_output("/auto_aim/should_shoot", should_shoot, false);
+
+        register_input("/remote/switch/right", right_switch);
 
         using namespace std::chrono_literals;
         framerate.set_interval(2s);
@@ -50,12 +53,17 @@ public:
 
         if (!feishu.heartbeat()) return;
 
+        *target_direction = kVectorNaN;
+
+        // 超时检测
         auto command = *feishu.latest();
         if (Clock::now() - command.timestamp > kAutoAimTimeout) {
             *should_control = false;
             *should_shoot   = false;
+            return;
         }
 
+        // 业务开关
         *should_control = command.should_control;
         *should_shoot   = command.should_shoot;
 
@@ -72,6 +80,11 @@ public:
 
 private:
     static constexpr auto kAutoAimTimeout = std::chrono::milliseconds { 100 };
+    static inline const auto kVectorNaN   = Eigen::Vector3d {
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+    };
 
     Adapter adapter;
 
@@ -85,6 +98,8 @@ private:
     OutputInterface<bool> should_control;
     OutputInterface<bool> should_shoot;
     OutputInterface<Eigen::Vector3d> target_direction;
+
+    InputInterface<rmcs_msgs::Switch> right_switch;
 
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
@@ -107,6 +122,8 @@ private:
 
         context.yaw   = current_gimbal_yaw;
         context.pitch = current_gimbal_pitch;
+
+        context.enable_autoaim = *right_switch == rmcs_msgs::Switch::UP;
 
         return context;
     }

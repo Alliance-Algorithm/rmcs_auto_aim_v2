@@ -118,6 +118,12 @@ public:
         }
         return to_return;
     }
+
+    template <typename F>
+        requires std::invocable<F, const RecvT&>
+    auto search(F&& method) const noexcept -> std::optional<RecvT> {
+        std::ignore = method; // TODO:
+    }
 };
 
 }

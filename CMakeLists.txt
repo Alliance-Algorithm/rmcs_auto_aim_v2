@@ -1,12 +1,24 @@
 cmake_minimum_required(VERSION 3.22)
 project(rmcs_auto_aim_v2)
 
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE "Release")
 add_compile_options(-Wall -Wextra -Wpedantic -O3)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    tinympc
+    GIT_REPOSITORY https://github.com/Alliance-Algorithm/TinyMPC.git
+    GIT_TAG main
+    SOURCE_SUBDIR src/tinympc
+)
+FetchContent_MakeAvailable(tinympc)
+if(TARGET tinympcstatic AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(tinympcstatic PRIVATE -w)
+endif()
 
 ## 依赖查找
 find_package(yaml-cpp REQUIRED)
@@ -71,14 +83,17 @@ add_library(
 )
 target_link_libraries(
     ${PROJECT_NAME}_module
-    yaml-cpp::yaml-cpp
-    ament_index_cpp::ament_index_cpp
-    openvino::runtime
-    rclcpp::rclcpp
-    ${OpenCV_LIBS}
-    ${hikcamera_LIBRARIES}
-    ${visualization_msgs_LIBRARIES}
-    ${geometry_msgs_LIBRARIES}
+    PUBLIC
+        yaml-cpp::yaml-cpp
+        ament_index_cpp::ament_index_cpp
+        openvino::runtime
+        rclcpp::rclcpp
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+        ${visualization_msgs_LIBRARIES}
+        ${geometry_msgs_LIBRARIES}
+    PRIVATE
+        tinympcstatic
 )
 
 ## 组件构建: component

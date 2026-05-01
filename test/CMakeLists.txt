@@ -133,3 +133,24 @@ ament_add_gtest(
     test_feishu
     ${TEST_DIR}/feishu_test.cpp
 )
+
+# Tiny MPC solver
+ament_add_gtest(
+    test_tiny_mpc_solver
+    ${TEST_DIR}/tiny_mpc_solver.cpp
+)
+target_link_libraries(
+    test_tiny_mpc_solver
+    tinympcstatic
+)
+
+# Tiny MPC axis solver
+ament_add_gtest(
+    test_tiny_mpc_axis_solver
+    ${TEST_DIR}/tiny_mpc_axis_solver.cpp
+    ${RMCS_SRC_DIR}/module/fire_control/planner/tiny_mpc_axis_solver.cpp
+)
+target_link_libraries(
+    test_tiny_mpc_axis_solver
+    tinympcstatic
+)

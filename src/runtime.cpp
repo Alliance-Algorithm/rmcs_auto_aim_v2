@@ -122,6 +122,11 @@ auto main() -> int {
         }
         visualization.update_camera_pose(context.camera_transform.orientation);
 
+        // if (context.enable_autoaim == false) {
+        //     feishu.send(AutoAimState::kInvalid());
+        //     continue;
+        // }
+
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
         }
@@ -166,13 +171,10 @@ auto main() -> int {
 
         /// 3. Apply Tracker
         ///
-        auto target = tracker.decide(armors_3d, image->get_timestamp());
-
-        if (!target.snapshot) continue;
-
-        auto& snapshot = target.snapshot;
-        auto command   = AutoAimState::kInvalid();
-        if (target.allow_control) {
+        auto target  = tracker.decide(armors_3d, image->get_timestamp());
+        auto command = AutoAimState::kInvalid();
+        if (target.allow_control && target.snapshot) {
+            auto& snapshot     = target.snapshot;
             const auto control = target.tracking_confirmed;
             const auto yaw     = context.yaw;
             if (auto result = fire_control.solve(*snapshot, control, yaw)) {
@@ -182,10 +184,9 @@ auto main() -> int {
                 command.yaw            = result->yaw;
                 command.pitch          = result->pitch;
             }
+            auto armors = snapshot->predicted_armors(Clock::now());
+            visualization.update_visible_robot(armors);
         }
-
-        auto armors = snapshot->predicted_armors(Clock::now());
-        visualization.update_visible_robot(armors);
 
         /// 4. Transmit State
         ///

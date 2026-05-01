@@ -1,6 +1,6 @@
 localhost_develop: false
-use_visualization: false
-use_painted_image: false
+use_visualization: true
+use_painted_image: true
 
 capturer:
   show_loss_framerate: false
@@ -78,13 +78,24 @@ pose_estimator:
 fire_control:
   initial_bullet_speed: 23.0 # m/s
   shoot_delay: 0.1 # s
-  yaw_offset: 0.0 # degree
+  yaw_offset: +2.5 # degree
   pitch_offset: 0.0 # degree
 
   coming_angle: 55.0 # degree
   leaving_angle: 30.0 # degree
   outpost_coming_angle: 50.0 # degree
   outpost_leaving_angle: 40.0 # degree
+  angular_velocity_threshold: 120.0 # degree/s
+
+  mpc_enable: true
+  mpc_max_yaw_acc: 50.0
+  mpc_yaw_q_angle: 9000000.0
+  mpc_yaw_q_rate: 0.0
+  mpc_yaw_r_acc: 1.0
+  mpc_max_pitch_acc: 100.0
+  mpc_pitch_q_angle: 9000000.0
+  mpc_pitch_q_rate: 0.0
+  mpc_pitch_r_acc: 1.0
 
   first_tolerance: 3 # 近距离射击容差，degree
   second_tolerance: 2 # 远距离射击容差，degree

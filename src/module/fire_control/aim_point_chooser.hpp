@@ -17,6 +17,7 @@ public:
     struct Config {
         double coming_angle;          // rad
         double leaving_angle;         // rad
+        double angular_velocity_threshold; // rad/s
         double outpost_coming_angle;  // rad
         double outpost_leaving_angle; // rad
     };

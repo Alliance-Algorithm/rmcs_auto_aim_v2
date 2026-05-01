@@ -13,6 +13,7 @@ namespace rmcs::kernel {
 
 struct Tracker {
     RMCS_PIMPL_DEFINITION(Tracker)
+
 public:
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 

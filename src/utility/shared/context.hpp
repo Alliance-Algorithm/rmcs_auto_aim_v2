@@ -9,14 +9,6 @@ namespace rmcs {
 template <class T>
 concept context_trait = std::is_trivially_copyable_v<T>;
 
-enum class ShootMode {
-    STOPPING,
-    OUTPOST,
-    BATTLE,
-    BUFF_SMALL,
-    BUFF_LARGE,
-};
-
 struct AutoAimState {
     static constexpr auto kLabel  = "/shm_autoaim_state";
     static constexpr auto kLength = 512;
@@ -51,7 +43,8 @@ struct SystemContext {
     /// Dynamic Context
     ///
     TimePoint timestamp { };
-    ShootMode shoot_mode { ShootMode::BATTLE };
+
+    bool enable_autoaim = false;
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
@@ -65,7 +58,7 @@ struct SystemContext {
     static auto kInvalid() {
         return SystemContext {
             .timestamp          = Clock::now(),
-            .shoot_mode         = ShootMode::STOPPING,
+            .enable_autoaim     = false,
             .yaw                = std::numeric_limits<double>::quiet_NaN(),
             .pitch              = std::numeric_limits<double>::quiet_NaN(),
             .camera_transform   = Transform::kNaN(),
@@ -75,7 +68,7 @@ struct SystemContext {
     static auto kIdentity() {
         return SystemContext {
             .timestamp          = Clock::now(),
-            .shoot_mode         = ShootMode::BATTLE,
+            .enable_autoaim     = true,
             .yaw                = 0,
             .pitch              = 0,
             .camera_transform   = Transform::kIdentity(),
