@@ -18,7 +18,7 @@ auto CameraFeature::distortion() const -> cv::Mat {
 }
 
 auto CameraFeature::orientation() const -> cv::Mat {
-    auto q_ros            = world_to_camera_orientation.make<Eigen::Quaterniond>();
+    auto q_ros            = camera_orientation.make<Eigen::Quaterniond>();
     auto r_ros            = q_ros.toRotationMatrix();
     Eigen::Matrix3d r_ocv = ros2opencv_rotation(r_ros);
 
@@ -28,7 +28,7 @@ auto CameraFeature::orientation() const -> cv::Mat {
 }
 
 auto CameraFeature::translation() const -> cv::Vec3d {
-    auto t_ros            = world_to_camera_translation.make<Eigen::Vector3d>();
+    auto t_ros            = camera_translation.make<Eigen::Vector3d>();
     Eigen::Vector3d t_ocv = ros2opencv_position(t_ros);
     return { t_ocv[0], t_ocv[1], t_ocv[2] };
 }
