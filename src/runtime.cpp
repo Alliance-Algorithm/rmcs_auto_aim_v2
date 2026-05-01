@@ -176,6 +176,7 @@ auto main() -> int {
             const auto control = target.tracking_confirmed;
             const auto yaw     = context.yaw;
             if (auto result = fire_control.solve(*snapshot, control, yaw)) {
+
                 command.should_control    = true;
                 command.target            = target.target_id;
                 command.should_shoot      = result->shoot_permitted;
@@ -189,6 +190,9 @@ auto main() -> int {
                 command.robot_center      = Translation { result->center_position };
             }
         }
+
+        visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
+            command.pitch_rate, command.yaw_acc, command.pitch_acc);
 
         auto armors = snapshot->predicted_armors(Clock::now());
         visualization.update_visible_robot(armors);

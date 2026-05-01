@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
+#include "module/debug/visualization/mpc_plan_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
@@ -54,6 +55,7 @@ struct Visualization::Impl {
 
     std::unique_ptr<debug::ArmorVisualizer> armors_detect;
     std::unique_ptr<debug::ArmorVisualizer> armors_group;
+    std::unique_ptr<debug::MpcPlanVisualizer> mpc_plan;
     std::unique_ptr<visual::Arrow> aiming_direction;
     std::unique_ptr<visual::Transform> camera_transform;
 
@@ -64,10 +66,11 @@ struct Visualization::Impl {
         session       = std::make_unique<debug::StreamSession>();
         armors_detect = std::make_unique<debug::ArmorVisualizer>();
         armors_group  = std::make_unique<debug::ArmorVisualizer>();
+        mpc_plan      = std::make_unique<debug::MpcPlanVisualizer>();
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
-        auto config = Config { };
+        auto config = Config {};
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
@@ -87,6 +90,7 @@ struct Visualization::Impl {
 
         armors_detect->initialize(visual_node);
         armors_group->initialize(visual_node);
+        mpc_plan->initialize(visual_node);
         aiming_direction = std::make_unique<visual::Arrow>(visual::Arrow::Config {
             .rclcpp = visual_node,
             .name   = "aiming_direction",
@@ -100,7 +104,7 @@ struct Visualization::Impl {
         });
 
         is_initialized = true;
-        return { };
+        return {};
     }
 
     auto initialized() const noexcept { return is_initialized; }
@@ -163,6 +167,13 @@ struct Visualization::Impl {
         aiming_direction->update();
     }
 
+    auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+        double yaw_acc, double pitch_acc) const -> void {
+        if (!is_initialized) return;
+        mpc_plan->publish_planned_yaw(yaw, yaw_rate, yaw_acc);
+        mpc_plan->publish_planned_pitch(pitch, pitch_rate, pitch_acc);
+    }
+
     auto update_camera_pose(const Orientation& orientation) const -> void {
         if (!is_initialized) return;
         camera_transform->move(Translation::kZero(), orientation);
@@ -190,6 +201,11 @@ auto Visualization::update_visible_robot(std::span<Armor3D const> armors) const 
 
 auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {
     pimpl->update_aiming_direction(yaw, pitch);
+}
+
+auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+    double yaw_acc, double pitch_acc) const -> void {
+    pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
 auto Visualization::update_camera_pose(const Orientation& orientation) const -> void {

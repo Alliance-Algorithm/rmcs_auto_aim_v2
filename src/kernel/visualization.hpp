@@ -32,6 +32,9 @@ public:
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 
+    auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+        double yaw_acc, double pitch_acc) const -> void;
+
     auto update_camera_pose(const Orientation&) const -> void;
 };
 
