@@ -9,21 +9,19 @@
 #include "utility/shared/context.hpp"
 
 using namespace std::chrono_literals;
-using rmcs::AutoAimState;
-using rmcs::Clock;
-using rmcs::ControlState;
-using rmcs::kernel::Feishu;
+using namespace rmcs;
+using namespace rmcs::kernel;
 
 TEST(FeishuIntegration, BidirectionalCommunication) {
     const auto pid = ::fork();
     ASSERT_NE(pid, -1);
 
     if (pid == 0) {
-        auto feishu_child = Feishu<AutoAimState, ControlState> { };
+        auto feishu_child = Feishu<AutoAimState, SystemContext> { };
         std::this_thread::sleep_for(50ms);
 
         auto deadline = Clock::now() + 500ms;
-        auto ctrl     = std::optional<ControlState> { };
+        auto ctrl     = std::optional<SystemContext> { };
         while (!ctrl && Clock::now() < deadline) {
             if (feishu_child.heartbeat()) {
                 ctrl = feishu_child.latest();
@@ -42,12 +40,12 @@ TEST(FeishuIntegration, BidirectionalCommunication) {
         exit(0);
     }
 
-    auto feishu_parent = Feishu<ControlState, AutoAimState> { };
+    auto feishu_parent = Feishu<SystemContext, AutoAimState> { };
     std::this_thread::sleep_for(50ms);
 
     feishu_parent.heartbeat();
 
-    auto ctrl      = ControlState { };
+    auto ctrl      = SystemContext { };
     ctrl.timestamp = Clock::now();
 
     feishu_parent.send(ctrl);

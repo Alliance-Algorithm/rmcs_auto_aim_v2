@@ -1,6 +1,6 @@
-use_visualization: true
-use_painted_image: true
-is_local_runtime: false
+localhost_develop: false
+use_visualization: false
+use_painted_image: false
 
 capturer:
   show_loss_framerate: false
@@ -25,7 +25,7 @@ capturer:
     fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/data/autoaim/1777297317784.avi"
+    location: "/path/to/your/video"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -52,13 +52,14 @@ identifier:
   nms_threshold: 0.3
 
 tracker:
-  enemy_color: red
-  # enemy_color: blue
+  # enemy_color: red
+  enemy_color: blue
   max_temporary_loss_frames: 4
   max_unconfirmed_loss_frames: 2
   tracking_confirm_frames: 2
 
 pose_estimator:
+  yaw_optimizer: true
   camera_matrix:
     [
       1.722231837421459e+03,
@@ -75,15 +76,15 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 21.0 # m/s
+  initial_bullet_speed: 23.0 # m/s
   shoot_delay: 0.1 # s
   yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
-  coming_angle: 55.0      # degree
-  leaving_angle: 30.0     # degree
-  outpost_coming_angle: 50.0      # degree
-  outpost_leaving_angle: 40.0     # degree
+  coming_angle: 55.0 # degree
+  leaving_angle: 30.0 # degree
+  outpost_coming_angle: 50.0 # degree
+  outpost_leaving_angle: 40.0 # degree
 
   first_tolerance: 3 # 近距离射击容差，degree
   second_tolerance: 2 # 远距离射击容差，degree
@@ -91,8 +92,8 @@ fire_control:
   auto_fire: true # 是否由自瞄控制射击
 
 visualization:
-  framerate: 50
-  # monitor_host: "localhost"
-  monitor_host: "192.168.3.125"
+  framerate: 60
+  monitor_host: "127.0.0.1"
+  # monitor_host: "192.168.3.125"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"

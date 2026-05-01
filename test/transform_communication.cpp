@@ -15,7 +15,7 @@ constexpr auto create_input_transform() -> Transform {
     using rmcs::Direction3d;
     using rmcs::Orientation;
     return {
-        .position    = Direction3d { 1.0, 2.0, 3.0 },
+        .translation = Direction3d { 1.0, 2.0, 3.0 },
         .orientation = Orientation { 0.0, 0.0, 0.0, 1.0 },
     };
 }
@@ -25,15 +25,15 @@ inline auto create_failed_input_transform() -> Transform {
     using rmcs::Direction3d;
     using rmcs::Orientation;
     return {
-        .position    = Direction3d { 2.0, 3.0, 3.0 },
+        .translation = Direction3d { 2.0, 3.0, 3.0 },
         .orientation = Orientation { Eigen::Quaterniond::Identity() },
     };
 }
 
 inline auto expect_transform_equal(const Transform& lhs, const Transform& rhs) -> void {
-    EXPECT_DOUBLE_EQ(lhs.position.x, rhs.position.x);
-    EXPECT_DOUBLE_EQ(lhs.position.y, rhs.position.y);
-    EXPECT_DOUBLE_EQ(lhs.position.z, rhs.position.z);
+    EXPECT_DOUBLE_EQ(lhs.translation.x, rhs.translation.x);
+    EXPECT_DOUBLE_EQ(lhs.translation.y, rhs.translation.y);
+    EXPECT_DOUBLE_EQ(lhs.translation.z, rhs.translation.z);
     EXPECT_DOUBLE_EQ(lhs.orientation.x, rhs.orientation.x);
     EXPECT_DOUBLE_EQ(lhs.orientation.y, rhs.orientation.y);
     EXPECT_DOUBLE_EQ(lhs.orientation.z, rhs.orientation.z);

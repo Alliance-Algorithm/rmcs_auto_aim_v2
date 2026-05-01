@@ -40,7 +40,7 @@ public:
             *should_control = false;
             *should_shoot   = false;
 
-            feishu.send(ControlState::kInvalid());
+            feishu.send(SystemContext::kInvalid());
             return;
         }
         action_throttler.reset("adapter");
@@ -80,7 +80,7 @@ private:
 
     RclcppNode rclcpp;
 
-    Feishu<ControlState, AutoAimState> feishu;
+    Feishu<SystemContext, AutoAimState> feishu;
 
     OutputInterface<bool> should_control;
     OutputInterface<bool> should_shoot;
@@ -89,8 +89,8 @@ private:
     FramerateCounter framerate;
     ActionThrottler action_throttler { std::chrono::seconds(1), 233 };
 
-    auto make_context() -> ControlState {
-        auto context = ControlState { };
+    auto make_context() -> SystemContext {
+        auto context = SystemContext { };
 
         context.timestamp = Clock::now();
 
@@ -99,7 +99,7 @@ private:
         current_gimbal_pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
         auto iso                             = adapter.camera_transform();
-        context.camera_transform.position    = iso.translation();
+        context.camera_transform.translation = iso.translation();
         context.camera_transform.orientation = Eigen::Quaterniond(iso.rotation());
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新

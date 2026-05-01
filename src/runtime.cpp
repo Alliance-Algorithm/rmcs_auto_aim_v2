@@ -13,6 +13,7 @@
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
 #include <csignal>
@@ -33,11 +34,10 @@ auto main() -> int {
     node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
     auto logging = LoggingUtil { node };
-    logging.reset("receive", 5);
     logging.reset("detection", 5);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, ControlState> { };
+    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };
     auto capturer       = kernel::Capturer { };
     auto identifier     = kernel::Identifier { };
     auto tracker        = kernel::Tracker { };
@@ -47,9 +47,9 @@ auto main() -> int {
 
     /// Configure
     auto configuration     = util::configuration();
+    auto localhost_develop = configuration["localhost_develop"].as<bool>();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
-    auto without_rmcs      = configuration["is_local_runtime"].as<bool>();
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -107,18 +107,18 @@ auto main() -> int {
     while (util::get_running()) {
         node.spin_once();
 
-        if (!without_rmcs && !feishu.heartbeat()) continue;
+        if (!localhost_develop && !feishu.heartbeat()) continue;
 
         auto image = capturer.fetch_image();
         if (!image) continue;
 
-        auto context = ControlState::kIdentity();
-        if (!without_rmcs) {
+        auto context = SystemContext::kIdentity();
+        if (!localhost_develop) {
             using namespace std::chrono_literals;
-            auto closest_state = feishu.search(image->get_timestamp(), 50ms);
-            if (!closest_state) continue;
+            auto closest = feishu.search(image->get_timestamp(), 50ms);
+            if (!closest) continue;
 
-            context = *closest_state;
+            context = *closest;
         }
         visualization.update_camera_pose(context.camera_transform.orientation);
 
@@ -156,12 +156,12 @@ auto main() -> int {
         auto armors_3d = Armor3Ds { };
         {
             pose_estimator.update_camera_transform(context.camera_transform);
-            if (auto result = pose_estimator.solve_pnp(armors_2d)) {
-                armors_3d = pose_estimator.odom_to_camera(*result);
+            auto result = pose_estimator.estimate_armor(armors_2d);
 
-                visualization.update_visible_armors(*result);
-            }
+            armors_3d = pose_estimator.into_odom_link(result);
             if (armors_3d.empty()) continue;
+
+            visualization.update_visible_armors(armors_3d);
         }
 
         /// 3. Apply Tracker

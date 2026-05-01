@@ -1,5 +1,6 @@
 #pragma once
 #include <concepts>
+#include <limits>
 
 namespace rmcs {
 
@@ -210,6 +211,33 @@ struct Orientation {
     }
 
     static constexpr auto kIdentity() { return Orientation { 0, 0, 0, 1 }; }
+};
+
+struct Transform {
+    Translation translation { };
+    Orientation orientation { };
+
+    static constexpr auto kNaN() {
+        return Transform {
+            Translation {
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            },
+            Orientation {
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            },
+        };
+    };
+    static constexpr auto kIdentity() {
+        return Transform {
+            Translation { 0, 0, 0 },
+            Orientation { 0, 0, 0, 1 },
+        };
+    }
 };
 
 }
