@@ -149,7 +149,7 @@ struct Visualization::Impl {
 
     auto update_visible_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
-        return armors_detect->visualize(armors, "visible_armors", kCameraLink);
+        return armors_detect->visualize(armors, "visible_armors", kOdomLink);
     }
 
     auto update_visible_robot(std::span<Armor3D const> armors) const -> bool {

@@ -1,6 +1,5 @@
 #include "pose_estimator.hpp"
 
-#include "utility/logging/printer.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/math/solve_pnp/solve_pnp.hpp"
@@ -17,23 +16,22 @@ struct PoseEstimator::Impl {
     struct Config : util::Serializable {
         std::array<float, 9> camera_matrix;
         std::array<float, 5> distort_coeff;
+        bool yaw_optimizer;
 
-        constexpr static std::tuple metas {
-            &Config::camera_matrix,
-            "camera_matrix",
-            &Config::distort_coeff,
-            "distort_coeff",
+        constexpr static std::tuple metas { //
+            &Config::camera_matrix, "camera_matrix", &Config::distort_coeff, "distort_coeff",
+            &Config::yaw_optimizer, "yaw_optimizer"
         };
     };
 
     Config config;
+
+    CameraFeature camera_feature;
     PnpSolution pnp_solution { };
     YawOptimizer yaw_optimizer { };
 
-    Eigen::Vector3d odom_to_camera_translation { Eigen::Vector3d::Zero() };
-    Eigen::Quaterniond odom_to_camera_orientation { Eigen::Quaterniond::Identity() };
-
-    Printer log { "PoseEstimator" };
+    Eigen::Vector3d camera_translation { Eigen::Vector3d::Zero() };
+    Eigen::Quaterniond camera_orientation { Eigen::Quaterniond::Identity() };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
         auto result = config.serialize(yaml);
@@ -41,20 +39,19 @@ struct PoseEstimator::Impl {
             return std::unexpected { result.error() };
         }
 
-        pnp_solution.input.camera.camera_matrix =
-            reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
-        pnp_solution.input.camera.distort_coeff =
-            reshape_array<float, 5, double>(config.distort_coeff);
+        camera_feature.camera_matrix = reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
+        camera_feature.distort_coeff = reshape_array<float, 5, double>(config.distort_coeff);
+
+        pnp_solution.input.camera  = camera_feature;
+        yaw_optimizer.input.camera = camera_feature;
 
         return { };
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
 
-    auto solve_pnp(std::vector<Armor2D> const& armors) -> std::optional<std::vector<Armor3D>> {
-        if (armors.empty()) return std::nullopt;
-
-        auto armor_shape = [](ArmorShape shape) {
+    auto solve_armor(std::vector<Armor2D> const& armors) {
+        constexpr auto get_shape = [](ArmorShape shape) {
             if (shape == ArmorShape::SMALL) {
                 return rmcs::kSmallArmorShapeOpenCV;
             } else {
@@ -62,97 +59,80 @@ struct PoseEstimator::Impl {
             }
         };
 
-        auto result = std::vector<Armor3D> { };
-
-        auto q_camera_to_odom = odom_to_camera_orientation;
-        auto q_odom_to_camera = q_camera_to_odom.inverse();
-        auto center_yaw       = eulers(q_camera_to_odom, 2, 1, 0)[0];
+        const auto q_camera_to_odom = camera_orientation;
+        const auto q_odom_to_camera = q_camera_to_odom.inverse();
+        const auto center_yaw       = eulers(q_camera_to_odom, 2, 1, 0)[0];
 
         auto& input = yaw_optimizer.input;
 
-        input.camera                             = pnp_solution.input.camera;
-        input.camera.world_to_camera_orientation = Orientation { q_odom_to_camera };
-        input.camera.world_to_camera_translation = Translation { Eigen::Vector3d {
-            -(q_odom_to_camera * odom_to_camera_translation).eval() } };
+        input.camera.camera_orientation = Orientation { q_odom_to_camera };
+        input.camera.camera_translation =
+            Translation { Eigen::Vector3d { -(q_odom_to_camera * camera_translation).eval() } };
 
+        auto result = std::vector<Armor3D> { };
         for (auto&& [index, armor] : armors | std::views::enumerate) {
-            pnp_solution.input.armor_shape = armor_shape(armor.shape);
-            pnp_solution.input.genre       = armor.genre;
-            pnp_solution.input.color       = armor_color2camp_color(armor.color);
-            std::ranges::copy(armor.corners(), pnp_solution.input.armor_detection.begin());
+            auto armor_3d = Armor3D { };
+            armor_3d.id   = static_cast<int>(index);
 
-            auto solved = pnp_solution.solve();
-            if (!solved) {
-                log.warn("solvePnP failed for armor {} ({} {})", index, get_enum_name(armor.genre),
-                    get_enum_name(armor.color));
-                continue;
+            { // pnp
+                auto& input       = pnp_solution.input;
+                input.armor_shape = get_shape(armor.shape);
+                input.genre       = armor.genre;
+                input.color       = armor_color2camp_color(armor.color);
+                std::ranges::copy(armor.corners(), input.armor_detection.begin());
+
+                auto solved = pnp_solution.solve();
+                if (!solved) continue;
+
+                armor_3d.genre       = pnp_solution.result.genre;
+                armor_3d.color       = camp_color2armor_color(pnp_solution.result.color);
+                armor_3d.translation = pnp_solution.result.translation;
+                armor_3d.orientation = pnp_solution.result.orientation;
             }
+            if (config.yaw_optimizer) { // yaw
+                auto t_in_camera = pnp_solution.result.translation.make<Eigen::Vector3d>();
+                auto t_in_world  = Eigen::Vector3d {
+                    (q_camera_to_odom * t_in_camera + camera_translation).eval()
+                };
 
-            auto armor_3d  = Armor3D { };
-            armor_3d.genre = pnp_solution.result.genre;
-            armor_3d.color = camp_color2armor_color(pnp_solution.result.color);
-            armor_3d.id    = static_cast<int>(index);
+                input.armor_shape  = get_shape(armor.shape);
+                input.xyz_in_world = Translation { t_in_world };
+                input.center_yaw   = center_yaw;
+                input.genre        = armor.genre;
+                std::ranges::copy(armor.corners(), input.detected_corners.begin());
 
-            armor_3d.translation = pnp_solution.result.translation;
-            armor_3d.orientation = pnp_solution.result.orientation;
-
-            auto t_in_camera = pnp_solution.result.translation.make<Eigen::Vector3d>();
-            auto t_in_world  = Eigen::Vector3d {
-                (q_camera_to_odom * t_in_camera + odom_to_camera_translation).eval()
-            };
-
-            input.armor_shape  = armor_shape(armor.shape);
-            input.xyz_in_world = Translation { t_in_world };
-            input.center_yaw   = center_yaw;
-            input.genre        = armor.genre;
-            std::ranges::copy(armor.corners(), input.detected_corners.begin());
-
-            armor_3d.orientation = yaw_optimizer.solve().orientation;
+                armor_3d.orientation = yaw_optimizer.solve().orientation;
+            }
 
             result.emplace_back(armor_3d);
         };
         return result;
     }
 
-    auto set_odom_to_camera_transform(Transform const& transform) -> void {
-        transform.position.copy_to(odom_to_camera_translation);
-        transform.orientation.copy_to(odom_to_camera_orientation);
+    auto update_camera_transform(Transform const& transform) {
+        transform.translation.copy_to(camera_translation);
+        transform.orientation.copy_to(camera_orientation);
     }
 
-    auto odom_to_camera(Armor3D const& armor) const -> Armor3D {
+    auto into_odom_link(Armor3D const& armor) const -> Armor3D {
         auto transformed = armor;
 
         auto position = Eigen::Vector3d { };
         transformed.translation.copy_to(position);
-        transformed.translation =
-            odom_to_camera_orientation * position + odom_to_camera_translation;
+        transformed.translation = camera_orientation * position + camera_translation;
 
         auto quat = Eigen::Quaterniond { };
         transformed.orientation.copy_to(quat);
-        transformed.orientation = odom_to_camera_orientation * quat;
+        transformed.orientation = camera_orientation * quat;
 
         return transformed;
     }
 
-    auto odom_to_camera(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+    auto into_odom_link(std::span<Armor3D const> armors) const {
         auto result = std::vector<Armor3D> { };
-        result.reserve(armors.size());
-
         for (const auto& armor : armors) {
-            auto transformed = armor;
-
-            auto position = Eigen::Vector3d { };
-            transformed.translation.copy_to(position);
-            transformed.translation =
-                odom_to_camera_orientation * position + odom_to_camera_translation;
-
-            auto quat = Eigen::Quaterniond { };
-            transformed.orientation.copy_to(quat);
-            transformed.orientation = odom_to_camera_orientation * quat;
-
-            result.emplace_back(transformed);
+            result.emplace_back(into_odom_link(armor));
         }
-
         return result;
     }
 };
@@ -162,20 +142,20 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto PoseEstimator::solve_pnp(std::vector<Armor2D> const& armors) const
-    -> std::optional<std::vector<Armor3D>> {
-    return pimpl->solve_pnp(armors);
+auto PoseEstimator::estimate_armor(std::vector<Armor2D> const& armors) const
+    -> std::vector<Armor3D> {
+    return pimpl->solve_armor(armors);
 }
 
 auto PoseEstimator::update_camera_transform(Transform const& transform) -> void {
-    return pimpl->set_odom_to_camera_transform(transform);
+    return pimpl->update_camera_transform(transform);
 }
 
-auto PoseEstimator::odom_to_camera(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
-    return pimpl->odom_to_camera(armors);
+auto PoseEstimator::into_odom_link(std::span<Armor3D const> armors) const -> std::vector<Armor3D> {
+    return pimpl->into_odom_link(armors);
 }
-auto PoseEstimator::odom_to_camera(Armor3D const& armor) const -> Armor3D {
-    return pimpl->odom_to_camera(armor);
+auto PoseEstimator::into_odom_link(Armor3D const& armor) const -> Armor3D {
+    return pimpl->into_odom_link(armor);
 }
 
 PoseEstimator::PoseEstimator() noexcept
