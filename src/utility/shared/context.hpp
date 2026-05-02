@@ -20,17 +20,23 @@ struct AutoAimState {
 
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
+    double yaw_rate { std::numeric_limits<double>::quiet_NaN() };
+    double pitch_rate { std::numeric_limits<double>::quiet_NaN() };
+    double yaw_acc { std::numeric_limits<double>::quiet_NaN() };
+    double pitch_acc { std::numeric_limits<double>::quiet_NaN() };
+    bool feedforward_valid { false };
+
+    Translation robot_center {
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::quiet_NaN(),
+    };
 
     DeviceId target { DeviceId::UNKNOWN };
 
     static auto kInvalid() {
         return AutoAimState {
-            .timestamp      = Clock::now(),
-            .should_control = false,
-            .should_shoot   = false,
-            .yaw            = std::numeric_limits<double>::quiet_NaN(),
-            .pitch          = std::numeric_limits<double>::quiet_NaN(),
-            .target         = DeviceId::UNKNOWN,
+            .timestamp = Clock::now(),
         };
     }
 };
@@ -49,30 +55,24 @@ struct SystemContext {
     double yaw { std::numeric_limits<double>::quiet_NaN() };
     double pitch { std::numeric_limits<double>::quiet_NaN() };
 
-    Transform camera_transform { }; // Imu Odom Link
+    Transform camera_transform = Transform::kNaN(); // Imu Odom Link
 
     /// Lazy Context
     ///
-    DeviceIds invincible_devices { DeviceIds::None() };
+    DeviceIds invincible_devices = DeviceIds::None();
 
     static auto kInvalid() {
         return SystemContext {
-            .timestamp          = Clock::now(),
-            .enable_autoaim     = false,
-            .yaw                = std::numeric_limits<double>::quiet_NaN(),
-            .pitch              = std::numeric_limits<double>::quiet_NaN(),
-            .camera_transform   = Transform::kNaN(),
-            .invincible_devices = DeviceIds::None(),
+            .timestamp = Clock::now(),
         };
     }
     static auto kIdentity() {
         return SystemContext {
-            .timestamp          = Clock::now(),
-            .enable_autoaim     = true,
-            .yaw                = 0,
-            .pitch              = 0,
-            .camera_transform   = Transform::kIdentity(),
-            .invincible_devices = DeviceIds::None(),
+            .timestamp        = Clock::now(),
+            .enable_autoaim   = true,
+            .yaw              = 0,
+            .pitch            = 0,
+            .camera_transform = Transform::kIdentity(),
         };
     }
 };

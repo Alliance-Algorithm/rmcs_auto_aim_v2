@@ -10,49 +10,44 @@ using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
     struct Config : util::Serializable {
-        double first_tolerance { 4.0 };  // degree
-        double second_tolerance { 2.0 }; // degree
-        double judge_distance { 3.0 };   // m
+        double near_angle_tolerance { 4.0 };
+        double far_angle_tolerance { 2.0 };
+        double split_distance { 3.0 };
         bool auto_fire { true };
+        bool is_lazy_gimbal { false };
 
         constexpr static std::tuple metas {
-            &Config::first_tolerance,
-            "first_tolerance",
-            &Config::second_tolerance,
-            "second_tolerance",
-            &Config::judge_distance,
-            "judge_distance",
+            &Config::near_angle_tolerance,
+            "near_angle_tolerance",
+            &Config::far_angle_tolerance,
+            "far_angle_tolerance",
+            &Config::split_distance,
+            "split_distance",
             &Config::auto_fire,
             "auto_fire",
+            &Config::is_lazy_gimbal,
+            "is_lazy_gimbal",
         };
-    };
+    } config;
 
-    Config config {};
-
-    double first_tolerance_ { 4.0 / 57.3 };
-    double second_tolerance_ { 2.0 / 57.3 };
-    double judge_distance_ { 3.0 };
-    bool auto_fire_ { true };
-
-    std::optional<Command> last_command_ {};
-
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
+    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
 
-        first_tolerance_  = config.first_tolerance / 57.3;
-        second_tolerance_ = config.second_tolerance / 57.3;
-        judge_distance_   = config.judge_distance;
-        auto_fire_        = config.auto_fire;
+        config.near_angle_tolerance = util::deg2rad(config.near_angle_tolerance);
+        config.far_angle_tolerance  = util::deg2rad(config.far_angle_tolerance);
         last_command_.reset();
 
-        if (!(first_tolerance_ > 0.0) || !(second_tolerance_ > 0.0)) {
-            return std::unexpected { "first_tolerance and second_tolerance must be > 0" };
+        if (!(config.near_angle_tolerance > 0.0) || !(config.far_angle_tolerance > 0.0)) {
+            return std::unexpected {
+                "near_angle_tolerance and far_angle_tolerance must be > 0",
+            };
         }
-        if (judge_distance_ < 0.0) {
-            return std::unexpected { "judge_distance must be >= 0" };
+
+        if (config.split_distance < 0.0) {
+            return std::unexpected { "split_distance must be >= 0" };
         }
 
         return {};
@@ -61,15 +56,29 @@ struct ShootEvaluator::Impl {
     auto evaluate(Command const& command, double current_yaw) noexcept -> bool {
         auto should_fire = false;
 
-        if (!command.control || !auto_fire_) {
+        if (!command.control || !config.auto_fire) {
             last_command_ = command;
             return false;
         }
 
-        const auto tolerance =
-            (command.distance > judge_distance_) ? second_tolerance_ : first_tolerance_;
+        if (config.is_lazy_gimbal) {
+            auto const aim_point_yaw =
+                std::atan2(command.aim_point_position.y(), command.aim_point_position.x());
+            const auto aim_delta  = std::abs(util::normalize_angle(current_yaw - aim_point_yaw));
+            const auto is_overlap = aim_delta < config.near_angle_tolerance;
+            if (!is_overlap) {
+                last_command_ = command;
+                return false;
+            }
+        }
 
-        if (last_command_.has_value() && command.auto_aim_enabled && command.aim_point_valid) {
+        auto const center_distance =
+            std::hypot(command.center_position.x(), command.center_position.y());
+        const auto tolerance = (center_distance > config.split_distance)
+            ? config.far_angle_tolerance
+            : config.near_angle_tolerance;
+
+        if (last_command_.has_value() && command.auto_aim_enabled) {
             const auto yaw_delta =
                 std::abs(util::normalize_angle(last_command_->yaw - command.yaw));
             const auto track_delta =
@@ -81,6 +90,9 @@ struct ShootEvaluator::Impl {
         last_command_ = command;
         return should_fire;
     }
+
+private:
+    std::optional<Command> last_command_ {};
 };
 
 ShootEvaluator::ShootEvaluator() noexcept
@@ -90,7 +102,12 @@ ShootEvaluator::~ShootEvaluator() noexcept = default;
 
 auto ShootEvaluator::initialize(const YAML::Node& yaml) noexcept
     -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
+    return pimpl->configure_yaml(yaml);
+}
+
+auto ShootEvaluator::configure_yaml(const YAML::Node& yaml) noexcept
+    -> std::expected<void, std::string> {
+    return pimpl->configure_yaml(yaml);
 }
 
 auto ShootEvaluator::evaluate(Command const& command, double current_yaw) noexcept -> bool {

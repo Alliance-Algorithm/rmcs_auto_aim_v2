@@ -22,9 +22,6 @@ concept context_trait = requires {
 template <context_trait SendT, context_trait RecvT>
 class Feishu {
 private:
-    using Timestamp = TimePoint;
-    using Duration  = Timestamp::duration;
-
     using SendClient = shm::Client<SendT>::Send;
     SendClient send_client { };
 

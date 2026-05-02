@@ -1,10 +1,12 @@
 #pragma once
+
+#include <expected>
+
+#include <yaml-cpp/yaml.h>
+
 #include "utility/image/image.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
-
-#include <expected>
-#include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
 
@@ -18,7 +20,6 @@ public:
         return update_image(image), *this;
     }
 
-public:
     auto initialize(const YAML::Node& yaml, util::RclcppNode& visual_node) noexcept
         -> std::expected<void, std::string>;
 
@@ -32,7 +33,11 @@ public:
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 
+    // TODO: 整理接口
+    auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+        double yaw_acc, double pitch_acc) const -> void;
+
     auto update_camera_pose(const Orientation&) const -> void;
 };
 
-}
+} // namespace rmcs::kernel

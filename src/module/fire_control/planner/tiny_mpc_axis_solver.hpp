@@ -3,20 +3,20 @@
 #include <expected>
 #include <string>
 
-#include <eigen3/Eigen/Geometry>
+#include "module/fire_control/planner/mpc_types.hpp"
 
 #include "utility/pimpl.hpp"
 
 namespace rmcs::fire_control {
 
-inline constexpr int kMpcAxisHorizon = 100;
-
-using MpcAxisTrajectory = Eigen::Matrix<double, 2, kMpcAxisHorizon>;
-
 class TinyMpcAxisSolver {
-    RMCS_PIMPL_DEFINITION(TinyMpcAxisSolver)
-
 public:
+    struct AngularKinematics {
+        double angle { 0.0 };
+        double rate { 0.0 };
+        double acc { 0.0 };
+    };
+
     struct Config {
         double max_acc { 0.0 };
         double q_angle { 0.0 };
@@ -27,6 +27,10 @@ public:
 
     auto initialize(Config const& config) -> std::expected<void, std::string>;
     auto solve_center(MpcAxisTrajectory const& reference) -> std::expected<double, std::string>;
+    auto solve_center_kinematics(MpcAxisTrajectory const& reference)
+        -> std::expected<AngularKinematics, std::string>;
+
+    RMCS_PIMPL_DEFINITION(TinyMpcAxisSolver)
 };
 
 } // namespace rmcs::fire_control

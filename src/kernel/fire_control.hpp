@@ -1,5 +1,7 @@
 #pragma once
 
+#include <eigen3/Eigen/Core>
+
 #include <expected>
 #include <yaml-cpp/yaml.h>
 
@@ -15,8 +17,13 @@ public:
     struct Result {
         double pitch;
         double yaw;
-        double horizon_distance;
+        double pitch_rate;
+        double yaw_rate;
+        double pitch_acc;
+        double yaw_acc;
+        bool feedforward_valid;
         bool shoot_permitted;
+        Eigen::Vector3d center_position;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
@@ -24,4 +31,5 @@ public:
     auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
         -> std::optional<Result>;
 };
-}
+
+} // namespace rmcs::kernel

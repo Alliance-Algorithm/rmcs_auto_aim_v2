@@ -1,6 +1,9 @@
 #pragma once
 
+#include <eigen3/Eigen/Dense>
+
 #include <expected>
+#include <limits>
 #include <string>
 
 #include <yaml-cpp/yaml.h>
@@ -16,12 +19,13 @@ public:
     struct Command {
         bool control { false };
         bool auto_aim_enabled { false };
-        bool aim_point_valid { false };
-        double yaw { 0. };
-        double distance { 0. };
+        double yaw { std::numeric_limits<double>::quiet_NaN() };
+        Eigen::Vector3d center_position { Eigen::Vector3d::Zero() };
+        Eigen::Vector3d aim_point_position { Eigen::Vector3d::Zero() };
     };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
+    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
     auto evaluate(Command const& command, double current_yaw) noexcept -> bool;
 };

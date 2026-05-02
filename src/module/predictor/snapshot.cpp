@@ -42,6 +42,8 @@ Snapshot::~Snapshot() noexcept = default;
 
 auto Snapshot::time_stamp() const -> TimePoint { return backend->time_stamp(); }
 
+auto Snapshot::device_id() const -> DeviceId { return backend->device; }
+
 auto Snapshot::kinematics() const -> Kinematics { return backend->kinematics_at(time_stamp()); }
 
 auto Snapshot::kinematics_at(TimePoint t) const -> Kinematics { return backend->kinematics_at(t); }

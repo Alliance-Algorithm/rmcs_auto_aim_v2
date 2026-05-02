@@ -122,11 +122,6 @@ auto main() -> int {
         }
         visualization.update_camera_pose(context.camera_transform.orientation);
 
-        // if (context.enable_autoaim == false) {
-        //     feishu.send(AutoAimState::kInvalid());
-        //     continue;
-        // }
-
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
         }
@@ -178,11 +173,17 @@ auto main() -> int {
             const auto control = target.tracking_confirmed;
             const auto yaw     = context.yaw;
             if (auto result = fire_control.solve(*snapshot, control, yaw)) {
-                command.should_control = true;
-                command.target         = target.target_id;
-                command.should_shoot   = result->shoot_permitted;
-                command.yaw            = result->yaw;
-                command.pitch          = result->pitch;
+                command.should_control    = true;
+                command.target            = target.target_id;
+                command.should_shoot      = result->shoot_permitted;
+                command.yaw               = result->yaw;
+                command.pitch             = result->pitch;
+                command.yaw_rate          = result->yaw_rate;
+                command.pitch_rate        = result->pitch_rate;
+                command.yaw_acc           = result->yaw_acc;
+                command.pitch_acc         = result->pitch_acc;
+                command.feedforward_valid = result->feedforward_valid;
+                command.robot_center      = Translation { result->center_position };
             }
             auto armors = snapshot->predicted_armors(Clock::now());
             visualization.update_visible_robot(armors);

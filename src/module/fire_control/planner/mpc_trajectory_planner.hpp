@@ -1,12 +1,10 @@
 #pragma once
 
 #include <expected>
-#include <optional>
 
 #include <yaml-cpp/yaml.h>
 
-#include "module/fire_control/aim_point_chooser.hpp"
-#include "module/predictor/snapshot.hpp"
+#include "module/fire_control/planner/mpc_types.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::fire_control {
@@ -16,17 +14,18 @@ class MpcTrajectoryPlanner {
 
 public:
     struct Plan {
-        double target_yaw { 0.0 };
-        double target_pitch { 0.0 };
         double yaw { 0.0 };
         double pitch { 0.0 };
+        double yaw_rate { 0.0 };
+        double pitch_rate { 0.0 };
+        double yaw_acc { 0.0 };
+        double pitch_acc { 0.0 };
     };
 
-    auto initialize(YAML::Node const& yaml, AimPointChooser::Config const& chooser_config) noexcept
-        -> std::expected<void, std::string>;
+    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
+    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
-    auto plan(predictor::Snapshot const& snapshot, TimePoint center_time, double bullet_speed,
-        double yaw_offset, double pitch_offset) -> std::optional<Plan>;
+    auto plan(ReferenceTrajectory const& reference) -> std::expected<Plan, std::string>;
 };
 
 } // namespace rmcs::fire_control

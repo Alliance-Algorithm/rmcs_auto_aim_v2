@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "module/debug/visualization/armor_visualizer.hpp"
+#include "module/debug/visualization/mpc_plan_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
 #include "utility/logging/printer.hpp"
@@ -27,13 +28,10 @@ struct Visualization::Impl {
     using NormalResult  = std::expected<void, std::string>;
 
     struct Config : util::Serializable {
-
-        util::integer_t framerate = 80;
-
+        util::integer_t framerate   = 80;
         util::string_t monitor_host = "localhost";
         util::string_t monitor_port = "5000";
-
-        util::string_t stream_type = "RTP_JEPG";
+        util::string_t stream_type  = "RTP_JEPG";
 
         static constexpr auto metas = std::tuple {
             &Config::framerate,
@@ -54,16 +52,19 @@ struct Visualization::Impl {
 
     std::unique_ptr<debug::ArmorVisualizer> armors_detect;
     std::unique_ptr<debug::ArmorVisualizer> armors_group;
+    std::unique_ptr<debug::MpcPlanVisualizer> mpc_plan;
     std::unique_ptr<visual::Arrow> aiming_direction;
     std::unique_ptr<visual::Transform> camera_transform;
 
     bool is_initialized  = false;
     bool size_determined = false;
 
+    // TODO: 可放在声明处构造
     Impl() noexcept {
         session       = std::make_unique<debug::StreamSession>();
         armors_detect = std::make_unique<debug::ArmorVisualizer>();
         armors_group  = std::make_unique<debug::ArmorVisualizer>();
+        mpc_plan      = std::make_unique<debug::MpcPlanVisualizer>();
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
@@ -73,6 +74,7 @@ struct Visualization::Impl {
             return std::unexpected { result.error() };
         }
 
+        // 用 {} 区分初始化的部分
         session_config.target.host = config.monitor_host;
         session_config.target.port = config.monitor_port;
         session_config.format.hz   = static_cast<int>(config.framerate);
@@ -87,6 +89,7 @@ struct Visualization::Impl {
 
         armors_detect->initialize(visual_node);
         armors_group->initialize(visual_node);
+        mpc_plan->initialize(visual_node);
         aiming_direction = std::make_unique<visual::Arrow>(visual::Arrow::Config {
             .rclcpp = visual_node,
             .name   = "aiming_direction",
@@ -114,32 +117,30 @@ struct Visualization::Impl {
             session_config.format.w = mat.cols;
             session_config.format.h = mat.rows;
 
-            { // open session
-                auto ret = session->open(session_config);
-                if (!ret) {
-                    log.error("Failed to open visualization session");
-                    log.error("  e: {}", ret.error());
-                    return false;
-                }
-                log.info("Visualization session is opened");
+            auto open_result = session->open(session_config);
+            if (!open_result) {
+                log.error("Failed to open visualization session");
+                log.error("  e: {}", open_result.error());
+                return false;
             }
-            { // write SDP
-                auto ret = session->session_description_protocol();
-                if (!ret) {
-                    log.error("Failed to get description protocol");
-                    log.error("  e: {}", ret.error());
-                    return false;
-                }
+            log.info("Visualization session is opened");
 
-                const auto output_location = "/tmp/auto_aim.sdp";
-                if (auto ofstream = std::ofstream { output_location }) {
-                    ofstream << ret.value();
-                    log.info("Sdp has been written to: {}", output_location);
-                } else {
-                    log.error("Failed to write sdp: {}", output_location);
-                    return false;
-                }
+            auto sdp_result = session->session_description_protocol();
+            if (!sdp_result) {
+                log.error("Failed to get description protocol");
+                log.error("  e: {}", sdp_result.error());
+                return false;
             }
+
+            const auto output_location = "/tmp/auto_aim.sdp";
+            if (auto ofstream = std::ofstream { output_location }) {
+                ofstream << sdp_result.value();
+                log.info("Sdp has been written to: {}", output_location);
+            } else {
+                log.error("Failed to write sdp: {}", output_location);
+                return false;
+            }
+
             size_determined = true;
         }
         if (!session->opened()) return false;
@@ -163,6 +164,13 @@ struct Visualization::Impl {
         aiming_direction->update();
     }
 
+    auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+        double yaw_acc, double pitch_acc) const -> void {
+        if (!is_initialized) return;
+        mpc_plan->publish_planned_yaw(yaw, yaw_rate, yaw_acc);
+        mpc_plan->publish_planned_pitch(pitch, pitch_rate, pitch_acc);
+    }
+
     auto update_camera_pose(const Orientation& orientation) const -> void {
         if (!is_initialized) return;
         camera_transform->move(Translation::kZero(), orientation);
@@ -184,12 +192,18 @@ auto Visualization::update_image(const Image& image) noexcept -> bool {
 auto Visualization::update_visible_armors(std::span<Armor3D const> armors) const -> bool {
     return pimpl->update_visible_armors(armors);
 }
+
 auto Visualization::update_visible_robot(std::span<Armor3D const> armors) const -> bool {
     return pimpl->update_visible_robot(armors);
 }
 
 auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {
     pimpl->update_aiming_direction(yaw, pitch);
+}
+
+auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
+    double yaw_acc, double pitch_acc) const -> void {
+    pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
 auto Visualization::update_camera_pose(const Orientation& orientation) const -> void {

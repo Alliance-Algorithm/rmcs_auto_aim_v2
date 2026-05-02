@@ -25,13 +25,13 @@ using AxisSolver      = rmcs::util::TinyMpcSolver<kAxisStateDim, kAxisInputDim, 
 } // namespace
 
 struct TinyMpcAxisSolver::Impl {
-    std::optional<AxisSolver> solver { };
+    std::optional<AxisSolver> solver {};
 
-    auto initialize(TinyMpcAxisSolver::Config const& config) -> std::expected<void, std::string> {
-        auto A = AxisDynamics { };
+    auto initialize(Config const& config) -> std::expected<void, std::string> {
+        auto A = AxisDynamics {};
         A << 1.0, kMpcAxisDt, 0.0, 1.0;
 
-        auto B = AxisInputMatrix { };
+        auto B = AxisInputMatrix {};
         B << 0.0, kMpcAxisDt;
 
         const auto f = AxisState::Zero();
@@ -40,7 +40,7 @@ struct TinyMpcAxisSolver::Impl {
         Q(0, 0) = config.q_angle;
         Q(1, 1) = config.q_rate;
 
-        auto R = AxisInputCost { };
+        auto R = AxisInputCost {};
         R << config.r_acc;
 
         auto created = AxisSolver::create(AxisSolver::InitConfig {
@@ -67,10 +67,19 @@ struct TinyMpcAxisSolver::Impl {
         }
 
         solver = std::move(created).value();
-        return { };
+        return {};
     }
 
     auto solve_center(MpcAxisTrajectory const& reference) -> std::expected<double, std::string> {
+        auto result = solve_center_kinematics(reference);
+        if (!result.has_value()) {
+            return std::unexpected { result.error() };
+        }
+        return result->angle;
+    }
+
+    auto solve_center_kinematics(MpcAxisTrajectory const& reference)
+        -> std::expected<TinyMpcAxisSolver::AngularKinematics, std::string> {
         if (!solver.has_value()) {
             return std::unexpected { "solver is not initialized" };
         }
@@ -87,7 +96,18 @@ struct TinyMpcAxisSolver::Impl {
             return std::unexpected { result.error() };
         }
 
-        return solver->template state<0, kMpcAxisHorizon / 2>();
+        constexpr auto kCenterStateStep = std::size_t { kMpcAxisHorizon / 2 };
+        constexpr auto kCenterInputStep = std::size_t {
+            (kCenterStateStep < static_cast<std::size_t>(kMpcAxisHorizon - 1))
+                ? kCenterStateStep
+                : static_cast<std::size_t>(kMpcAxisHorizon - 2),
+        };
+
+        return TinyMpcAxisSolver::AngularKinematics {
+            .angle = solver->template state<0, kCenterStateStep>(),
+            .rate  = solver->template state<1, kCenterStateStep>(),
+            .acc   = solver->template input<0, kCenterInputStep>(),
+        };
     }
 };
 
@@ -103,4 +123,9 @@ auto TinyMpcAxisSolver::initialize(Config const& config) -> std::expected<void, 
 auto TinyMpcAxisSolver::solve_center(MpcAxisTrajectory const& reference)
     -> std::expected<double, std::string> {
     return pimpl->solve_center(reference);
+}
+
+auto TinyMpcAxisSolver::solve_center_kinematics(MpcAxisTrajectory const& reference)
+    -> std::expected<AngularKinematics, std::string> {
+    return pimpl->solve_center_kinematics(reference);
 }
