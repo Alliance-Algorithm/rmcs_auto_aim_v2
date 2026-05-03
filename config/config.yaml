@@ -19,7 +19,7 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: true
+    invert_image: false
     software_sync: false
     trigger_mode: false
     fixed_framerate: false
@@ -76,17 +76,17 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 21.0 # m/s
+  initial_bullet_speed: 24.2 # m/s
   shoot_delay: 0.1 # s
   mpc_enable: true
-  yaw_offset: +2.5 # degree
+  yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
   aim_point_chooser:
     coming_angle: 60.0 # degree
     leaving_angle: 20.0 # degree
     outpost_coming_angle: 70.0 # degree
-    outpost_leaving_angle: 50.0 # degree
+    outpost_leaving_angle: 30.0 # degree
 
   mpc:
     mpc_max_yaw_acc: 50.0
@@ -99,7 +99,7 @@ fire_control:
     mpc_pitch_r_acc: 1.0
 
   shoot_evaluator:
-    is_lazy_gimbal: true
+    is_lazy_gimbal: false
     near_angle_tolerance: 3 # degree
     far_angle_tolerance: 2 # degree
     split_distance: 2 # m

@@ -9,6 +9,7 @@
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/logging_util.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -16,8 +17,10 @@
 #include "utility/shared/context.hpp"
 #include "utility/singleton/running.hpp"
 
+#include <chrono>
 #include <csignal>
 #include <experimental/scope>
+#include <filesystem>
 #include <string>
 #include <yaml-cpp/yaml.h>
 
@@ -37,13 +40,13 @@ auto main() -> int {
     logging.reset("detection", 5);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };
-    auto capturer       = kernel::Capturer { };
-    auto identifier     = kernel::Identifier { };
-    auto tracker        = kernel::Tracker { };
-    auto pose_estimator = kernel::PoseEstimator { };
-    auto fire_control   = kernel::FireControl { };
-    auto visualization  = kernel::Visualization { };
+    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> {};
+    auto capturer       = kernel::Capturer {};
+    auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
+    auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
+    auto visualization  = kernel::Visualization {};
 
     /// Configure
     auto configuration     = util::configuration();
@@ -101,7 +104,7 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
-    auto framerate = FramerateCounter { };
+    auto framerate = FramerateCounter {};
     framerate.set_interval(std::chrono::seconds { 5 });
 
     while (util::get_running()) {
@@ -132,7 +135,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds { };
+        auto armors_2d = Armor2Ds {};
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) {
@@ -153,7 +156,7 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds { };
+        auto armors_3d = Armor3Ds {};
         {
             pose_estimator.update_camera_transform(context.camera_transform);
             auto result = pose_estimator.estimate_armor(armors_2d);
@@ -187,6 +190,8 @@ auto main() -> int {
             }
             auto armors = snapshot->predicted_armors(Clock::now());
             visualization.update_visible_robot(armors);
+            visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
+                command.pitch_rate, command.yaw_acc, command.pitch_acc);
         }
 
         /// 4. Transmit State
