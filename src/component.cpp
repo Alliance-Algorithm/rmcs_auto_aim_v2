@@ -1,4 +1,4 @@
-#include "adapter/sentry.hpp"
+#include "adapter/adapter.hpp"
 #include "kernel/feishu.hpp"
 #include "module/debug/action_throttler.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -24,6 +24,7 @@ public:
 
         register_output("/auto_aim/should_control", should_control, false);
         register_output("/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
+        register_output("/auto_aim/robot_center", robot_center, kVectorNaN);
         register_output("/auto_aim/should_shoot", should_shoot, false);
         register_output("/auto_aim/yaw_rate", yaw_rate, 0.0);
         register_output("/auto_aim/pitch_rate", pitch_rate, 0.0);
@@ -38,11 +39,10 @@ public:
     }
 
     auto update() -> void override {
+        set_default_command();
+
         if (!adapter.ready()) [[unlikely]] {
             action_throttler.dispatch("adapter", [&] { rclcpp.warn("adapter is not ready"); });
-
-            *should_control = false;
-            *should_shoot   = false;
 
             feishu.send(SystemContext::kInvalid());
             return;
@@ -54,19 +54,29 @@ public:
 
         if (!feishu.heartbeat()) return;
 
-        *target_direction = kVectorNaN;
-
         // 超时检测
-        auto command = *feishu.latest();
+        const auto latest = feishu.latest();
+        if (!latest.has_value()) return;
+
+        const auto& command = *latest;
         if (Clock::now() - command.timestamp > kAutoAimTimeout) {
-            *should_control = false;
-            *should_shoot   = false;
             return;
         }
 
         // 业务开关
         *should_control = command.should_control;
         *should_shoot   = command.should_shoot;
+        *robot_center   = Eigen::Vector3d {
+            command.robot_center.x,
+            command.robot_center.y,
+            command.robot_center.z,
+        };
+
+        *yaw_rate          = command.yaw_rate;
+        *pitch_rate        = command.pitch_rate;
+        *yaw_acc           = command.yaw_acc;
+        *pitch_acc         = command.pitch_acc;
+        *feedforward_valid = command.feedforward_valid;
 
         if (!*should_control) return;
 
@@ -81,11 +91,8 @@ public:
 
 private:
     static constexpr auto kAutoAimTimeout = std::chrono::milliseconds { 100 };
-    static inline const auto kVectorNaN   = Eigen::Vector3d {
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN(),
-    };
+    static constexpr auto kNaN            = std::numeric_limits<double>::quiet_NaN();
+    static inline const auto kVectorNaN   = Eigen::Vector3d { kNaN, kNaN, kNaN };
 
     Adapter adapter;
     RclcppNode rclcpp;
@@ -95,6 +102,7 @@ private:
     OutputInterface<bool> should_control;
     OutputInterface<bool> should_shoot;
     OutputInterface<Eigen::Vector3d> target_direction;
+    OutputInterface<Eigen::Vector3d> robot_center;
     OutputInterface<double> yaw_rate;
     OutputInterface<double> pitch_rate;
     OutputInterface<double> yaw_acc;
@@ -103,8 +111,20 @@ private:
 
     InputInterface<rmcs_msgs::Switch> right_switch;
 
+    auto set_default_command() -> void {
+        *should_control    = false;
+        *should_shoot      = false;
+        *target_direction  = kVectorNaN;
+        *robot_center      = kVectorNaN;
+        *yaw_rate          = kNaN;
+        *pitch_rate        = kNaN;
+        *yaw_acc           = kNaN;
+        *pitch_acc         = kNaN;
+        *feedforward_valid = false;
+    };
+
     auto make_context() -> SystemContext {
-        auto context = SystemContext { };
+        auto context = SystemContext {};
 
         context.timestamp = Clock::now();
 

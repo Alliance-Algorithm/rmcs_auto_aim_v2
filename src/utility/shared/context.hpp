@@ -12,25 +12,22 @@ concept context_trait = std::is_trivially_copyable_v<T>;
 struct AutoAimState {
     static constexpr auto kLabel  = "/shm_autoaim_state";
     static constexpr auto kLength = 512;
+    static constexpr auto kNaN    = std::numeric_limits<double>::quiet_NaN();
 
-    TimePoint timestamp { };
+    TimePoint timestamp {};
 
     bool should_control { false };
     bool should_shoot = { false };
 
-    double yaw { std::numeric_limits<double>::quiet_NaN() };
-    double pitch { std::numeric_limits<double>::quiet_NaN() };
-    double yaw_rate { std::numeric_limits<double>::quiet_NaN() };
-    double pitch_rate { std::numeric_limits<double>::quiet_NaN() };
-    double yaw_acc { std::numeric_limits<double>::quiet_NaN() };
-    double pitch_acc { std::numeric_limits<double>::quiet_NaN() };
+    double yaw { kNaN };
+    double pitch { kNaN };
+    double yaw_rate { kNaN };
+    double pitch_rate { kNaN };
+    double yaw_acc { kNaN };
+    double pitch_acc { kNaN };
     bool feedforward_valid { false };
 
-    Translation robot_center {
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN(),
-        std::numeric_limits<double>::quiet_NaN(),
-    };
+    Translation robot_center { kNaN, kNaN, kNaN };
 
     DeviceId target { DeviceId::UNKNOWN };
 
@@ -45,15 +42,16 @@ static_assert(context_trait<AutoAimState>);
 struct SystemContext {
     static constexpr auto kLabel  = "/shm_control_state";
     static constexpr auto kLength = 512;
+    static constexpr auto kNaN    = std::numeric_limits<double>::quiet_NaN();
 
     /// Dynamic Context
     ///
-    TimePoint timestamp { };
+    TimePoint timestamp {};
 
     bool enable_autoaim = false;
 
-    double yaw { std::numeric_limits<double>::quiet_NaN() };
-    double pitch { std::numeric_limits<double>::quiet_NaN() };
+    double yaw { kNaN };
+    double pitch { kNaN };
 
     Transform camera_transform = Transform::kNaN(); // Imu Odom Link
 
