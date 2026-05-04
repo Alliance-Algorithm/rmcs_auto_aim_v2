@@ -33,17 +33,30 @@ struct Visualization::Impl {
         util::string_t monitor_port = "5000";
         util::string_t stream_type  = "RTP_JEPG";
 
+        bool image_enabled            = true;
+        bool visible_armors_enabled   = true;
+        bool visible_robot_enabled    = true;
+        bool camera_pose_enabled      = true;
+        bool aiming_direction_enabled = true;
+        bool mpc_plan_enabled         = true;
+
         static constexpr auto metas = std::tuple {
-            &Config::framerate,
-            "framerate",
-            &Config::monitor_host,
-            "monitor_host",
-            &Config::monitor_port,
-            "monitor_port",
-            &Config::stream_type,
-            "stream_type",
+            // clang-format off
+            &Config::framerate,               "framerate",
+            &Config::monitor_host,            "monitor_host",
+            &Config::monitor_port,            "monitor_port",
+            &Config::stream_type,             "stream_type",
+            &Config::image_enabled,           "image_enabled",
+            &Config::visible_armors_enabled,  "visible_armors_enabled",
+            &Config::visible_robot_enabled,   "visible_robot_enabled",
+            &Config::camera_pose_enabled,     "camera_pose_enabled",
+            &Config::aiming_direction_enabled,"aiming_direction_enabled",
+            &Config::mpc_plan_enabled,        "mpc_plan_enabled",
+            // clang-format on
         };
     };
+
+    Config config {};
 
     Printer log { "visual" };
 
@@ -68,7 +81,6 @@ struct Visualization::Impl {
     }
 
     auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
-        auto config = Config { };
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
@@ -103,13 +115,14 @@ struct Visualization::Impl {
         });
 
         is_initialized = true;
-        return { };
+        return {};
     }
 
     auto initialized() const noexcept { return is_initialized; }
 
     auto send_image(const Image& image) noexcept -> bool {
         if (!is_initialized) return false;
+        if (!config.image_enabled) return false;
 
         const auto& mat = image.details().mat;
 
@@ -150,16 +163,19 @@ struct Visualization::Impl {
 
     auto update_visible_armors(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
+        if (!config.visible_armors_enabled) return false;
         return armors_detect->visualize(armors, "visible_armors", kOdomLink);
     }
 
     auto update_visible_robot(std::span<Armor3D const> armors) const -> bool {
         if (!is_initialized) return false;
+        if (!config.visible_robot_enabled) return false;
         return armors_group->visualize(armors, "visible_robot", kOdomLink);
     }
 
     auto update_aiming_direction(double yaw, double pitch) const -> void {
         if (!is_initialized) return;
+        if (!config.aiming_direction_enabled) return;
         aiming_direction->move(Translation::kZero(), euler_to_quaternion(yaw, pitch, 0.0));
         aiming_direction->update();
     }
@@ -167,12 +183,14 @@ struct Visualization::Impl {
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
         double yaw_acc, double pitch_acc) const -> void {
         if (!is_initialized) return;
+        if (!config.mpc_plan_enabled) return;
         mpc_plan->publish_planned_yaw(yaw, yaw_rate, yaw_acc);
         mpc_plan->publish_planned_pitch(pitch, pitch_rate, pitch_acc);
     }
 
     auto update_camera_pose(const Orientation& orientation) const -> void {
         if (!is_initialized) return;
+        if (!config.camera_pose_enabled) return;
         camera_transform->move(Translation::kZero(), orientation);
         camera_transform->update();
     }

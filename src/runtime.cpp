@@ -172,7 +172,10 @@ auto main() -> int {
         auto target  = tracker.decide(armors_3d, image->get_timestamp());
         auto command = AutoAimState::kInvalid();
         if (target.allow_control && target.snapshot) {
-            auto& snapshot     = target.snapshot;
+            auto& snapshot = target.snapshot;
+            auto armors    = snapshot->predicted_armors(Clock::now());
+            visualization.update_visible_robot(armors);
+
             const auto control = target.tracking_confirmed;
             const auto yaw     = context.yaw;
             if (auto result = fire_control.solve(*snapshot, control, yaw)) {
@@ -187,11 +190,11 @@ auto main() -> int {
                 command.pitch_acc         = result->pitch_acc;
                 command.feedforward_valid = result->feedforward_valid;
                 command.robot_center      = Translation { result->center_position };
+
+                visualization.update_aiming_direction(command.yaw, command.pitch);
+                visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
+                    command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
-            auto armors = snapshot->predicted_armors(Clock::now());
-            visualization.update_visible_robot(armors);
-            visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
-                command.pitch_rate, command.yaw_acc, command.pitch_acc);
         }
 
         /// 4. Transmit State
