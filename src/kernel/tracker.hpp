@@ -19,6 +19,8 @@ public:
 
     auto set_invincible_armors(DeviceIds devices) -> void;
 
+    auto set_enemy_color(CampColor color) -> void;
+
     auto filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D>;
 
     auto decide(std::span<Armor3D const> armors, TimePoint t) -> tracker::Decider::Output;

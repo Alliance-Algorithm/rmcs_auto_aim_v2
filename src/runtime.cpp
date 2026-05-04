@@ -40,13 +40,13 @@ auto main() -> int {
     logging.reset("detection", 5);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> {};
-    auto capturer       = kernel::Capturer {};
-    auto identifier     = kernel::Identifier {};
-    auto tracker        = kernel::Tracker {};
-    auto pose_estimator = kernel::PoseEstimator {};
-    auto fire_control   = kernel::FireControl {};
-    auto visualization  = kernel::Visualization {};
+    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };
+    auto capturer       = kernel::Capturer { };
+    auto identifier     = kernel::Identifier { };
+    auto tracker        = kernel::Tracker { };
+    auto pose_estimator = kernel::PoseEstimator { };
+    auto fire_control   = kernel::FireControl { };
+    auto visualization  = kernel::Visualization { };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -104,7 +104,7 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
-    auto framerate = FramerateCounter {};
+    auto framerate = FramerateCounter { };
     framerate.set_interval(std::chrono::seconds { 5 });
 
     while (util::get_running()) {
@@ -135,7 +135,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds {};
+        auto armors_2d = Armor2Ds { };
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) {
@@ -148,6 +148,12 @@ auto main() -> int {
             }
             logging.reset("detection", 5);
 
+            using namespace rmcs_msgs;
+            if (context.id.color() == RobotColor::RED) // if unknown, let it default
+                tracker.set_enemy_color(CampColor::BLUE);
+            else if (context.id.color() == RobotColor::BLUE)
+                tracker.set_enemy_color(CampColor::RED);
+
             tracker.set_invincible_armors(context.invincible_devices);
             armors_2d = tracker.filter_armors(*result);
 
@@ -156,7 +162,7 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds {};
+        auto armors_3d = Armor3Ds { };
         {
             pose_estimator.update_camera_transform(context.camera_transform);
             auto result = pose_estimator.estimate_armor(armors_2d);

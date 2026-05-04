@@ -40,9 +40,9 @@ struct Tracker::Impl {
         return { };
     }
 
-    auto set_invincible_armors(DeviceIds devices) -> void {
-        return filter.set_invincible_armors(devices);
-    }
+    auto set_invincible_armors(DeviceIds devices) { filter.set_invincible_armors(devices); }
+
+    auto set_enemy_color(CampColor color) { filter.set_enemy_color(color); }
 
     auto filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto result = filter.filter(armors);
@@ -66,8 +66,10 @@ auto Tracker::initialize(const YAML::Node& yaml) noexcept -> std::expected<void,
 }
 
 auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
-    return pimpl->set_invincible_armors(devices);
+    pimpl->set_invincible_armors(devices);
 }
+
+auto Tracker::set_enemy_color(CampColor color) -> void { pimpl->set_enemy_color(color); }
 
 auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D> {
     return pimpl->filter_armors(armors);
