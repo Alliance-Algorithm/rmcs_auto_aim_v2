@@ -192,10 +192,8 @@ auto main() -> int {
                 command.robot_center      = Translation { result->center_position };
 
                 visualization.update_aiming_direction(command.yaw, command.pitch);
-                if (command.feedforward_valid) {
-                    visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
-                        command.pitch_rate, command.yaw_acc, command.pitch_acc);
-                }
+                visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
+                    command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
         }
 
