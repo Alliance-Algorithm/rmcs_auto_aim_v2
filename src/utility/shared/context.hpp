@@ -52,8 +52,6 @@ struct SystemContext {
     ///
     TimePoint timestamp { };
 
-    bool enable_autoaim = false;
-
     double yaw { kNaN };
     double pitch { kNaN };
 
@@ -65,6 +63,8 @@ struct SystemContext {
 
     RobotId id = RobotId::UNKNOWN;
 
+    /// Template Context
+    ///
     static auto kInvalid() {
         return SystemContext {
             .timestamp = Clock::now(),
@@ -73,7 +73,6 @@ struct SystemContext {
     static auto kIdentity() {
         return SystemContext {
             .timestamp        = Clock::now(),
-            .enable_autoaim   = true,
             .yaw              = 0,
             .pitch            = 0,
             .camera_transform = Transform::kIdentity(),

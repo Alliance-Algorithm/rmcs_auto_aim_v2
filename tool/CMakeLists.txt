@@ -109,6 +109,17 @@ if(HIKCAMERA_AVAILABLE)
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )
+
+    # Hikcamera Test
+    add_executable(
+        hikcamera_test
+        ${TOOL_DIR}/hikcamera_test.cpp
+    )
+    target_link_libraries(
+        hikcamera_test
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+    )
 else()
     message(STATUS "hikcamera 未检测到，跳过相关构建")
 endif()

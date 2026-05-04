@@ -1,9 +1,16 @@
-#include "adapter/adapter.hpp"
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+#include "adapter/sentry.hpp"
 #include "kernel/feishu.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
 
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/robot_id.hpp>
 #include <rmcs_msgs/switch.hpp>
 
@@ -31,10 +38,9 @@ private:
     OutputInterface<double> pitch_acc;
     OutputInterface<bool> feedforward_valid;
 
-    InputInterface<rmcs_msgs::Switch> right_switch;
     InputInterface<rmcs_msgs::RobotId> robot_id;
 
-    auto make_context() -> SystemContext {
+    auto make_context() const {
         auto context = SystemContext { };
 
         context.timestamp = Clock::now();
@@ -49,8 +55,6 @@ private:
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         context.invincible_devices = DeviceIds::None();
-
-        context.enable_autoaim = (*right_switch == rmcs_msgs::Switch::UP);
 
         return context;
     }
@@ -70,8 +74,7 @@ public:
         register_output("/auto_aim/pitch_acc", pitch_acc, 0.0);
         register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
 
-        register_input("/remote/switch/right", right_switch);
-        register_input("/referee/id", robot_id);
+        register_input("/referee/id", robot_id, true);
     }
 
     auto update() -> void override {
@@ -120,7 +123,7 @@ public:
             command.robot_center.z,
         };
 
-        if (!*should_control) return;
+        if (!command.should_control) return;
 
         const auto pitch  = command.pitch;
         const auto yaw    = command.yaw;
