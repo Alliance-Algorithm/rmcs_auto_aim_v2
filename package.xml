@@ -15,6 +15,8 @@
   
 <!-- 添加的两个依赖，为了保证正常的依赖构建顺序 -->
   <depend>rmcs_executor</depend>
+  <depend>rmcs_description</depend>
+  <depend>fast_tf</depend>
   <depend>hikcamera</depend>
 
   <export>
