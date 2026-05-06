@@ -12,27 +12,27 @@ auto rmcs::fire_control::AimPointSampler::sample_at(
     -> std::expected<AimSample, std::string> {
     auto aim_point = sample_aim_point_at(snapshot, chooser, t);
     if (!aim_point.has_value()) {
-        return std::unexpected { "aim point sample failed" };
+        return std::unexpected { aim_point.error() };
     }
 
-    auto attitude = solve_aim_attitude(*aim_point, bullet_speed);
+    auto attitude = solve_aim_attitude(aim_point.value(), bullet_speed);
     if (!attitude.has_value()) {
         return std::unexpected { attitude.error() };
     }
 
     return AimSample {
         .attitude  = *attitude,
-        .aim_point = *aim_point,
+        .aim_point = aim_point.value(),
     };
 }
 
 auto rmcs::fire_control::AimPointSampler::sample_aim_point_at(predictor::Snapshot const& snapshot,
-    AimPointChooser& chooser, TimePoint t) -> std::optional<Eigen::Vector3d> {
+    AimPointChooser& chooser, TimePoint t) -> std::expected<Eigen::Vector3d, std::string> {
     auto predicted_armors     = snapshot.predicted_armors(t);
     auto predicted_kinematics = snapshot.kinematics_at(t);
     auto chosen_armor = chooser.choose_armor(predicted_armors, predicted_kinematics.center_position,
         predicted_kinematics.angular_velocity);
-    if (!chosen_armor.has_value()) return std::nullopt;
+    if (!chosen_armor.has_value()) return std::unexpected { "choose_armor returned nullopt" };
 
     auto aim_point = Eigen::Vector3d {};
     chosen_armor->translation.copy_to(aim_point);

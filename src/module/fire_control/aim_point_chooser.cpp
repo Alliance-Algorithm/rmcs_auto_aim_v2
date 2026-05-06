@@ -57,7 +57,8 @@ struct AimPointChooser::Impl {
         if (!(config.coming_angle > 0.0) || !(config.leaving_angle > 0.0)
             || !(config.outpost_coming_angle > 0.0) || !(config.outpost_leaving_angle > 0.0)) {
             return std::unexpected {
-                "coming_angle, leaving_angle, outpost_coming_angle and outpost_leaving_angle must be > 0",
+                "coming_angle, leaving_angle, outpost_coming_angle and outpost_leaving_angle must "
+                "be > 0",
             };
         }
 
@@ -95,7 +96,7 @@ struct AimPointChooser::Impl {
         };
 
         for (size_t index = 0; index < armors.size(); ++index) {
-            const auto delta_yaw  = util::normalize_angle(yaw(index) - center_yaw);
+            const auto delta_yaw   = util::normalize_angle(yaw(index) - center_yaw);
             candidate_evals[index] = {
                 .delta_yaw = delta_yaw,
                 .in_window = in_window(delta_yaw),
@@ -103,11 +104,17 @@ struct AimPointChooser::Impl {
         }
 
         const auto priority_key = [&](size_t index) {
-            const auto abs_delta    = std::abs(candidate_evals[index].delta_yaw);
-            const auto id           = armors[index].id;
-            const auto is_last      = last_chosen_armor_id.has_value() && (id == *last_chosen_armor_id);
+            const auto preferred_incoming = [&] {
+                const auto delta = candidate_evals[index].delta_yaw;
+                if (angular_velocity > 0.0) return (delta > 0.0) ? 1 : 0;
+                if (angular_velocity < 0.0) return (delta < 0.0) ? 1 : 0;
+                return 0;
+            }();
+            const auto abs_delta = std::abs(candidate_evals[index].delta_yaw);
+            const auto id        = armors[index].id;
+            const auto is_last = last_chosen_armor_id.has_value() && (id == *last_chosen_armor_id);
             const auto last_penalty = is_last ? 0 : 1;
-            return std::tuple { abs_delta, last_penalty, id, index };
+            return std::tuple { preferred_incoming, abs_delta, last_penalty, id, index };
         };
 
         auto best_idx = std::optional<size_t> {};

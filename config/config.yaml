@@ -76,14 +76,14 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 24.2 # m/s
-  shoot_delay: 0.1 # s
+  initial_bullet_speed: 21.4 # m/s
+  shoot_delay: 0.07 # s
   mpc_enable: true
   yaw_offset: 0.0 # degree
   pitch_offset: 0.0 # degree
 
   aim_point_chooser:
-    coming_angle: 60.0 # degree
+    coming_angle: 70.0 # degree
     leaving_angle: 20.0 # degree
     outpost_coming_angle: 70.0 # degree
     outpost_leaving_angle: 30.0 # degree

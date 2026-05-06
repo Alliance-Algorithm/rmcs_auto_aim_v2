@@ -29,7 +29,7 @@ public:
 
 private:
     static auto sample_aim_point_at(predictor::Snapshot const& snapshot, AimPointChooser& chooser,
-        TimePoint t) -> std::optional<Eigen::Vector3d>;
+        TimePoint t) -> std::expected<Eigen::Vector3d, std::string>;
 
     static auto solve_aim_attitude(Eigen::Vector3d const& aim_point, double bullet_speed)
         -> std::expected<AimAttitude, std::string>;
