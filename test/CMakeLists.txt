@@ -27,6 +27,7 @@ find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(rmcs_msgs REQUIRED)
 
 find_package(yaml-cpp REQUIRED)
 find_package(OpenVINO REQUIRED)
@@ -38,6 +39,7 @@ include_directories(
     ${rclcpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
+    ${rmcs_msgs_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
 

@@ -2,9 +2,12 @@ name: Run Test
 
 on:
   push:
-    branches: [ main ]
   pull_request:
   workflow_dispatch:
+
+env:
+  RMCS_REPO: https://github.com/Alliance-Algorithm/RMCS.git
+  RMCS_REF: main
 
 jobs:
   test:
@@ -14,45 +17,78 @@ jobs:
       options: --user 0
 
     env:
-      WS_DIR: ${{ github.workspace }}/ws
-      SRC_DIR: ${{ github.workspace }}/ws/src
       TEST_ASSETS_ROOT: /tmp/auto_aim
 
     steps:
-      - name: Checkout repository into ROS2 workspace
+      - name: Checkout rmcs_auto_aim_v2
         uses: actions/checkout@v4
         with:
-          repository: Alliance-Algorithm/rmcs_auto_aim_v2
-          path: ws/src/rmcs_auto_aim_v2
+          path: rmcs_auto_aim_v2
+
+      - name: Clone RMCS workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "${RMCS_REF}" "${RMCS_REPO}" /tmp/RMCS
+          mkdir -p /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2
+          tar -C "${GITHUB_WORKSPACE}/rmcs_auto_aim_v2" --exclude=".git" -cf - . \
+            | tar -C /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2 -xf -
 
       - name: Install yq dependency
         run: |
           apt-get update
           apt-get install -y yq
 
+      - name: Build RMCS workspace
+        shell: bash
+        working-directory: /tmp/RMCS/rmcs_ws
+        run: |
+          set -euo pipefail
+          set +u
+          source /opt/ros/jazzy/setup.bash
+          set -u
+          colcon build --packages-up-to rmcs_auto_aim_v2
+
       - name: Download test assets
         shell: bash
         run: |
-          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          set -euo pipefail
+          set +u
+          source /opt/ros/jazzy/setup.bash
+          source /tmp/RMCS/rmcs_ws/install/setup.bash
+          set -u
+          cd /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2/test
           TEST_ASSETS_ROOT="$TEST_ASSETS_ROOT" ./download_assets.sh
 
       - name: Configure test project
         shell: bash
         run: |
+          set -euo pipefail
+          set +u
           source /opt/ros/jazzy/setup.bash
-          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          source /tmp/RMCS/rmcs_ws/install/setup.bash
+          set -u
+          cd /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2/test
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build test project
         shell: bash
         run: |
+          set -euo pipefail
+          set +u
           source /opt/ros/jazzy/setup.bash
-          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          source /tmp/RMCS/rmcs_ws/install/setup.bash
+          set -u
+          cd /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2/test
           cmake --build build --parallel
 
       - name: Run gtests
         shell: bash
         run: |
+          set -euo pipefail
+          set +u
           source /opt/ros/jazzy/setup.bash
-          cd "$SRC_DIR/rmcs_auto_aim_v2/test"
+          source /tmp/RMCS/rmcs_ws/install/setup.bash
+          set -u
+          cd /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2/test
           ctest --test-dir build --output-on-failure
