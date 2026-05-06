@@ -29,11 +29,16 @@ struct FireControl::Impl {
         double pitch_offset;
 
         constexpr static std::tuple metas {
-            &Config::initial_bullet_speed, "initial_bullet_speed",
-            &Config::shoot_delay,          "shoot_delay",
-            &Config::mpc_enable,           "mpc_enable",
-            &Config::yaw_offset,           "yaw_offset",
-            &Config::pitch_offset,         "pitch_offset",
+            &Config::initial_bullet_speed,
+            "initial_bullet_speed",
+            &Config::shoot_delay,
+            "shoot_delay",
+            &Config::mpc_enable,
+            "mpc_enable",
+            &Config::yaw_offset,
+            "yaw_offset",
+            &Config::pitch_offset,
+            "pitch_offset",
         };
     } config;
 
@@ -89,9 +94,8 @@ struct FireControl::Impl {
         auto yaw_acc           = std::numeric_limits<double>::quiet_NaN();
         auto feedforward_valid = false;
 
-        if (config.mpc_enable) {
-            auto sample_attitude =
-                [&](TimePoint t) -> std::expected<AimAttitude, std::string> {
+        if (config.mpc_enable && snapshot.device_id() != DeviceId::OUTPOST) {
+            auto sample_attitude = [&](TimePoint t) -> std::expected<AimAttitude, std::string> {
                 auto sample = AimPointSampler::sample_at(
                     snapshot, aim_point_chooser, t, config.initial_bullet_speed);
                 if (!sample.has_value()) return std::unexpected { sample.error() };
@@ -111,11 +115,11 @@ struct FireControl::Impl {
                     yaw_acc           = planned->yaw_acc;
                     feedforward_valid = true;
                 } else {
-                    constexpr int kYawRow   = 0;
-                    constexpr int kPitchRow = 2;
+                    constexpr int kYawRow    = 0;
+                    constexpr int kPitchRow  = 2;
                     constexpr int kCenterCol = kMpcAxisHorizon / 2;
-                    pitch = (*reference)(kPitchRow, kCenterCol);
-                    yaw   = util::normalize_angle((*reference)(kYawRow, kCenterCol));
+                    pitch                    = (*reference)(kPitchRow, kCenterCol);
+                    yaw = util::normalize_angle((*reference)(kYawRow, kCenterCol));
                 }
             }
         }
