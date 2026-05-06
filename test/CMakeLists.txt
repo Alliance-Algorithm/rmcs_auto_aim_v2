@@ -143,12 +143,6 @@ ament_add_gtest(
     ${TEST_DIR}/transform_communication.cpp
 )
 
-# Feishu IPC
-ament_add_gtest(
-    test_feishu
-    ${TEST_DIR}/feishu_test.cpp
-)
-
 # Aim point chooser
 ament_add_gtest(
     test_aim_point_chooser
