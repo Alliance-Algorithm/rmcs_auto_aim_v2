@@ -32,6 +32,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(rmcs_msgs REQUIRED)
 
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_description REQUIRED)
@@ -47,10 +48,12 @@ include_directories(
     ${ament_index_cpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
+    ${rmcs_msgs_INCLUDE_DIRS}
 
     ${rmcs_executor_INCLUDE_DIRS}
     ${rmcs_description_INCLUDE_DIRS}
     ${fast_tf_INCLUDE_DIRS}
+    ${hikcamera_INCLUDE_DIRS}
 )
 
 ## 代码资源搜索
