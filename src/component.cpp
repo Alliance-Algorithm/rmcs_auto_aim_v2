@@ -4,7 +4,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-#include "adapter/sentry.hpp"
+#include "adapter/adapter.hpp"
 #include "kernel/feishu.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/shared/context.hpp"
@@ -41,7 +41,7 @@ private:
     InputInterface<rmcs_msgs::RobotId> robot_id;
 
     auto make_context() const {
-        auto context = SystemContext { };
+        auto context = SystemContext {};
 
         context.timestamp = Clock::now();
 

@@ -106,3 +106,21 @@ TEST(AimPointChooser, SingleArmorHighSpeedScanBySpinDirection) {
         }
     }
 }
+
+TEST(AimPointChooser, PreferIncomingArmorWhenSpinPositive) {
+    auto const armors = make_armors({ -30.0, 5.0 });
+    auto const chosen = choose_once(armors, 0.0, kFastPositive);
+    EXPECT_EQ(chosen, std::optional<int> { 0 });
+}
+
+TEST(AimPointChooser, PreferIncomingArmorWhenSpinNegative) {
+    auto const armors = make_armors({ -5.0, 30.0 });
+    auto const chosen = choose_once(armors, 0.0, kFastNegative);
+    EXPECT_EQ(chosen, std::optional<int> { 1 });
+}
+
+TEST(AimPointChooser, KeepAbsoluteDeltaPriorityWhenSpinZero) {
+    auto const armors = make_armors({ -15.0, 5.0 });
+    auto const chosen = choose_once(armors, 0.0, 0.0);
+    EXPECT_EQ(chosen, std::optional<int> { 1 });
+}
