@@ -12,6 +12,7 @@ concurrency:
 env:
   RMCS_REPO: https://github.com/Alliance-Algorithm/RMCS.git
   RMCS_REF: main
+  HIKCAMERA_REPO: https://github.com/Alliance-Algorithm/ros2-hikcamera.git
 
 jobs:
   test:
@@ -33,7 +34,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch "${RMCS_REF}" "${RMCS_REPO}" /tmp/RMCS
+          git clone --depth 1 --recurse-submodules --branch "${RMCS_REF}" "${RMCS_REPO}" /tmp/RMCS
+          git clone --depth 1 "${HIKCAMERA_REPO}" /tmp/RMCS/rmcs_ws/src/hikcamera
           mkdir -p /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2
           tar -C "${GITHUB_WORKSPACE}/rmcs_auto_aim_v2" --exclude=".git" -cf - . \
             | tar -C /tmp/RMCS/rmcs_ws/src/rmcs_auto_aim_v2 -xf -
