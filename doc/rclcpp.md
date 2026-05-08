@@ -70,6 +70,6 @@ armor.move(t, q);
 armor.update();
 ```
 
-具体例子可以在 [`test/visualization.cpp`](../test/visualization.cpp) 中查看
+具体例子可以在 [`tool/visualization.cpp`](../tool/visualization.cpp) 中查看
 
-构建项目的 `tests` 后可以使用 `./build/example_visualization` 查看效果，打开 `foxglove` 相关应用就可以看到一个不断旋转平移的四块装甲板
+构建项目的 `tool` 后可以运行 `./build/tool/visualization` 查看效果，打开 `foxglove` 相关应用就可以看到一个不断旋转平移的四块装甲板

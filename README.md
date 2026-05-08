@@ -12,7 +12,7 @@
 
 ## 部署步骤
 
-先确保海康相机的 SDK 正确构建，再保证 `rmcs_exetutor` 正确构建，如果要运行 RMCS 控制系统的话
+先确保海康相机的 SDK 正确构建，再保证 `rmcs_executor` 正确构建，如果要运行 RMCS 控制系统的话
 
 ```sh
 # 进入工作空间的 src/ 目录下
@@ -25,26 +25,57 @@ build-rmcs
 # 启动运行时
 ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
 
-# 运行示例程序
-cd /path/to/rmcs_auto_aim_v2/test/
-cmake -B build
-cmake --build build -j
+# 或使用 launch 文件启动（带自动重启）
+ros2 launch rmcs_auto_aim_v2 launch.py
 
-# 以 example 开头的程序包含了很多具体业务的单独运行时实现
-./build/example_xxx
+# 运行测试
+colcon test --packages-select rmcs_auto_aim_v2
+colcon test-result --all --verbose
 ```
+
+### 在 RMCS 控制系统中启用自瞄
+
+自瞄系统以 Component 的形式集成到 RMCS 控制系统中。在机器人配置文件（如 `sentry.yaml`）的 `components` 列表中添加：
+
+```yaml
+- rmcs::AutoAimComponent -> auto_aim_component
+```
+
+与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的 [`config/config.yaml`](./config/config.yaml) 统一配置，因此实例名可以随意取，不影响参数读取。
+
+启用后，RMCS 控制系统启动时会自动加载 Component，但 Runtime 需要单独启动：
+
+```sh
+# 方式一：直接运行
+ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
+
+# 方式二：通过 launch 文件启动（带自动重启）
+ros2 launch rmcs_auto_aim_v2 launch.py
+```
+
+两个进程通过共享内存（`feishu`）通信：Runtime 负责图像采集、识别、跟踪、火控解算等算法逻辑，Component 负责与 RMCS 控制系统对接并下发控制指令
 
 ## 项目架构
 
 ### 文件排布
 
-- `kernel`: 运行时封装，与业务逻辑强相关，包含业务流程，数据流动，参数配置等
+- `adapter`: 车辆适配层，将不同车型的底盘、云台等接口统一为自瞄可用的抽象接口
 
-- `module`: 特定特务的通用实现模块，但不包含运行时逻辑
+- `kernel`: 运行时业务内核，与业务逻辑强相关，包含识别、跟踪、位姿估计、火控、可视化等核心流程，以及进程间通信（`feishu`）
 
-- `utility`: 和运行业务无关的基本数据结果，基本算法和辅助工具，与一些第三方库的有限接口封装
+- `module`: 特定任务的通用实现模块，不包含运行时逻辑，可在不同上下文中复用
+
+- `utility`: 与业务无关的基础设施数库，包括 `rclcpp` 封装、数学工具、图像处理、进程间共享内存、线程工具等
 
 ### 架构设计
+
+本项目采用**进程分离**架构，自瞄系统分为两个独立进程：
+
+- **Component**（`component.cpp`）：运行在 RMCS 控制系统中，负责与 RMCS 通信，通过进程间共享内存（`feishu`）接收 Runtime 下发的控制指令。与 RMCS 共享进程空间，不执行任何图像处理或算法逻辑
+
+- **Runtime**（`runtime.cpp`）：独立运行的自瞄主进程，负责图像采集、目标识别、位姿估计、跟踪、火控解算等内存密集型操作。通过 `feishu` 将控制指令发送给 Component
+
+这种分离确保了自瞄系统在进行频繁内存操作时，即使出现异常也不会影响 RMCS 控制系统的稳定性。两个进程通过 `feishu`（基于共享内存的进程间通信）进行数据交换
 
 ## 调试指南
 
@@ -123,13 +154,13 @@ export LIBGL_ALWAYS_SOFTWARE=1
 ```yaml
 visualization:
     # ......
-    framerate: 80
+    framerate: 60
     monitor_host: "127.0.0.1"
     monitor_port: "5000"
     # ......
 ```
 
-需要配置的只有帧率和主机网络地址，帧率需要同`capturer`模块的帧率一致（也许应该自动读取相机的帧率，以后再论吧），`host`填自己电脑的 IPv4 地址（注意是和运行自瞄的主机同一局域网下的地址），端口随意，别和本机服务冲突就行了
+需要配置的只有帧率和主机网络地址，帧率需要同`capturer`模块的帧率一致（也许应该自动读取相机的帧率，以后再论吧），`monitor_host`填自己电脑的 IPv4 地址（注意是和运行自瞄的主机同一局域网下的地址），`monitor_port`随意，别和本机服务冲突就行了
 
 然后启动项目：
 
@@ -238,7 +269,7 @@ auto use_object(Object& object) -> void {
 - 最小化运行时抽象，使用最少的虚函数来完成运行时注册，面向用户的编译期多态通过模板实现
 - concept 可以利用 `static_assert` 等工具来提供更友善的编写期提示
 
-一个典型的例子：[`kernel/capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/b80584118d2361840c647f4f90cc0ca97a065dc6/src/kernel/capturer.cpp#L39)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
+一个典型的例子：[`kernel/capturer.cpp`](https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2/blob/main/src/kernel/capturer.cpp)，它使用了 `Capturer` 的特征，但是一部分是编译期多态接口，一部分是运行时多态接口，编译期接口用于重复性初始化，多态接口用于注册
 
 ### 2. 提前编写期检查：
 
