@@ -53,6 +53,7 @@ qtcreator-*
 CATKIN_IGNORE
 
 .cache/
+.worktrees/
 
 MvSdkLog/
 MvFGSdkLog/

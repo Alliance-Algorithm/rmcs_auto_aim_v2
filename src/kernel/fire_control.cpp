@@ -1,6 +1,5 @@
 #include "fire_control.hpp"
 
-#include <chrono>
 #include <cmath>
 #include <format>
 #include <limits>
