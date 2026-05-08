@@ -41,7 +41,7 @@ private:
     InputInterface<rmcs_msgs::RobotId> robot_id;
 
     auto make_context() const {
-        auto context = SystemContext {};
+        auto context = SystemContext { };
 
         context.timestamp = Clock::now();
 
@@ -78,6 +78,12 @@ public:
     }
 
     auto update() -> void override {
+        if (!adapter.ready()) [[unlikely]] {
+            feishu.send(SystemContext::kInvalid());
+            return;
+        }
+        feishu.send(make_context());
+
         // Reset all command
         {
             *should_control    = false;
@@ -91,21 +97,15 @@ public:
             *feedforward_valid = false;
         }
 
-        if (!adapter.ready()) [[unlikely]] {
-            feishu.send(SystemContext::kInvalid());
-            return;
-        }
-
-        feishu.send(make_context());
-
-        if (!feishu.heartbeat()) return;
+        feishu.heartbeat();
+        if (!feishu.latest()) return;
 
         // If heartbeat successfully, latest exists
         const auto command = *feishu.latest();
 
         // Timeout
         using namespace std::chrono_literals;
-        if (Clock::now() - command.timestamp > 10ms) {
+        if (Clock::now() - command.timestamp > 100ms) {
             return;
         }
 

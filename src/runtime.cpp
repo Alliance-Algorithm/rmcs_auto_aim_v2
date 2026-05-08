@@ -198,6 +198,8 @@ auto main() -> int {
                 command.robot_center      = Translation { result->center_position };
 
                 visualization.update_aiming_direction(command.yaw, command.pitch);
+
+                // TODO: 将 MPC 的 target 曲线和 Yaw 置于一个统一的参考系
                 visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
                     command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
