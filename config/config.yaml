@@ -22,7 +22,7 @@ capturer:
     invert_image: false
     software_sync: false
     trigger_mode: false
-    fixed_framerate: false
+    fixed_framerate: true
   local_video:
     # 替换为你具体的路径
     location: "/path/to/your/video"

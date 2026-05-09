@@ -53,6 +53,7 @@ struct Decider::Impl {
             if (!trackers.contains(id)) {
                 trackers[id] = std::make_unique<RobotState>();
                 trackers[id]->initialize(grouped.front(), t);
+                last_seen_times[id] = t;
             }
 
             auto grouped_span = std::span<Armor3D const> { grouped.data(), grouped.size() };
