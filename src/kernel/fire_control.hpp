@@ -28,8 +28,7 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
-        -> std::optional<Result>;
+    auto solve(const predictor::Snapshot& snapshot, double current_yaw) -> std::optional<Result>;
 };
 
 } // namespace rmcs::kernel

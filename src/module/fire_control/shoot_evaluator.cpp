@@ -13,7 +13,6 @@ struct ShootEvaluator::Impl {
         double near_angle_tolerance { 4.0 };
         double far_angle_tolerance { 2.0 };
         double split_distance { 3.0 };
-        bool auto_fire { true };
         bool is_lazy_gimbal { false };
 
         constexpr static std::tuple metas {
@@ -23,8 +22,6 @@ struct ShootEvaluator::Impl {
             "far_angle_tolerance",
             &Config::split_distance,
             "split_distance",
-            &Config::auto_fire,
-            "auto_fire",
             &Config::is_lazy_gimbal,
             "is_lazy_gimbal",
         };
@@ -56,11 +53,6 @@ struct ShootEvaluator::Impl {
     auto evaluate(Command const& command, double current_yaw) noexcept -> bool {
         auto should_fire = false;
 
-        if (!command.control || !config.auto_fire) {
-            last_command_ = command;
-            return false;
-        }
-
         if (config.is_lazy_gimbal) {
             auto const aim_point_yaw =
                 std::atan2(command.aim_point_position.y(), command.aim_point_position.x());
@@ -78,7 +70,7 @@ struct ShootEvaluator::Impl {
             ? config.far_angle_tolerance
             : config.near_angle_tolerance;
 
-        if (last_command_.has_value() && command.auto_aim_enabled) {
+        if (last_command_.has_value()) {
             const auto yaw_delta =
                 std::abs(util::normalize_angle(last_command_->yaw - command.yaw));
             const auto track_delta =

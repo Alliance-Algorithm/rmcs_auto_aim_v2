@@ -76,8 +76,7 @@ struct FireControl::Impl {
         return {};
     }
 
-    auto solve(predictor::Snapshot const& snapshot, bool control, double current_yaw)
-        -> std::optional<Result> {
+    auto solve(predictor::Snapshot const& snapshot, double current_yaw) -> std::optional<Result> {
         auto target_solution = target_solution_solver.solve(
             snapshot, aim_point_chooser, config.initial_bullet_speed, config.shoot_delay);
         if (!target_solution.has_value()) return std::nullopt;
@@ -127,8 +126,6 @@ struct FireControl::Impl {
         pitch = pitch + config.pitch_offset;
 
         auto shoot_command = ShootEvaluator::Command {
-            .control            = control,
-            .auto_aim_enabled   = control,
             .yaw                = yaw,
             .center_position    = center_position,
             .aim_point_position = aim_point_position,
@@ -164,7 +161,7 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
     return pimpl->initialize(yaml);
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot, bool control, double current_yaw)
+auto FireControl::solve(const predictor::Snapshot& snapshot, double current_yaw)
     -> std::optional<Result> {
-    return pimpl->solve(snapshot, control, current_yaw);
+    return pimpl->solve(snapshot, current_yaw);
 }

@@ -54,9 +54,6 @@ identifier:
 tracker:
   # enemy_color: red
   enemy_color: blue
-  max_temporary_loss_frames: 4
-  max_unconfirmed_loss_frames: 2
-  tracking_confirm_frames: 2
 
 pose_estimator:
   yaw_optimizer: true
@@ -103,7 +100,6 @@ fire_control:
     near_angle_tolerance: 3 # degree
     far_angle_tolerance: 2 # degree
     split_distance: 2 # m
-    auto_fire: true
 
 visualization:
   framerate: 60

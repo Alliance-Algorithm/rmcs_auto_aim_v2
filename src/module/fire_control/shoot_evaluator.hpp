@@ -17,8 +17,6 @@ class ShootEvaluator {
 
 public:
     struct Command {
-        bool control { false };
-        bool auto_aim_enabled { false };
         double yaw { std::numeric_limits<double>::quiet_NaN() };
         Eigen::Vector3d center_position { Eigen::Vector3d::Zero() };
         Eigen::Vector3d aim_point_position { Eigen::Vector3d::Zero() };

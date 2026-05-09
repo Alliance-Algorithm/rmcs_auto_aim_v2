@@ -1,6 +1,5 @@
 #include "decider.hpp"
 #include "module/predictor/robot_state.hpp"
-#include "utility/serializable.hpp"
 #include "utility/time.hpp"
 
 #include <cmath>
@@ -17,30 +16,6 @@ using namespace std::chrono_literals;
 struct Decider::Impl {
     static constexpr auto kDefaultCleanupInterval = 1.0s;
     static constexpr auto kOutpostCleanupInterval = 1.5s;
-    static constexpr auto kReleaseAfterFrames     = std::size_t { 3 };
-
-    struct TargetMemory {
-        std::optional<TimePoint> last_seen_time { };
-        std::size_t consecutive_missing_frames { 0 };
-        std::size_t consecutive_stable_frames { 0 };
-        std::size_t consecutive_instable_frames { 0 };
-        bool temporary_lost_armed { false };
-    };
-
-    struct Config : util::Serializable {
-        std::size_t max_temporary_loss_frames { 5 };
-        std::size_t max_unconfirmed_loss_frames { 3 };
-        std::size_t tracking_confirm_frames { 3 };
-
-        constexpr static std::tuple metas {
-            &Config::max_temporary_loss_frames,
-            "max_temporary_loss_frames",
-            &Config::max_unconfirmed_loss_frames,
-            "max_unconfirmed_loss_frames",
-            &Config::tracking_confirm_frames,
-            "tracking_confirm_frames",
-        };
-    };
 
     static constexpr auto get_cleanup_interval(DeviceId device_id) {
         switch (device_id) {
@@ -52,20 +27,7 @@ struct Decider::Impl {
     }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-
-        if (config.max_temporary_loss_frames == 0) {
-            return std::unexpected { "tracker.max_temporary_loss_frames must be > 0" };
-        }
-        if (config.max_unconfirmed_loss_frames == 0) {
-            return std::unexpected { "tracker.max_unconfirmed_loss_frames must be > 0" };
-        }
-        if (config.tracking_confirm_frames == 0) {
-            return std::unexpected { "tracker.tracking_confirm_frames must be > 0" };
-        }
+        std::ignore = yaml;
 
         if (priority_mode.empty()) priority_mode = mode2;
 
@@ -88,7 +50,6 @@ struct Decider::Impl {
         }
 
         for (auto& [id, grouped] : grouped_armors) {
-            auto& target_memory = target_memories[id];
             if (!trackers.contains(id)) {
                 trackers[id] = std::make_unique<RobotState>();
                 trackers[id]->initialize(grouped.front(), t);
@@ -99,53 +60,17 @@ struct Decider::Impl {
 
             if (fused) {
                 observed_ids.insert(id);
-                target_memory.last_seen_time             = t;
-                target_memory.consecutive_missing_frames = 0;
-            }
-        }
-
-        // 状态机：
-        // 1. unconfirmed: 已有 tracker，但还没稳定到可接管；
-        // 2. confirmed: 连续稳定若干帧后允许控制接管；
-        // 3. temporary lost: confirmed 目标短暂丢失时，保留控制输出窗口。
-        // 4. confirmed → unconfirmed: 需要连续不稳定 kReleaseAfterFrames 帧才释放
-        for (const auto& [id, tracker] : trackers) {
-            auto& target_memory         = target_memories[id];
-            auto was_tracking_confirmed = tracking_confirmed(id);
-
-            if (observed_ids.contains(id) && tracker->is_converged()) {
-                ++target_memory.consecutive_stable_frames;
-                target_memory.consecutive_instable_frames = 0;
-                target_memory.temporary_lost_armed        = false;
-                continue;
-            }
-
-            if (observed_ids.contains(id)) {
-                ++target_memory.consecutive_instable_frames;
-                if (target_memory.consecutive_instable_frames < kReleaseAfterFrames) {
-                    continue;
-                }
-            }
-
-            target_memory.consecutive_stable_frames = 0;
-            if (!observed_ids.contains(id)) {
-                if (was_tracking_confirmed) {
-                    target_memory.temporary_lost_armed = true;
-                }
-                ++target_memory.consecutive_missing_frames;
-            } else {
-                target_memory.temporary_lost_armed = false;
+                last_seen_times[id] = t;
             }
         }
 
         std::erase_if(trackers, [&](const auto& item) {
-            auto memory_it        = target_memories.find(item.first);
+            auto last_seen_it     = last_seen_times.find(item.first);
             auto cleanup_interval = get_cleanup_interval(item.first);
-            bool expired = memory_it == target_memories.end() || !memory_it->second.last_seen_time
-                || util::delta_time(t, *memory_it->second.last_seen_time) > cleanup_interval;
+            bool expired = last_seen_it == last_seen_times.end()
+                || util::delta_time(t, last_seen_it->second) > cleanup_interval;
             if (expired) {
-                if (item.first == primary_target_id) primary_target_id = DeviceId::UNKNOWN;
-                target_memories.erase(item.first);
+                last_seen_times.erase(item.first);
             }
 
             return expired;
@@ -153,22 +78,13 @@ struct Decider::Impl {
 
         auto fresh_target_id = arbitrate(observed_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
-            primary_target_id = fresh_target_id;
-
-            auto confirmed = tracking_confirmed(primary_target_id);
-            return make_output(primary_target_id, confirmed, confirmed);
+            return make_output(fresh_target_id, trackers.at(fresh_target_id)->is_converged());
         }
 
-        if (auto output = hold_output(primary_target_id)) {
-            return std::move(*output);
-        }
-
-        primary_target_id = DeviceId::UNKNOWN;
         return Output {
-            .target_id          = DeviceId::UNKNOWN,
-            .snapshot           = std::nullopt,
-            .allow_control      = false,
-            .tracking_confirmed = false,
+            .target_id     = DeviceId::UNKNOWN,
+            .snapshot      = std::nullopt,
+            .allow_control = false,
         };
     }
 
@@ -187,55 +103,12 @@ struct Decider::Impl {
         return best_target_id;
     }
 
-    auto tracking_confirmed(DeviceId device_id) const -> bool {
-        auto memory_it = target_memories.find(device_id);
-        if (memory_it == target_memories.end()) {
-            return false;
-        }
-
-        return memory_it->second.consecutive_stable_frames >= config.tracking_confirm_frames;
-    }
-
-    auto make_output(DeviceId device_id, bool allow_takeover, bool confirmed) const -> Output {
+    auto make_output(DeviceId device_id, bool allow_takeover) const -> Output {
         return Output {
-            .target_id          = device_id,
-            .snapshot           = trackers.at(device_id)->get_snapshot(),
-            .allow_control      = allow_takeover,
-            .tracking_confirmed = confirmed,
+            .target_id     = device_id,
+            .snapshot      = trackers.at(device_id)->get_snapshot(),
+            .allow_control = allow_takeover,
         };
-    }
-
-    auto hold_output(DeviceId device_id) const -> std::optional<Output> {
-        if (device_id == DeviceId::UNKNOWN || !trackers.contains(device_id)) {
-            return std::nullopt;
-        }
-
-        const auto& target_tracker = *trackers.at(device_id);
-        const auto& target_memory  = target_memories.at(device_id);
-
-        if (target_tracker.is_converged()) {
-            if (target_memory.temporary_lost_armed
-                && is_within_loss_window(device_id, config.max_temporary_loss_frames)) {
-                return make_output(device_id, true, false);
-            }
-            return std::nullopt;
-        }
-
-        if (is_within_loss_window(device_id, config.max_unconfirmed_loss_frames)) {
-            return make_output(device_id, false, false);
-        }
-
-        return std::nullopt;
-    }
-
-    auto is_within_loss_window(DeviceId device_id, std::size_t max_missing_frames) const -> bool {
-        auto memory_it = target_memories.find(device_id);
-        if (device_id == DeviceId::UNKNOWN || !trackers.contains(device_id)
-            || memory_it == target_memories.end() || !memory_it->second.last_seen_time) {
-            return false;
-        }
-
-        return memory_it->second.consecutive_missing_frames <= max_missing_frames;
     }
 
     auto priority_of(DeviceId device_id) const -> int {
@@ -264,11 +137,9 @@ struct Decider::Impl {
         return rank(lhs) < rank(rhs);
     }
 
-    DeviceId primary_target_id { DeviceId::UNKNOWN };
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
-    std::unordered_map<DeviceId, TargetMemory> target_memories;
+    std::unordered_map<DeviceId, TimePoint> last_seen_times;
 
-    Config config { };
     PriorityMode priority_mode;
 
     const PriorityMode mode1 = {
