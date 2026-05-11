@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(OpenVINO REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 find_package(OpenCV 4 REQUIRED)
 
@@ -59,6 +60,18 @@ add_executable(
 target_link_libraries(
     ov-model-status
     openvino::runtime
+)
+
+add_executable(
+    rune_preprocess_visualizer
+    ${TOOL_DIR}/rune_preprocess_visualizer.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_preprocessor.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpp
+)
+target_link_libraries(
+    rune_preprocess_visualizer
+    yaml-cpp::yaml-cpp
+    ${OpenCV_LIBS}
 )
 
 #

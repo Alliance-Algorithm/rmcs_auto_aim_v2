@@ -156,6 +156,19 @@ target_link_libraries(
     yaml-cpp::yaml-cpp
 )
 
+# Rune preprocessor
+ament_add_gtest(
+    test_rune_preprocessor
+    ${TEST_DIR}/rune_preprocessor.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_preprocessor.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpp
+)
+target_link_libraries(
+    test_rune_preprocessor
+    yaml-cpp::yaml-cpp
+    ${OpenCV_LIBRARIES}
+)
+
 # Tiny MPC solver
 ament_add_gtest(
     test_tiny_mpc_solver

@@ -41,6 +41,12 @@ identifier:
   # model_location: "shenzhen-0708.onnx"
   # model_location: "tongji-yolov5.xml"
 
+  rune_preprocessor:
+    target_color: red
+    binary_threshold: 40
+    min_contour_area: 20.0
+    max_contour_area: 10000.0
+
   infer_device: "AUTO"
   use_roi_segment: false
   roi_rows: 640
