@@ -169,6 +169,21 @@ target_link_libraries(
     ${OpenCV_LIBRARIES}
 )
 
+# Rune feature identifier
+ament_add_gtest(
+    test_rune_feature_identifier
+    ${TEST_DIR}/rune_feature_identifier.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_preprocessor.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_center_identifier.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_feature_identifier.cpp
+    ${RMCS_SRC_DIR}/utility/image/image.cpp
+)
+target_link_libraries(
+    test_rune_feature_identifier
+    yaml-cpp::yaml-cpp
+    ${OpenCV_LIBRARIES}
+)
+
 # Tiny MPC solver
 ament_add_gtest(
     test_tiny_mpc_solver

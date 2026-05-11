@@ -66,6 +66,8 @@ add_executable(
     rune_preprocess_visualizer
     ${TOOL_DIR}/rune_preprocess_visualizer.cpp
     ${RMCS_SRC_DIR}/module/identifier/rune/rune_preprocessor.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_center_identifier.cpp
+    ${RMCS_SRC_DIR}/module/identifier/rune/rune_feature_identifier.cpp
     ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 target_link_libraries(
