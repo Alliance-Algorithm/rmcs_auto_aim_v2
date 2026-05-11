@@ -41,7 +41,7 @@ identifier:
   # model_location: "shenzhen-0708.onnx"
   # model_location: "tongji-yolov5.xml"
 
-  infer_device: "AUTO"
+  infer_device: "GPU"
   use_roi_segment: false
   roi_rows: 640
   roi_cols: 640
@@ -58,19 +58,9 @@ tracker:
 pose_estimator:
   yaw_optimizer: true
   camera_matrix:
-    [
-      1.722231837421459e+03,
-      0,
-      7.013056440882832e+02,
-      0,
-      1.724876404292754e+03,
-      5.645821718351237e+02,
-      0,
-      0,
-      1,
-    ]
+    [1808.40,0,752.39,0,1807.39,510.42,0,0,1]
   distort_coeff:
-    [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
+    [-0.0799, 0.0997, -0.00134, -0.00071, 0]
 
 fire_control:
   initial_bullet_speed: 21.4 # m/s
