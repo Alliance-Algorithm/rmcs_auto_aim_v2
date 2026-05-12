@@ -184,9 +184,8 @@ auto main() -> int {
             auto armors    = snapshot->predicted_armors(Clock::now());
             visualization.update_visible_robot(armors);
 
-            const auto control = target.tracking_confirmed;
-            const auto yaw     = context.yaw;
-            if (auto result = fire_control.solve(*snapshot, control, yaw)) {
+            const auto yaw = context.yaw;
+            if (auto result = fire_control.solve(*snapshot, yaw)) {
                 command.should_control    = true;
                 command.target            = target.target_id;
                 command.should_shoot      = result->shoot_permitted;

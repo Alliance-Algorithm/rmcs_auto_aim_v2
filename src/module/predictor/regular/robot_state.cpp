@@ -1,8 +1,9 @@
 #include "robot_state.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
+#include <optional>
 #include <vector>
 
 #include "module/predictor/regular/snapshot.hpp"
@@ -11,34 +12,44 @@
 using namespace rmcs::predictor;
 
 struct RegularRobotState::Impl {
-    struct MatchResult {
-        int armor_id;
-        double error;
-        bool is_valid;
+    struct MatchDecision {
+        int matched_armor_id { kUnknownMatchedArmorId };
+        double error { std::numeric_limits<double>::infinity() };
+        bool is_valid { false };
+    };
+
+    struct BestMatch {
+        std::size_t observation_index;
+        MatchDecision decision;
     };
 
     DeviceId device { DeviceId::UNKNOWN };
     CampColor color { CampColor::UNKNOWN };
     int armor_num { 0 };
 
-    EKF ekf { EKF { } };
+    EKF ekf { EKF {} };
     TimePoint time_stamp;
 
     bool initialized { false };
     int update_count { 0 };
 
+    static constexpr int kUnknownMatchedArmorId = -1;
+    int last_matched_armor_id { kUnknownMatchedArmorId };
+
     const std::chrono::duration<double> reset_interval { 1.0 };
     const double angle_error_threshold { 0.65 };
+    const double visible_angle_threshold { std::numbers::pi / 2.0 };
 
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
     auto initialize(Armor3D const& armor, TimePoint t) -> void {
-        device         = armor.genre;
-        color          = armor_color2camp_color(armor.color);
-        armor_num      = EKFParameters::armor_num(armor.genre);
-        time_stamp     = t;
-        update_count   = 0;
+        device                = armor.genre;
+        color                 = armor_color2camp_color(armor.color);
+        armor_num             = EKFParameters::armor_num(armor.genre);
+        time_stamp            = t;
+        update_count          = 0;
+        last_matched_armor_id = 0;
         ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
         initialized = true;
     }
@@ -49,9 +60,10 @@ struct RegularRobotState::Impl {
         if (initialized) {
             auto dt = util::delta_time(t, time_stamp);
             if (dt > reset_interval) {
-                initialized  = false;
-                update_count = 0;
-                time_stamp   = t;
+                initialized           = false;
+                update_count          = 0;
+                last_matched_armor_id = kUnknownMatchedArmorId;
+                time_stamp            = t;
                 return;
             }
 
@@ -65,13 +77,21 @@ struct RegularRobotState::Impl {
     }
 
     auto update(std::span<Armor3D const> armors) -> bool {
-        bool fused = false;
-        for (auto const& armor : armors)
-            fused = update_single(armor) || fused;
+        if (armors.empty()) return false;
 
-        if (fused) ++update_count;
+        if (!initialized) {
+            initialize(armors.front(), time_stamp);
+            ++update_count;
+            return true;
+        }
 
-        return fused;
+        auto best_match = select_best_match(armors);
+        if (!best_match.has_value()) return false;
+
+        apply_match(armors, *best_match);
+        ++update_count;
+
+        return true;
     }
 
     auto is_converged() const -> bool {
@@ -83,7 +103,7 @@ struct RegularRobotState::Impl {
         auto const r_ok = (r > 0.05) && (r < 0.5);
         auto const l_ok = (l > 0.05) && (l < 0.5);
 
-        int min_updates = 3;
+        int const min_updates = 3;
         return r_ok && l_ok && update_count >= min_updates;
     }
 
@@ -98,8 +118,8 @@ struct RegularRobotState::Impl {
     }
 
 private:
-    auto match(Armor3D const& armor) const -> MatchResult {
-        if (!initialized || armor.genre != device) return { -1, 1e10, false };
+    auto decide_match(Armor3D const& armor) const -> MatchDecision {
+        if (!initialized || armor.genre != device) return {};
 
         auto armors_xyza = calculate_armors(ekf.x);
 
@@ -110,36 +130,58 @@ private:
         auto const ypr_in_world = util::eulers(orientation);
         auto const ypd_in_world = util::xyz2ypd(xyz);
 
-        auto it =
-            std::ranges::min_element(armors_xyza, [&](auto const& a_xyza, auto const& b_xyza) {
-                auto get_error = [&](auto const& pred) {
-                    auto ypd_pred = util::xyz2ypd(pred.template head<3>());
-                    return std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
-                        + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
-                };
-
-                return get_error(a_xyza) < get_error(b_xyza);
-            });
-
-        auto const best_id   = static_cast<int>(std::distance(armors_xyza.begin(), it));
-        auto const min_error = [&] {
-            auto ypd_pred = util::xyz2ypd(it->template head<3>());
-            return std::abs(util::normalize_angle(ypr_in_world[0] - (*it)[3]))
-                + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
+        auto best_matched_armor_id           = kUnknownMatchedArmorId;
+        auto min_error                       = std::numeric_limits<double>::infinity();
+        auto const opposite_matched_armor_id = [&] {
+            if (armor_num != 4 || last_matched_armor_id == kUnknownMatchedArmorId) {
+                return kUnknownMatchedArmorId;
+            }
+            return (last_matched_armor_id + armor_num / 2) % armor_num;
         }();
 
-        return { best_id, min_error, min_error < angle_error_threshold };
+        for (auto&& [candidate_armor_id, pred] : armors_xyza | std::views::enumerate) {
+            if (candidate_armor_id == opposite_matched_armor_id) continue;
+
+            auto const ypd_pred   = util::xyz2ypd(pred.template head<3>());
+            auto const view_delta = std::abs(util::normalize_angle(pred[3] - ypd_pred[0]));
+            if (view_delta > visible_angle_threshold) continue;
+
+            auto const error = std::abs(util::normalize_angle(ypr_in_world[0] - pred[3]))
+                + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
+            if (error >= min_error) continue;
+
+            best_matched_armor_id = candidate_armor_id;
+            min_error             = error;
+        }
+
+        if (best_matched_armor_id == kUnknownMatchedArmorId) return {};
+
+        return {
+            .matched_armor_id = best_matched_armor_id,
+            .error            = min_error,
+            .is_valid         = min_error < angle_error_threshold,
+        };
     }
 
-    auto update_single(Armor3D const& armor) -> bool {
-        if (!initialized) {
-            initialize(armor, time_stamp);
-            return true;
-        }
-        if (armor.genre != device) return false;
+    auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
+        auto best_match = std::optional<BestMatch> {};
+        for (std::size_t observation_index = 0; observation_index < armors.size();
+            ++observation_index) {
+            auto decision = decide_match(armors[observation_index]);
+            if (!decision.is_valid) continue;
+            if (best_match.has_value() && decision.error >= best_match->decision.error) continue;
 
-        auto match_result = match(armor);
-        if (!match_result.is_valid) return false;
+            best_match = { .observation_index = observation_index, .decision = decision };
+        }
+
+        return best_match;
+    }
+
+    auto apply_match(std::span<Armor3D const> armors, BestMatch const& best_match) -> void {
+        auto const& armor    = armors[best_match.observation_index];
+        auto const& decision = best_match.decision;
+
+        if (armor.genre != device) return;
 
         auto const [pos_x, pos_y, pos_z] = armor.translation;
         auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
@@ -149,22 +191,22 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto z = EKF::ZVec { };
+        auto z = EKF::ZVec {};
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
             z,
-            [id = match_result.armor_id, this](
+            [id = decision.matched_armor_id, this](
                 EKF::XVec const& x) { return EKFParameters::h(device, x, id, armor_num); },
-            [id = match_result.armor_id, this](
+            [id = decision.matched_armor_id, this](
                 EKF::XVec const& x) { return EKFParameters::H(device, x, id, armor_num); },
             EKFParameters::R(xyz, ypr, ypd), EKFParameters::x_add, EKFParameters::z_subtract);
 
-        return true;
+        last_matched_armor_id = decision.matched_armor_id;
     }
 
     auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> { };
+        auto armors = std::vector<Eigen::Vector4d> {};
         armors.reserve(armor_num);
         for (int i = 0; i < armor_num; ++i) {
             auto angle = EKFParameters::armor_yaw(device, x, i);

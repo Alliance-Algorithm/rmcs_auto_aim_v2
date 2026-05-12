@@ -22,7 +22,6 @@ public:
         DeviceId target_id;
         std::optional<predictor::Snapshot> snapshot;
         bool allow_control { false };
-        bool tracking_confirmed { false };
     };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
