@@ -56,6 +56,8 @@ private:
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         context.invincible_devices = DeviceIds::None();
 
+        context.id = *robot_id;
+
         return context;
     }
 
