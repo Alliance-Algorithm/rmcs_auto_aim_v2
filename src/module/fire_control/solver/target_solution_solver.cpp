@@ -30,7 +30,8 @@ struct TargetSolutionSolver::Impl {
         for (int i = 0; i < kMaxIterateCount; ++i) {
             auto const total_predict_time = current_fly_time + shoot_delay;
             auto const t_target           = snapshot.time_stamp()
-                + std::chrono::duration_cast<Duration>(std::chrono::duration<double>(total_predict_time));
+                + std::chrono::duration_cast<Duration>(
+                    std::chrono::duration<double>(total_predict_time));
 
             auto predicted_kinematics = snapshot.kinematics_at(t_target);
             auto sample = AimPointSampler::sample_at(snapshot, chooser, t_target, bullet_speed);
@@ -39,10 +40,10 @@ struct TargetSolutionSolver::Impl {
             auto const time_error = std::abs(sample->attitude.fly_time - current_fly_time);
             current_fly_time      = sample->attitude.fly_time;
             best_candidate        = BestCandidate {
-                .attitude        = sample->attitude,
-                .impact_time     = t_target,
-                .center_position = predicted_kinematics.center_position,
-                .aim_point       = sample->aim_point,
+                       .attitude        = sample->attitude,
+                       .impact_time     = t_target,
+                       .center_position = predicted_kinematics.center_position,
+                       .aim_point       = sample->aim_point,
             };
             if (time_error < kMaxFlyTimeThreshold) break;
         }
