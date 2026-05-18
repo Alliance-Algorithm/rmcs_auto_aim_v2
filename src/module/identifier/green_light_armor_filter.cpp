@@ -16,7 +16,7 @@ struct GreenLightArmorFilter::Impl {
     GreenLightDetection green_light_detection;
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        return green_light_detection.initialize(yaml["outpost_green_light_filter"]);
+        return green_light_detection.initialize(yaml);
     }
 
     auto filter(const Image& image, std::span<const Armor2D> armors) noexcept -> std::vector<bool> {

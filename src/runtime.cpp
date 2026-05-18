@@ -9,6 +9,7 @@
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/image/green_light.hpp"
+#include "utility/image/text.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -210,6 +211,8 @@ auto main() -> int {
                     command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
         }
+
+        util::draw_text(*image, command.should_shoot ? "ATTACK" : "IDLE");
 
         /// 4. Transmit State
         ///

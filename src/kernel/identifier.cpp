@@ -22,7 +22,7 @@ struct Identifier::Impl {
             if (!result.has_value()) return std::unexpected { result.error() };
         }
         {
-            auto result = green_light_armor_filter.initialize(yaml);
+            auto result = green_light_armor_filter.initialize(yaml["outpost_green_light_filter"]);
             if (!result.has_value()) return std::unexpected { result.error() };
         }
 
