@@ -2,23 +2,21 @@
 
 #include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
-#include "utility/robot/armor.hpp"
 
 #include <expected>
 #include <optional>
 
 #include <opencv2/core/types.hpp>
-#include <yaml-cpp/node/node.h>
+#include <yaml-cpp/yaml.h>
 
-namespace rmcs::kernel {
+namespace rmcs::identifier {
 
-class Identifier {
-    RMCS_PIMPL_DEFINITION(Identifier)
+class GreenLightDetection {
+    RMCS_PIMPL_DEFINITION(GreenLightDetection)
 
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-
-    auto sync_identify(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
+    auto sync_detect(const Image&, const cv::Rect2i&) noexcept -> std::optional<cv::Rect2i>;
     auto green_light() const noexcept -> std::optional<cv::Rect2i>;
 };
 

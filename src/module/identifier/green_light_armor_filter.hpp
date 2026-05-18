@@ -6,19 +6,21 @@
 
 #include <expected>
 #include <optional>
+#include <span>
+#include <vector>
 
 #include <opencv2/core/types.hpp>
-#include <yaml-cpp/node/node.h>
 
-namespace rmcs::kernel {
+#include <yaml-cpp/yaml.h>
 
-class Identifier {
-    RMCS_PIMPL_DEFINITION(Identifier)
+namespace rmcs::identifier {
+
+class GreenLightArmorFilter {
+    RMCS_PIMPL_DEFINITION(GreenLightArmorFilter)
 
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-
-    auto sync_identify(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
+    auto filter(const Image&, std::span<const Armor2D>) noexcept -> std::vector<bool>;
     auto green_light() const noexcept -> std::optional<cv::Rect2i>;
 };
 

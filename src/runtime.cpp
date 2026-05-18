@@ -8,6 +8,7 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/image/green_light.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -145,6 +146,10 @@ auto main() -> int {
             if (use_painted_image) {
                 for (const auto& armor : *result)
                     util::draw(*image, armor);
+
+                if (const auto rect = identifier.green_light(); rect.has_value()) {
+                    util::draw_green_light(*image, *rect);
+                }
             }
             logging.reset("detection", 5);
 
