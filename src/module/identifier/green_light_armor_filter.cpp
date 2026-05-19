@@ -19,26 +19,26 @@ struct GreenLightArmorFilter::Impl {
         return green_light_detection.initialize(yaml);
     }
 
-    auto filter(const Image& image, std::span<const Armor2D> armors) noexcept -> std::vector<bool> {
-        auto keep_mask = std::vector<bool>(armors.size(), true);
-        if (armors.empty()) return keep_mask;
+    auto filter(const Image& image, std::span<const Armor2D> armors) noexcept
+        -> GreenLightArmorFilter::Result {
+        auto result = GreenLightArmorFilter::Result {
+            .keep_mask   = std::vector<bool>(armors.size(), true),
+            .green_light = std::nullopt,
+        };
+        if (armors.empty()) return result;
 
         auto detect_roi = compute_detect_roi(image, armors);
-        if (!detect_roi.has_value()) return keep_mask;
+        if (!detect_roi.has_value()) return result;
 
-        auto green_light_rect = green_light_detection.sync_detect(image, *detect_roi);
-        if (!green_light_rect.has_value()) return keep_mask;
+        result.green_light = green_light_detection.sync_detect(image, *detect_roi);
+        if (!result.green_light.has_value()) return result;
 
-        const auto threshold_y = green_light_rect->y + green_light_rect->height;
+        const auto threshold_y = result.green_light->y + result.green_light->height;
         for (std::size_t index = 0; index < armors.size(); ++index) {
-            keep_mask[index] = armors[index].center.y >= 1.0 * threshold_y;
+            result.keep_mask[index] = armors[index].center.y >= 1.0 * threshold_y;
         }
 
-        return keep_mask;
-    }
-
-    auto green_light() const noexcept -> std::optional<cv::Rect2i> {
-        return green_light_detection.green_light();
+        return result;
     }
 
 private:
@@ -86,12 +86,8 @@ auto GreenLightArmorFilter::initialize(const YAML::Node& yaml) noexcept
 }
 
 auto GreenLightArmorFilter::filter(const Image& image, std::span<const Armor2D> armors) noexcept
-    -> std::vector<bool> {
+    -> Result {
     return pimpl->filter(image, armors);
-}
-
-auto GreenLightArmorFilter::green_light() const noexcept -> std::optional<cv::Rect2i> {
-    return pimpl->green_light();
 }
 
 GreenLightArmorFilter::GreenLightArmorFilter() noexcept

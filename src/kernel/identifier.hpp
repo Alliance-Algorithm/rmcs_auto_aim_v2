@@ -16,10 +16,14 @@ class Identifier {
     RMCS_PIMPL_DEFINITION(Identifier)
 
 public:
+    struct Result {
+        Armor2Ds armors;
+        std::optional<cv::Rect2i> green_light;
+    };
+
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto sync_identify(const Image&) noexcept -> std::optional<std::vector<Armor2D>>;
-    auto green_light() const noexcept -> std::optional<cv::Rect2i>;
+    auto sync_identify(const Image&) noexcept -> std::optional<Result>;
 };
 
 }

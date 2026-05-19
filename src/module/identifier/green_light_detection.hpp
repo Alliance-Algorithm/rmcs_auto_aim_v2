@@ -17,7 +17,6 @@ class GreenLightDetection {
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
     auto sync_detect(const Image&, const cv::Rect2i&) noexcept -> std::optional<cv::Rect2i>;
-    auto green_light() const noexcept -> std::optional<cv::Rect2i>;
 };
 
 }

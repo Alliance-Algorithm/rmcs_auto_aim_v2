@@ -145,12 +145,11 @@ auto main() -> int {
                 continue; // 一般不会推理出错喵~
             }
             if (use_painted_image) {
-                for (const auto& armor : *result)
+                for (const auto& armor : result->armors)
                     util::draw(*image, armor);
 
-                if (const auto rect = identifier.green_light(); rect.has_value()) {
-                    util::draw_green_light(*image, *rect);
-                }
+                if (result->green_light.has_value())
+                    util::draw_green_light(*image, *result->green_light);
             }
             logging.reset("detection", 5);
 
@@ -163,7 +162,7 @@ auto main() -> int {
                 tracker.set_enemy_color(CampColor::RED);
 
             tracker.set_invincible_armors(context.invincible_devices);
-            armors_2d = tracker.filter_armors(*result);
+            armors_2d = tracker.filter_armors(result->armors);
 
             if (armors_2d.empty()) continue;
         }

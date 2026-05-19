@@ -19,9 +19,13 @@ class GreenLightArmorFilter {
     RMCS_PIMPL_DEFINITION(GreenLightArmorFilter)
 
 public:
+    struct Result {
+        std::vector<bool> keep_mask;
+        std::optional<cv::Rect2i> green_light;
+    };
+
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto filter(const Image&, std::span<const Armor2D>) noexcept -> std::vector<bool>;
-    auto green_light() const noexcept -> std::optional<cv::Rect2i>;
+    auto filter(const Image&, std::span<const Armor2D>) noexcept -> Result;
 };
 
 }

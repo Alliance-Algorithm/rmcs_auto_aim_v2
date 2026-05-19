@@ -13,8 +13,6 @@
 using namespace rmcs::identifier;
 
 struct GreenLightDetection::Impl {
-    std::optional<cv::Rect2i> green_light;
-
     struct Config : util::Serializable {
         int green_threshold;
 
@@ -59,9 +57,9 @@ struct GreenLightDetection::Impl {
         return {};
     }
 
-    auto sync_detect(const Image& image, const cv::Rect2i& roi) noexcept
+    auto sync_detect(const Image& image, const cv::Rect2i& roi) const noexcept
         -> std::optional<cv::Rect2i> {
-        green_light.reset();
+        auto green_light = std::optional<cv::Rect2i> {};
 
         const auto& mat = image.details().mat;
         if (mat.empty()) {
@@ -133,8 +131,6 @@ struct GreenLightDetection::Impl {
 
         return green_light;
     }
-
-    auto green_light_value() const noexcept -> std::optional<cv::Rect2i> { return green_light; }
 };
 
 auto GreenLightDetection::initialize(const YAML::Node& yaml) noexcept
@@ -145,10 +141,6 @@ auto GreenLightDetection::initialize(const YAML::Node& yaml) noexcept
 auto GreenLightDetection::sync_detect(const Image& image, const cv::Rect2i& roi) noexcept
     -> std::optional<cv::Rect2i> {
     return pimpl->sync_detect(image, roi);
-}
-
-auto GreenLightDetection::green_light() const noexcept -> std::optional<cv::Rect2i> {
-    return pimpl->green_light_value();
 }
 
 GreenLightDetection::GreenLightDetection() noexcept

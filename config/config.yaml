@@ -59,7 +59,7 @@ identifier:
 
 tracker:
   # enemy_color: red
-  enemy_color: red
+  enemy_color: blue
 
 pose_estimator:
   yaw_optimizer: true
