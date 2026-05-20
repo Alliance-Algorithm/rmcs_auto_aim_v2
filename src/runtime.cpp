@@ -8,6 +8,8 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
+#include "utility/image/green_light.hpp"
+#include "utility/image/text.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -143,8 +145,13 @@ auto main() -> int {
                 continue; // 一般不会推理出错喵~
             }
             if (use_painted_image) {
-                for (const auto& armor : *result)
+                for (const auto& armor : result->armors)
                     util::draw(*image, armor);
+
+                if (result->outpost_green_light.has_value())
+                    util::draw_green_light(*image, *result->outpost_green_light);
+                if (result->base_green_light.has_value())
+                    util::draw_green_light(*image, *result->base_green_light);
             }
             logging.reset("detection", 5);
 
@@ -157,7 +164,7 @@ auto main() -> int {
                 tracker.set_enemy_color(CampColor::RED);
 
             tracker.set_invincible_armors(context.invincible_devices);
-            armors_2d = tracker.filter_armors(*result);
+            armors_2d = tracker.filter_armors(result->armors);
 
             if (armors_2d.empty()) continue;
         }
@@ -204,6 +211,9 @@ auto main() -> int {
                 visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,
                     command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
+        }
+        if (use_visualization) {
+            util::draw_text(*image, command.should_shoot ? "ATTACK" : "IDLE");
         }
 
         /// 4. Transmit State

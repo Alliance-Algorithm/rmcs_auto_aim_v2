@@ -22,7 +22,7 @@ capturer:
     invert_image: false
     software_sync: false
     trigger_mode: false
-    fixed_framerate: true
+    fixed_framerate: false
   local_video:
     # 替换为你具体的路径
     location: "/path/to/your/video"
@@ -51,6 +51,12 @@ identifier:
   score_threshold: 0.7
   nms_threshold: 0.3
 
+  green_light_filter:
+    green_threshold: 120
+    min_area: 20
+    min_circularity: 0.6
+    max_aspect_ratio: 1.5
+
 tracker:
   # enemy_color: red
   enemy_color: blue
@@ -73,7 +79,7 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 21.4 # m/s
+  initial_bullet_speed: 23.2 # m/s
   shoot_delay: 0.07 # s
   mpc_enable: true
   yaw_offset: 0.0 # degree
@@ -82,8 +88,8 @@ fire_control:
   aim_point_chooser:
     coming_angle: 70.0 # degree
     leaving_angle: 20.0 # degree
-    outpost_coming_angle: 70.0 # degree
-    outpost_leaving_angle: 30.0 # degree
+    outpost_coming_angle: 60.0 # degree
+    outpost_leaving_angle: 25.0 # degree
 
   mpc:
     mpc_max_yaw_acc: 50.0

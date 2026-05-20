@@ -6,25 +6,24 @@
 
 #include <expected>
 #include <optional>
+#include <span>
 
 #include <opencv2/core/types.hpp>
-#include <yaml-cpp/node/node.h>
 
-namespace rmcs::kernel {
+#include <yaml-cpp/yaml.h>
 
-class Identifier {
-    RMCS_PIMPL_DEFINITION(Identifier)
+namespace rmcs::identifier {
+
+class GreenLightLocator {
+    RMCS_PIMPL_DEFINITION(GreenLightLocator)
 
 public:
     struct Result {
-        Armor2Ds armors;
-        std::optional<cv::Rect2i> outpost_green_light;
-        std::optional<cv::Rect2i> base_green_light;
+        std::optional<cv::Rect2i> green_light;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-
-    auto sync_identify(const Image&) noexcept -> std::optional<Result>;
+    auto locate(const Image&, std::span<const Armor2D>) noexcept -> Result;
 };
 
 }
