@@ -148,8 +148,10 @@ auto main() -> int {
                 for (const auto& armor : result->armors)
                     util::draw(*image, armor);
 
-                if (result->green_light.has_value())
-                    util::draw_green_light(*image, *result->green_light);
+                if (result->outpost_green_light.has_value())
+                    util::draw_green_light(*image, *result->outpost_green_light);
+                if (result->base_green_light.has_value())
+                    util::draw_green_light(*image, *result->base_green_light);
             }
             logging.reset("detection", 5);
 
@@ -210,8 +212,9 @@ auto main() -> int {
                     command.pitch_rate, command.yaw_acc, command.pitch_acc);
             }
         }
-
-        util::draw_text(*image, command.should_shoot ? "ATTACK" : "IDLE");
+        if (use_visualization) {
+            util::draw_text(*image, command.should_shoot ? "ATTACK" : "IDLE");
+        }
 
         /// 4. Transmit State
         ///

@@ -51,7 +51,7 @@ identifier:
   score_threshold: 0.7
   nms_threshold: 0.3
 
-  outpost_green_light_filter:
+  green_light_filter:
     green_threshold: 120
     min_area: 20
     min_circularity: 0.6

@@ -18,7 +18,8 @@ class Identifier {
 public:
     struct Result {
         Armor2Ds armors;
-        std::optional<cv::Rect2i> green_light;
+        std::optional<cv::Rect2i> outpost_green_light;
+        std::optional<cv::Rect2i> base_green_light;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
