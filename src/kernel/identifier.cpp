@@ -46,7 +46,11 @@ struct Identifier::Impl {
             const auto threshold_y =
                 locator_result.green_light->y + locator_result.green_light->height;
             for (const auto& armor : *detected_armors) {
-                if (armor.center.y >= 1.0 * threshold_y) filtered.push_back(armor);
+                const auto outpost_interference = DeviceIds::kBuilding().contains(armor.genre)
+                    || armor.genre == DeviceId::UNKNOWN;
+                // 过滤掉绿灯之上的前哨站、基地和未知装甲板（图像坐标系y向下为正）
+                if (outpost_interference && armor.center.y < threshold_y) continue;
+                filtered.push_back(armor);
             }
         }
 
