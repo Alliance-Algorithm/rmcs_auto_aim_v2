@@ -7,7 +7,6 @@
 #include <expected>
 #include <optional>
 #include <span>
-#include <vector>
 
 #include <opencv2/core/types.hpp>
 
@@ -15,17 +14,16 @@
 
 namespace rmcs::identifier {
 
-class GreenLightArmorFilter {
-    RMCS_PIMPL_DEFINITION(GreenLightArmorFilter)
+class GreenLightLocator {
+    RMCS_PIMPL_DEFINITION(GreenLightLocator)
 
 public:
     struct Result {
-        std::vector<bool> keep_mask;
         std::optional<cv::Rect2i> green_light;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto filter(const Image&, std::span<const Armor2D>) noexcept -> Result;
+    auto locate(const Image&, std::span<const Armor2D>) noexcept -> Result;
 };
 
 }

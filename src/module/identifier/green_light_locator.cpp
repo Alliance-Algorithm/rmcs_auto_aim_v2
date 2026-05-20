@@ -1,9 +1,8 @@
-#include "green_light_armor_filter.hpp"
+#include "green_light_locator.hpp"
 
 #include "module/identifier/green_light_detection.hpp"
 #include "utility/image/image.details.hpp"
 
-#include <cstddef>
 #include <ranges>
 #include <span>
 #include <vector>
@@ -12,17 +11,16 @@
 
 using namespace rmcs::identifier;
 
-struct GreenLightArmorFilter::Impl {
+struct GreenLightLocator::Impl {
     GreenLightDetection green_light_detection;
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         return green_light_detection.initialize(yaml);
     }
 
-    auto filter(const Image& image, std::span<const Armor2D> armors) noexcept
-        -> GreenLightArmorFilter::Result {
-        auto result = GreenLightArmorFilter::Result {
-            .keep_mask   = std::vector<bool>(armors.size(), true),
+    auto locate(const Image& image, std::span<const Armor2D> armors) noexcept
+        -> GreenLightLocator::Result {
+        auto result = GreenLightLocator::Result {
             .green_light = std::nullopt,
         };
         if (armors.empty()) return result;
@@ -31,13 +29,6 @@ struct GreenLightArmorFilter::Impl {
         if (!detect_roi.has_value()) return result;
 
         result.green_light = green_light_detection.sync_detect(image, *detect_roi);
-        if (!result.green_light.has_value()) return result;
-
-        const auto threshold_y = result.green_light->y + result.green_light->height;
-        for (std::size_t index = 0; index < armors.size(); ++index) {
-            result.keep_mask[index] = armors[index].center.y >= 1.0 * threshold_y;
-        }
-
         return result;
     }
 
@@ -80,17 +71,17 @@ private:
     }
 };
 
-auto GreenLightArmorFilter::initialize(const YAML::Node& yaml) noexcept
+auto GreenLightLocator::initialize(const YAML::Node& yaml) noexcept
     -> std::expected<void, std::string> {
     return pimpl->initialize(yaml);
 }
 
-auto GreenLightArmorFilter::filter(const Image& image, std::span<const Armor2D> armors) noexcept
+auto GreenLightLocator::locate(const Image& image, std::span<const Armor2D> armors) noexcept
     -> Result {
-    return pimpl->filter(image, armors);
+    return pimpl->locate(image, armors);
 }
 
-GreenLightArmorFilter::GreenLightArmorFilter() noexcept
+GreenLightLocator::GreenLightLocator() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-GreenLightArmorFilter::~GreenLightArmorFilter() noexcept = default;
+GreenLightLocator::~GreenLightLocator() noexcept = default;

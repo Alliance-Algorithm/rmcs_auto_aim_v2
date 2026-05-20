@@ -1,6 +1,6 @@
 #include "identifier.hpp"
 #include "module/identifier/armor_detection.hpp"
-#include "module/identifier/green_light_armor_filter.hpp"
+#include "module/identifier/green_light_locator.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <optional>
@@ -13,14 +13,14 @@ using namespace rmcs::identifier;
 
 struct Identifier::Impl {
     ArmorDetection armor_detection;
-    GreenLightArmorFilter green_light_armor_filter;
+    GreenLightLocator green_light_locator;
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto armor_result = armor_detection.initialize(yaml);
         if (!armor_result.has_value()) return std::unexpected { armor_result.error() };
-        auto filter_result = green_light_armor_filter.initialize(yaml["outpost_green_light_"
-                                                                      "filter"]);
-        if (!filter_result.has_value()) return std::unexpected { filter_result.error() };
+        auto locator_result = green_light_locator.initialize(yaml["outpost_green_light_"
+                                                                  "filter"]);
+        if (!locator_result.has_value()) return std::unexpected { locator_result.error() };
 
         return {};
     }
@@ -35,25 +35,24 @@ struct Identifier::Impl {
             if (armor.genre == DeviceId::OUTPOST) outpost_armors.push_back(armor);
         }
 
-        const auto filter_result = green_light_armor_filter.filter(src, outpost_armors);
+        const auto locator_result = green_light_locator.locate(src, outpost_armors);
 
         auto filtered = Armor2Ds {};
         filtered.reserve(detected_armors->size());
 
-        auto keep_it = filter_result.keep_mask.begin();
-        for (const auto& armor : *detected_armors) {
-            if (armor.genre != DeviceId::OUTPOST) {
-                filtered.push_back(armor);
-                continue;
+        if (!locator_result.green_light.has_value()) {
+            filtered = *detected_armors;
+        } else {
+            const auto threshold_y =
+                locator_result.green_light->y + locator_result.green_light->height;
+            for (const auto& armor : *detected_armors) {
+                if (armor.center.y >= 1.0 * threshold_y) filtered.push_back(armor);
             }
-
-            if (*keep_it) filtered.push_back(armor);
-            ++keep_it;
         }
 
         return Identifier::Result {
             .armors      = std::move(filtered),
-            .green_light = filter_result.green_light,
+            .green_light = locator_result.green_light,
         };
     }
 };
