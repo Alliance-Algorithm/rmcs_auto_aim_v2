@@ -39,6 +39,12 @@ private:
     OutputInterface<bool> feedforward_valid;
 
     InputInterface<rmcs_msgs::RobotId> robot_id;
+    InputInterface<float> referee_initial_speed_;
+    InputInterface<double> referee_shoot_timestamp_;
+
+    float latest_referee_bullet_speed_ = std::numeric_limits<float>::quiet_NaN();
+    double last_referee_event_timestamp_ = 0.0;
+    TimePoint latest_referee_bullet_speed_update_time_ { };
 
     auto make_context() const {
         auto context = SystemContext { };
@@ -52,6 +58,7 @@ private:
         const auto iso                       = adapter.camera_transform();
         context.camera_transform.translation = iso.translation();
         context.camera_transform.orientation = Eigen::Quaterniond(iso.rotation());
+        context.bullet_speed                 = latest_referee_bullet_speed_;
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         context.invincible_devices = DeviceIds::None();
@@ -77,6 +84,15 @@ public:
         register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
 
         register_input("/referee/id", robot_id, true);
+        register_input("/referee/shooter/initial_speed", referee_initial_speed_, false);
+        register_input("/referee/shooter/shoot_timestamp", referee_shoot_timestamp_, false);
+    }
+
+    auto before_updating() -> void override {
+        if (!referee_initial_speed_.ready())
+            referee_initial_speed_.bind_directly(std::numeric_limits<float>::quiet_NaN());
+        if (!referee_shoot_timestamp_.ready())
+            referee_shoot_timestamp_.bind_directly(0.0);
     }
 
     auto update() -> void override {
@@ -84,6 +100,7 @@ public:
             feishu.send(SystemContext::kInvalid());
             return;
         }
+        update_referee_bullet_speed_cache_();
         feishu.send(make_context());
 
         // Reset all command
@@ -134,6 +151,27 @@ public:
             std::cos(pitch) * std::sin(yaw),
             std::sin(pitch),
         };
+    }
+
+    auto update_referee_bullet_speed_cache_() -> void {
+        using namespace std::chrono_literals;
+
+        const auto shoot_timestamp = *referee_shoot_timestamp_;
+        if (shoot_timestamp != last_referee_event_timestamp_) {
+            last_referee_event_timestamp_ = shoot_timestamp;
+
+            const auto initial_speed = *referee_initial_speed_;
+            if (std::isfinite(initial_speed) && initial_speed > 0.0F) {
+                latest_referee_bullet_speed_ = initial_speed;
+                latest_referee_bullet_speed_update_time_ = Clock::now();
+            }
+        }
+
+        if (latest_referee_bullet_speed_update_time_ == TimePoint { })
+            return;
+
+        if (Clock::now() - latest_referee_bullet_speed_update_time_ > 2s)
+            latest_referee_bullet_speed_ = std::numeric_limits<float>::quiet_NaN();
     }
 };
 

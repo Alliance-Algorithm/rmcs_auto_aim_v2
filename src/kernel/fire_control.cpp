@@ -76,9 +76,16 @@ struct FireControl::Impl {
         return {};
     }
 
-    auto solve(predictor::Snapshot const& snapshot, double current_yaw) -> std::optional<Result> {
+    auto solve(
+        predictor::Snapshot const& snapshot, double current_yaw, double runtime_bullet_speed)
+        -> std::optional<Result> {
+        const double bullet_speed =
+            std::isfinite(runtime_bullet_speed) && runtime_bullet_speed > 0.0
+                ? runtime_bullet_speed
+                : config.initial_bullet_speed;
+
         auto target_solution = target_solution_solver.solve(
-            snapshot, aim_point_chooser, config.initial_bullet_speed, config.shoot_delay);
+            snapshot, aim_point_chooser, bullet_speed, config.shoot_delay);
         if (!target_solution.has_value()) return std::nullopt;
 
         auto center_position    = target_solution->center_position;
@@ -94,8 +101,7 @@ struct FireControl::Impl {
 
         if (config.mpc_enable && snapshot.device_id() != DeviceId::OUTPOST) {
             auto sample_attitude = [&](TimePoint t) -> std::expected<AimAttitude, std::string> {
-                auto sample = AimPointSampler::sample_at(
-                    snapshot, aim_point_chooser, t, config.initial_bullet_speed);
+                auto sample = AimPointSampler::sample_at(snapshot, aim_point_chooser, t, bullet_speed);
                 if (!sample.has_value()) return std::unexpected { sample.error() };
                 return sample->attitude;
             };
@@ -161,7 +167,8 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
     return pimpl->initialize(yaml);
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot, double current_yaw)
+auto FireControl::solve(
+    const predictor::Snapshot& snapshot, double current_yaw, double runtime_bullet_speed)
     -> std::optional<Result> {
-    return pimpl->solve(snapshot, current_yaw);
+    return pimpl->solve(snapshot, current_yaw, runtime_bullet_speed);
 }

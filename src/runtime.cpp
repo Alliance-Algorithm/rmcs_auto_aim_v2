@@ -192,7 +192,7 @@ auto main() -> int {
             visualization.update_visible_robot(armors);
 
             const auto yaw = context.yaw;
-            if (auto result = fire_control.solve(*snapshot, yaw)) {
+            if (auto result = fire_control.solve(*snapshot, yaw, context.bullet_speed)) {
                 command.should_control    = true;
                 command.target            = target.target_id;
                 command.should_shoot      = result->shoot_permitted;

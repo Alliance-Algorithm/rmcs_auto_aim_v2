@@ -28,7 +28,10 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto solve(const predictor::Snapshot& snapshot, double current_yaw) -> std::optional<Result>;
+    auto solve(
+        const predictor::Snapshot& snapshot, double current_yaw,
+        double runtime_bullet_speed = std::numeric_limits<double>::quiet_NaN())
+        -> std::optional<Result>;
 };
 
 } // namespace rmcs::kernel

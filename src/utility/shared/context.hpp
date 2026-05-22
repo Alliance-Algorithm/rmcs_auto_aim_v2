@@ -54,6 +54,7 @@ struct SystemContext {
 
     double yaw { kNaN };
     double pitch { kNaN };
+    double bullet_speed { kNaN };
 
     Transform camera_transform = Transform::kNaN(); // Imu Odom Link
 
@@ -75,6 +76,7 @@ struct SystemContext {
             .timestamp        = Clock::now(),
             .yaw              = 0,
             .pitch            = 0,
+            .bullet_speed     = kNaN,
             .camera_transform = Transform::kIdentity(),
         };
     }
