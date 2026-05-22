@@ -80,10 +80,10 @@ pose_estimator:
 
 fire_control:
   initial_bullet_speed: 23.2 # m/s
-  shoot_delay: 0.07 # s
+  shoot_delay: 0.078 # s
   mpc_enable: true
-  yaw_offset: 0.0 # degree
-  pitch_offset: 0.0 # degree
+  yaw_offset: 0.5 # degree
+  pitch_offset: 2.3 # degree
 
   aim_point_chooser:
     coming_angle: 70.0 # degree
@@ -114,7 +114,7 @@ visualization:
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
 
-  image_enabled: true
+  image_enabled: false
   visible_armors_enabled: true
   visible_robot_enabled: true
   camera_pose_enabled: true

@@ -10,6 +10,7 @@
 #include "utility/shared/context.hpp"
 
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/keyboard.hpp>
 #include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/robot_id.hpp>
 #include <rmcs_msgs/switch.hpp>
@@ -37,8 +38,13 @@ private:
     OutputInterface<double> yaw_acc;
     OutputInterface<double> pitch_acc;
     OutputInterface<bool> feedforward_valid;
+    OutputInterface<uint8_t> ui_mode;
 
+    InputInterface<rmcs_msgs::Keyboard> keyboard;
     InputInterface<rmcs_msgs::RobotId> robot_id;
+
+    rmcs_msgs::Keyboard last_keyboard_ = rmcs_msgs::Keyboard::zero();
+    TargetMode target_mode_ { TargetMode::COMBAT };
 
     auto make_context() const {
         auto context = SystemContext { };
@@ -55,10 +61,21 @@ private:
 
         // TODO:无敌状态下的装甲板需要从裁判系统获取并在此更新
         context.invincible_devices = DeviceIds::None();
+        context.target_mode        = target_mode_;
 
         context.id = *robot_id;
 
         return context;
+    }
+
+    auto update_target_mode() -> void {
+        if (!keyboard.ready()) return;
+
+        if (!last_keyboard_.g && keyboard->g) {
+            target_mode_ = target_mode_ == TargetMode::COMBAT ? TargetMode::OUTPOST_ONLY
+                                                              : TargetMode::COMBAT;
+        }
+        last_keyboard_ = *keyboard;
     }
 
 public:
@@ -75,11 +92,17 @@ public:
         register_output("/auto_aim/yaw_acc", yaw_acc, 0.0);
         register_output("/auto_aim/pitch_acc", pitch_acc, 0.0);
         register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
+        register_output("/auto_aim/ui_mode", ui_mode, uint8_t { 0 });
 
+        register_input("/remote/keyboard", keyboard, false);
         register_input("/referee/id", robot_id, true);
     }
 
     auto update() -> void override {
+        update_target_mode();
+
+        *ui_mode = static_cast<uint8_t>(target_mode_);
+
         if (!adapter.ready()) [[unlikely]] {
             feishu.send(SystemContext::kInvalid());
             return;

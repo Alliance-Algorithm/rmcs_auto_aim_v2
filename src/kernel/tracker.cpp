@@ -44,6 +44,11 @@ struct Tracker::Impl {
 
     auto set_enemy_color(CampColor color) { filter.set_enemy_color(color); }
 
+    auto set_target_mode(TargetMode mode) {
+        filter.set_target_mode(mode);
+        decider.set_target_mode(mode);
+    }
+
     auto filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto result = filter.filter(armors);
         return result;
@@ -70,6 +75,8 @@ auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
 }
 
 auto Tracker::set_enemy_color(CampColor color) -> void { pimpl->set_enemy_color(color); }
+
+auto Tracker::set_target_mode(TargetMode mode) -> void { pimpl->set_target_mode(mode); }
 
 auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D> {
     return pimpl->filter_armors(armors);

@@ -163,6 +163,7 @@ auto main() -> int {
             else if (context.id.color() == RobotColor::BLUE)
                 tracker.set_enemy_color(CampColor::RED);
 
+            tracker.set_target_mode(context.target_mode);
             tracker.set_invincible_armors(context.invincible_devices);
             armors_2d = tracker.filter_armors(result->armors);
 
@@ -184,8 +185,9 @@ auto main() -> int {
 
         /// 3. Apply Tracker
         ///
-        auto target  = tracker.decide(armors_3d, image->get_timestamp());
-        auto command = AutoAimState::kInvalid();
+        auto target    = tracker.decide(armors_3d, image->get_timestamp());
+        auto command   = AutoAimState::kInvalid();
+        command.target = target.target_id;
         if (target.allow_control && target.snapshot) {
             auto& snapshot = target.snapshot;
             auto armors    = snapshot->predicted_armors(Clock::now());

@@ -8,6 +8,7 @@
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
+#include "utility/robot/target_mode.hpp"
 
 namespace rmcs::kernel {
 
@@ -20,6 +21,8 @@ public:
     auto set_invincible_armors(DeviceIds devices) -> void;
 
     auto set_enemy_color(CampColor color) -> void;
+
+    auto set_target_mode(TargetMode mode) -> void;
 
     auto filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D>;
 

@@ -2,6 +2,8 @@
 
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
+#include "utility/robot/target_mode.hpp"
+
 namespace rmcs::tracker {
 class ArmorFilter {
 
@@ -10,6 +12,8 @@ public:
     auto set_enemy_color(CampColor color) -> void;
 
     auto set_invincible_armors(DeviceIds devices) -> void;
+
+    auto set_target_mode(TargetMode mode) -> void;
 
     auto filter(std::span<Armor2D> const&) const -> std::vector<Armor2D>;
 };

@@ -11,6 +11,7 @@
 #include "utility/pimpl.hpp"
 #include "utility/robot/id.hpp"
 #include "utility/robot/priority.hpp"
+#include "utility/robot/target_mode.hpp"
 
 namespace rmcs::tracker {
 
@@ -27,6 +28,8 @@ public:
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
+
+    auto set_target_mode(TargetMode mode) -> void;
 
     auto update(std::span<Armor3D const> armors, TimePoint t) -> Output;
 };

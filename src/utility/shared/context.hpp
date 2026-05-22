@@ -3,6 +3,7 @@
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/id.hpp"
+#include "utility/robot/target_mode.hpp"
 
 #include <rmcs_msgs/robot_id.hpp>
 
@@ -60,6 +61,8 @@ struct SystemContext {
     /// Lazy Context
     ///
     DeviceIds invincible_devices = DeviceIds::None();
+
+    TargetMode target_mode { TargetMode::COMBAT };
 
     RobotId id = RobotId::UNKNOWN;
 

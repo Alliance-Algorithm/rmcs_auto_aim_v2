@@ -36,6 +36,8 @@ struct Decider::Impl {
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
+    auto set_target_mode(TargetMode mode) -> void { target_mode = mode; }
+
     auto update(std::span<Armor3D const> armors, TimePoint t) -> Output {
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
@@ -77,6 +79,10 @@ struct Decider::Impl {
             return expired;
         });
 
+        if (!target_mode_allows(target_mode, locked_target_id)) {
+            locked_target_id = DeviceId::UNKNOWN;
+        }
+
         // 优先保持已锁定且仍在短时失观测宽限期内的目标
         if (locked_target_id != DeviceId::UNKNOWN) {
             auto locked_seen_it = last_seen_times.find(locked_target_id);
@@ -94,10 +100,11 @@ struct Decider::Impl {
 
         auto fresh_target_id = arbitrate(fused_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
-            bool allow_control = trackers.at(fresh_target_id)->is_converged();
+            bool is_converged = trackers.at(fresh_target_id)->is_converged();
+            bool allow_lock   = fresh_target_id == DeviceId::OUTPOST || is_converged;
 
-            // 只有收敛后的目标才会进入锁定；未收敛目标可以输出，但不会写成锁定目标。
-            if (allow_control) locked_target_id = fresh_target_id;
+            // 前哨站允许先锁定后收敛，避免在短时融合空窗内被其他兵种切走。
+            if (allow_lock) locked_target_id = fresh_target_id;
 
             return make_output(fresh_target_id, true);
         }
@@ -114,6 +121,7 @@ struct Decider::Impl {
 
         for (const auto& [device_id, _] : trackers) {
             if (!fused_ids.contains(device_id)) continue;
+            if (!target_mode_allows(target_mode, device_id)) continue;
 
             if (best_target_id == DeviceId::UNKNOWN
                 || is_better_target(device_id, best_target_id)) {
@@ -161,6 +169,7 @@ struct Decider::Impl {
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
     std::unordered_map<DeviceId, TimePoint> last_seen_times;
     DeviceId locked_target_id { DeviceId::UNKNOWN };
+    TargetMode target_mode { TargetMode::COMBAT };
 
     PriorityMode priority_mode;
 
@@ -200,6 +209,8 @@ auto Decider::initialize(const YAML::Node& yaml) noexcept -> std::expected<void,
 auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
+
+auto Decider::set_target_mode(TargetMode mode) -> void { return pimpl->set_target_mode(mode); }
 
 auto Decider::update(std::span<Armor3D const> armors, TimePoint t) -> Output {
     return pimpl->update(armors, t);
