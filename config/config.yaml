@@ -82,7 +82,7 @@ fire_control:
   initial_bullet_speed: 23.2 # m/s
   shoot_delay: 0.078 # s
   mpc_enable: true
-  yaw_offset: 0.5 # degree
+  yaw_offset: 0.6 # degree
   pitch_offset: 2.3 # degree
 
   aim_point_chooser:
