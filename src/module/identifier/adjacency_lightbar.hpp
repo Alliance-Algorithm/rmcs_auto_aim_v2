@@ -16,6 +16,8 @@ public:
     struct Lightbar {
         Point2d point1;
         Point2d point2;
+        bool is_right { false };
+        bool is_upper { false };
     };
 
     auto set_camera_feature(const util::CameraFeature& feature) -> void;

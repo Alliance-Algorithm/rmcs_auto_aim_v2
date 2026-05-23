@@ -21,13 +21,13 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: true
+    invert_image: false
     software_sync: false
     trigger_mode: false
     fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/workspaces/data/autoaim/手持录旋转前哨站.avi"
+    location: "/workspaces/data/autoaim/静止看前哨站.avi"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -65,6 +65,7 @@ tracker:
 
 pose_estimator:
   yaw_optimizer: true
+  distance_optimizer: true
   camera_matrix:
     [
       1.722231837421459e+03,

@@ -20,10 +20,14 @@ namespace rmcs {
 struct AdjacencyLightbarFinder::Impl {
     struct CandidateRoi {
         cv::Rect2i roi;
-        cv::Point2f predicted_higher;
-        cv::Point2f predicted_lowwer;
-        cv::Point2f higher;
-        cv::Point2f lowwer;
+
+        cv::Point2f predicted_upper;
+        cv::Point2f predicted_lower;
+
+        cv::Point2f upper;
+        cv::Point2f lower;
+        bool is_right { false };
+        bool is_upper { false };
         bool detected { false };
     };
     std::vector<CandidateRoi> candidates { };
@@ -50,7 +54,7 @@ struct AdjacencyLightbarFinder::Impl {
         const auto translation = armor3d.translation.make<Eigen::Vector3d>();
         const auto rotation    = armor3d.orientation.make<Eigen::Quaterniond>().toRotationMatrix();
 
-        const auto lunit  = Eigen::Vector3d { 0.0, 1.0, 0.0 };
+        const auto lunit  = Eigen::Vector3d { 0.0, +1.0, 0.0 };
         const auto runit  = Eigen::Vector3d { 0.0, -1.0, 0.0 };
         const auto lpoint = Eigen::Vector3d { (translation + rotation * lunit).eval() };
         const auto rpoint = Eigen::Vector3d { (translation + rotation * runit).eval() };
@@ -73,6 +77,8 @@ struct AdjacencyLightbarFinder::Impl {
             CandidateBar { solution.result.bars[0] },
             CandidateBar { solution.result.bars[1] },
         };
+        const auto bar0_center_z = 0.5 * (bars[0].bar.first.z + bars[0].bar.second.z);
+        const auto bar1_center_z = 0.5 * (bars[1].bar.first.z + bars[1].bar.second.z);
 
         const auto& mat     = image.details().mat;
         const auto distance = armor3d.translation.make<Eigen::Vector3d>().norm();
@@ -88,7 +94,8 @@ struct AdjacencyLightbarFinder::Impl {
         self_roi.height += 10;
         self_roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
-        for (const auto& candidate : bars) {
+        for (std::size_t candidate_index = 0; candidate_index < bars.size(); ++candidate_index) {
+            const auto& candidate = bars[candidate_index];
             // 重投影候选灯条的两个端点。
             auto segment_points = std::array<cv::Point3f, 2> { };
             for (std::size_t i = 0; i < segment_points.size(); ++i) {
@@ -118,7 +125,18 @@ struct AdjacencyLightbarFinder::Impl {
             roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
             if (roi.width <= 0 || roi.height <= 0) continue;
 
-            candidates.push_back({ roi, top, bottom, top, bottom, false });
+            const auto candidate_center_z = candidate_index == 0 ? bar0_center_z : bar1_center_z;
+            const auto other_center_z     = candidate_index == 0 ? bar1_center_z : bar0_center_z;
+            candidates.push_back({
+                roi,
+                top,
+                bottom,
+                top,
+                bottom,
+                prefer_right,
+                candidate_center_z > other_center_z,
+                false,
+            });
 
             auto roi_mat            = mat(roi).clone();
             const auto self_overlap = self_roi & roi;
@@ -141,10 +159,10 @@ struct AdjacencyLightbarFinder::Impl {
                 static_cast<int>(std::lround(bottom.y - 1.0 * roi.y)) };
             if (!finder.solve()) continue;
 
-            candidates.back().higher =
+            candidates.back().upper =
                 cv::Point2f { static_cast<float>(finder.result.point1.x + roi.x),
                     static_cast<float>(finder.result.point1.y + roi.y) };
-            candidates.back().lowwer =
+            candidates.back().lower =
                 cv::Point2f { static_cast<float>(finder.result.point2.x + roi.x),
                     static_cast<float>(finder.result.point2.y + roi.y) };
             candidates.back().detected = true;
@@ -159,8 +177,10 @@ struct AdjacencyLightbarFinder::Impl {
         }
 
         detected_lightbar = Lightbar {
-            .point1 = Point2d { detected->higher },
-            .point2 = Point2d { detected->lowwer },
+            .point1   = Point2d { detected->upper },
+            .point2   = Point2d { detected->lower },
+            .is_right = detected->is_right,
+            .is_upper = detected->is_upper,
         };
         return detected_lightbar;
     }
@@ -180,8 +200,8 @@ struct AdjacencyLightbarFinder::Impl {
             const auto& color     = kRoiColors[i % kRoiColors.size()];
 
             cv::rectangle(mat, candidate.roi, color, 1, cv::LINE_AA);
-            cv::circle(mat, candidate.predicted_higher, 2, kPredictedPointColor, -1, cv::LINE_AA);
-            cv::circle(mat, candidate.predicted_lowwer, 2, kPredictedPointColor, -1, cv::LINE_AA);
+            cv::circle(mat, candidate.predicted_upper, 1, kPredictedPointColor, -1, cv::LINE_AA);
+            cv::circle(mat, candidate.predicted_lower, 1, kPredictedPointColor, -1, cv::LINE_AA);
         }
     }
 
@@ -190,9 +210,9 @@ struct AdjacencyLightbarFinder::Impl {
         if (mat.empty()) return;
         if (!detected_lightbar.has_value()) return;
 
-        cv::circle(mat, detected_lightbar->point1.make<cv::Point2f>(), 3, cv::Scalar { 0, 0, 255 },
+        cv::circle(mat, detected_lightbar->point1.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 },
             -1, cv::LINE_AA);
-        cv::circle(mat, detected_lightbar->point2.make<cv::Point2f>(), 3, cv::Scalar { 0, 0, 255 },
+        cv::circle(mat, detected_lightbar->point2.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 },
             -1, cv::LINE_AA);
     }
 };

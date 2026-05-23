@@ -24,10 +24,10 @@ auto NeighborBarSolution::solve() -> void {
 
     auto candidate_z = std::array<double, 2> { };
     if (input.in_right) {
-        candidate_z[0] = input.source.translation.z - kOutpostArmorHeightStep;
+        candidate_z[0] = input.source.translation.z - 1.0 * kOutpostArmorHeightStep;
         candidate_z[1] = input.source.translation.z + 2.0 * kOutpostArmorHeightStep;
     } else {
-        candidate_z[0] = input.source.translation.z + kOutpostArmorHeightStep;
+        candidate_z[0] = input.source.translation.z + 1.0 * kOutpostArmorHeightStep;
         candidate_z[1] = input.source.translation.z - 2.0 * kOutpostArmorHeightStep;
     }
 
