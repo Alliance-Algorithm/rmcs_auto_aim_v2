@@ -3,11 +3,9 @@
 #include "module/identifier/green_light_detection.hpp"
 #include "utility/image/image.details.hpp"
 
-#include <ranges>
+#include <algorithm>
+#include <cmath>
 #include <span>
-#include <vector>
-
-#include <opencv2/imgproc.hpp>
 
 using namespace rmcs::identifier;
 
@@ -21,6 +19,7 @@ struct GreenLightLocator::Impl {
     auto locate(const Image& image, std::span<const Armor2D> armors) noexcept
         -> GreenLightLocator::Result {
         auto result = GreenLightLocator::Result {
+            .detect_roi  = std::nullopt,
             .green_light = std::nullopt,
         };
         if (armors.empty()) return result;
@@ -28,6 +27,7 @@ struct GreenLightLocator::Impl {
         auto detect_roi = compute_detect_roi(image, armors);
         if (!detect_roi.has_value()) return result;
 
+        result.detect_roi   = detect_roi;
         result.green_light = green_light_detection.sync_detect(image, *detect_roi);
         return result;
     }
@@ -35,31 +35,52 @@ struct GreenLightLocator::Impl {
 private:
     static auto compute_detect_roi(const Image& image, std::span<const Armor2D> armors)
         -> std::optional<cv::Rect2i> {
-        constexpr auto kExpandPixels = 300;
+        constexpr auto kExpandScale = 1.5F;
 
         if (armors.empty()) return std::nullopt;
 
         const auto& mat = image.details().mat;
         if (mat.empty()) return std::nullopt;
 
-        auto union_rect = cv::boundingRect(std::vector<cv::Point2f> {
-            armors.front().tl,
-            armors.front().tr,
-            armors.front().br,
-            armors.front().bl,
-        });
+        auto min_x = armors.front().tl.x;
+        auto max_x = armors.front().tl.x;
+        auto min_y = armors.front().tl.y;
+        auto max_y = armors.front().tl.y;
+        auto max_armor_width = 0.0F;
+        auto max_armor_height = 0.0F;
 
-        for (const auto& armor : armors | std::views::drop(1)) {
-            const auto armor_rect = cv::boundingRect(
-                std::vector<cv::Point2f> { armor.tl, armor.tr, armor.br, armor.bl });
-            union_rect |= armor_rect;
+        for (const auto& armor : armors) {
+            auto armor_min_x = armor.tl.x;
+            auto armor_max_x = armor.tl.x;
+            auto armor_min_y = armor.tl.y;
+            auto armor_max_y = armor.tl.y;
+
+            for (const auto& corner : armor.corners()) {
+                min_x = std::min(min_x, corner.x);
+                max_x = std::max(max_x, corner.x);
+                min_y = std::min(min_y, corner.y);
+                max_y = std::max(max_y, corner.y);
+
+                armor_min_x = std::min(armor_min_x, corner.x);
+                armor_max_x = std::max(armor_max_x, corner.x);
+                armor_min_y = std::min(armor_min_y, corner.y);
+                armor_max_y = std::max(armor_max_y, corner.y);
+            }
+
+            max_armor_width = std::max(max_armor_width, armor_max_x - armor_min_x);
+            max_armor_height = std::max(max_armor_height, armor_max_y - armor_min_y);
         }
 
+        const auto roi_left   = min_x - max_armor_width * kExpandScale;
+        const auto roi_right  = max_x + max_armor_width * kExpandScale;
+        const auto roi_top    = min_y - max_armor_height * kExpandScale;
+        const auto roi_bottom = max_y + max_armor_height * kExpandScale;
+
         auto roi = cv::Rect2i {
-            union_rect.x - kExpandPixels,
-            union_rect.y - kExpandPixels,
-            union_rect.width + kExpandPixels * 2,
-            union_rect.height + kExpandPixels * 2,
+            static_cast<int>(std::floor(roi_left)),
+            static_cast<int>(std::floor(roi_top)),
+            static_cast<int>(std::ceil(roi_right) - std::floor(roi_left)),
+            static_cast<int>(std::ceil(roi_bottom) - std::floor(roi_top)),
         };
 
         roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };

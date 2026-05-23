@@ -7,5 +7,6 @@
 namespace rmcs::util {
 
 auto draw_green_light(Image&, const cv::Rect2i&) noexcept -> void;
+auto draw_green_light_roi(Image&, const cv::Rect2i&) noexcept -> void;
 
 }

@@ -8,7 +8,6 @@
 
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
-#include "utility/image/green_light.hpp"
 #include "utility/image/text.hpp"
 #include "utility/logging_util.hpp"
 #include "utility/math/linear.hpp"
@@ -42,13 +41,13 @@ auto main() -> int {
     logging.reset("detection", 5);
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> {};
-    auto capturer       = kernel::Capturer {};
-    auto identifier     = kernel::Identifier {};
-    auto tracker        = kernel::Tracker {};
-    auto pose_estimator = kernel::PoseEstimator {};
-    auto fire_control   = kernel::FireControl {};
-    auto visualization  = kernel::Visualization {};
+    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };
+    auto capturer       = kernel::Capturer { };
+    auto identifier     = kernel::Identifier { };
+    auto tracker        = kernel::Tracker { };
+    auto pose_estimator = kernel::PoseEstimator { };
+    auto fire_control   = kernel::FireControl { };
+    auto visualization  = kernel::Visualization { };
 
     /// Configure
     auto configuration     = util::configuration();
@@ -106,7 +105,7 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
-    auto framerate = FramerateCounter {};
+    auto framerate = FramerateCounter { };
     framerate.set_interval(std::chrono::seconds { 5 });
 
     while (util::get_running()) {
@@ -137,23 +136,10 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds {};
+        auto armors_2d = Armor2Ds { };
         {
             auto result = identifier.sync_identify(*image);
-            if (!result.has_value()) {
-                logging.error("detection", "Something wrong happend in identifier");
-                continue; // 一般不会推理出错喵~
-            }
-            if (use_painted_image) {
-                for (const auto& armor : result->armors)
-                    util::draw(*image, armor);
-
-                if (result->outpost_green_light.has_value())
-                    util::draw_green_light(*image, *result->outpost_green_light);
-                if (result->base_green_light.has_value())
-                    util::draw_green_light(*image, *result->base_green_light);
-            }
-            logging.reset("detection", 5);
+            if (!result.has_value()) continue; // 一般不会推理出错喵~
 
             using namespace rmcs_msgs;
             if (context.id == RobotId::UNKNOWN) {
@@ -168,13 +154,22 @@ auto main() -> int {
 
             if (armors_2d.empty()) continue;
         }
+        [[maybe_unused]] auto paint_image = std::experimental::scope_exit { [&] {
+            if (use_painted_image) {
+                identifier.draw_green_light_roi(*image);
+                identifier.draw_green_light(*image);
+
+                for (const auto& armor : armors_2d)
+                    util::draw(*image, armor);
+            }
+        } };
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds {};
+        auto armors_3d = Armor3Ds { };
         {
             pose_estimator.update_camera_transform(context.camera_transform);
-            auto result = pose_estimator.estimate_armor(armors_2d);
+            auto result = pose_estimator.estimate_armor(armors_2d, *image);
 
             armors_3d = pose_estimator.into_odom_link(result);
             if (armors_3d.empty()) continue;
@@ -203,7 +198,7 @@ auto main() -> int {
                 command.yaw_acc           = result->yaw_acc;
                 command.pitch_acc         = result->pitch_acc;
                 command.feedforward_valid = result->feedforward_valid;
-                command.robot_center      = Translation { result->center_position };
+                command.robot_center      = result->center_position;
 
                 visualization.update_aiming_direction(command.yaw, -command.pitch);
 

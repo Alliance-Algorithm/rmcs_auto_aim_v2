@@ -19,6 +19,7 @@ class GreenLightLocator {
 
 public:
     struct Result {
+        std::optional<cv::Rect2i> detect_roi;
         std::optional<cv::Rect2i> green_light;
     };
 

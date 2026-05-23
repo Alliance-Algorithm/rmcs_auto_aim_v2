@@ -1,4 +1,4 @@
-localhost_develop: false
+localhost_develop: true
 use_visualization: true
 use_painted_image: true
 
@@ -7,8 +7,8 @@ capturer:
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
 
-  # source: "local_video"
-  source: "hikcamera"
+  source: "local_video"
+  # source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500
@@ -19,13 +19,13 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: false
+    invert_image: true
     software_sync: false
     trigger_mode: false
     fixed_framerate: false
   local_video:
     # 替换为你具体的路径
-    location: "/path/to/your/video"
+    location: "/workspaces/data/autoaim/手持录旋转前哨站.avi"
     # double 帧率
     frame_rate: 60
     # bool 是否循环播放
@@ -79,11 +79,11 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 23.2 # m/s
+  initial_bullet_speed: 22.5 # m/s
   shoot_delay: 0.07 # s
   mpc_enable: true
-  yaw_offset: 0.0 # degree
-  pitch_offset: 0.0 # degree
+  yaw_offset: -0.35 # degree
+  pitch_offset: 0.5 # degree
 
   aim_point_chooser:
     coming_angle: 70.0 # degree
@@ -108,7 +108,7 @@ fire_control:
     split_distance: 2 # m
 
 visualization:
-  framerate: 60
+  framerate: 30
   # e.g. monitor_host: "192.168.3.125"
   monitor_host: "127.0.0.1"
   monitor_port: "5000"

@@ -53,6 +53,21 @@ target_link_libraries(
 )
 
 add_executable(
+    see_outpost
+    ${TOOL_DIR}/see_outpost.cpp
+    ${RMCS_SRC_DIR}/utility/math/outpost.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    see_outpost
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+)
+
+add_executable(
     ov-model-status
     ${TOOL_DIR}/ov_model_status.cpp
 )
