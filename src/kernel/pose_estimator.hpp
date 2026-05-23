@@ -21,6 +21,9 @@ public:
 
     auto into_odom_link(std::span<const Armor3D> armors) const -> std::vector<Armor3D>;
     auto into_odom_link(const Armor3D& armor) const -> Armor3D;
+
+    auto draw_debug(Image&) -> void;
+    auto publish_debug() -> void;
 };
 
 }

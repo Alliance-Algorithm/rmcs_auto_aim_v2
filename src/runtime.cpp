@@ -172,6 +172,8 @@ auto main() -> int {
         {
             pose_estimator.update_camera_transform(context.camera_transform);
             auto result = pose_estimator.estimate_armor(armors_2d, *image);
+            pose_estimator.draw_debug(*image);
+            pose_estimator.publish_debug();
 
             armors_3d = pose_estimator.into_odom_link(result);
             if (armors_3d.empty()) continue;
