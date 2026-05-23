@@ -78,7 +78,7 @@ auto OutpostDistanceOptimizer::solve() -> bool {
                                              : neighbor_bar_solution.result.bars[1];
     }();
 
-    constexpr auto kRadiusScale = 1.13;
+    constexpr auto kRadiusScale = 1.13; // @NOTE: 娘的半径错了，试了老半天没找出问题
     for (const auto& point : { selected_bar.first, selected_bar.second }) {
         const auto point_in_camera_ros = point.make<Eigen::Vector3d>();
         auto point_in_local_ros =
