@@ -335,7 +335,9 @@ struct OutpostRobotState::Impl {
         return true;
     }
 
-    auto is_converged() const -> bool { return initialized && spin.confirmed_sign.has_value(); }
+    auto is_converged() const -> bool {
+        return initialized && (spin.confirmed_sign.has_value() || spin.pending_sign.has_value());
+    }
 
     auto get_snapshot() const -> Snapshot {
         return detail::make_outpost_snapshot(
