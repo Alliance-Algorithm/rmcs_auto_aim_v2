@@ -54,6 +54,7 @@ auto main() -> int {
     auto localhost_develop = configuration["localhost_develop"].as<bool>();
     auto use_visualization = configuration["use_visualization"].as<bool>();
     auto use_painted_image = configuration["use_painted_image"].as<bool>();
+    auto use_painted_roi   = configuration["use_painted_roi"].as<bool>();
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -155,10 +156,11 @@ auto main() -> int {
             if (armors_2d.empty()) continue;
         }
         [[maybe_unused]] auto paint_image = std::experimental::scope_exit { [&] {
-            if (use_painted_image) {
+            if (use_painted_roi) {
                 identifier.draw_green_light_roi(*image);
+            }
+            if (use_painted_image) {
                 identifier.draw_green_light(*image);
-
                 for (const auto& armor : armors_2d)
                     util::draw(*image, armor);
             }

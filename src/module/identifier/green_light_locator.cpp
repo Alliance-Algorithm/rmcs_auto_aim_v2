@@ -27,7 +27,7 @@ struct GreenLightLocator::Impl {
         auto detect_roi = compute_detect_roi(image, armors);
         if (!detect_roi.has_value()) return result;
 
-        result.detect_roi   = detect_roi;
+        result.detect_roi  = detect_roi;
         result.green_light = green_light_detection.sync_detect(image, *detect_roi);
         return result;
     }
@@ -35,18 +35,18 @@ struct GreenLightLocator::Impl {
 private:
     static auto compute_detect_roi(const Image& image, std::span<const Armor2D> armors)
         -> std::optional<cv::Rect2i> {
-        constexpr auto kExpandScale = 1.5F;
+        constexpr auto kExpandScale = 4.0;
 
         if (armors.empty()) return std::nullopt;
 
         const auto& mat = image.details().mat;
         if (mat.empty()) return std::nullopt;
 
-        auto min_x = armors.front().tl.x;
-        auto max_x = armors.front().tl.x;
-        auto min_y = armors.front().tl.y;
-        auto max_y = armors.front().tl.y;
-        auto max_armor_width = 0.0F;
+        auto min_x            = armors.front().tl.x;
+        auto max_x            = armors.front().tl.x;
+        auto min_y            = armors.front().tl.y;
+        auto max_y            = armors.front().tl.y;
+        auto max_armor_width  = 0.0F;
         auto max_armor_height = 0.0F;
 
         for (const auto& armor : armors) {
@@ -67,7 +67,7 @@ private:
                 armor_max_y = std::max(armor_max_y, corner.y);
             }
 
-            max_armor_width = std::max(max_armor_width, armor_max_x - armor_min_x);
+            max_armor_width  = std::max(max_armor_width, armor_max_x - armor_min_x);
             max_armor_height = std::max(max_armor_height, armor_max_y - armor_min_y);
         }
 

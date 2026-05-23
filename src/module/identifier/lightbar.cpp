@@ -2,7 +2,6 @@
 
 #include "utility/math/angle.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -24,32 +23,37 @@ auto LightbarFinder::solve() -> bool {
     cv::HoughLinesP(mask, lines, 1.0, std::numbers::pi / 180.0, 12, 12.0, 4.0);
     if (lines.empty()) return false;
 
-    const auto predicted_dx = static_cast<double>(input.predicted_point2.x - input.predicted_point1.x);
-    const auto predicted_dy = static_cast<double>(input.predicted_point2.y - input.predicted_point1.y);
-    const auto predicted_angle = std::atan2(predicted_dy, predicted_dx);
+    const auto predicted_dx =
+        static_cast<double>(input.predicted_point2.x - input.predicted_point1.x);
+    const auto predicted_dy =
+        static_cast<double>(input.predicted_point2.y - input.predicted_point1.y);
+    const auto predicted_angle    = std::atan2(predicted_dy, predicted_dx);
     const auto predicted_midpoint = cv::Point2d {
         0.5 * static_cast<double>(input.predicted_point1.x + input.predicted_point2.x),
         0.5 * static_cast<double>(input.predicted_point1.y + input.predicted_point2.y),
     };
 
-    auto best_line   = cv::Vec4i { };
-    auto best_score  = std::numeric_limits<double>::infinity();
+    auto best_line  = cv::Vec4i { };
+    auto best_score = std::numeric_limits<double>::infinity();
 
     for (const auto& line : lines) {
         const auto dx          = static_cast<double>(line[2] - line[0]);
         const auto dy          = static_cast<double>(line[3] - line[1]);
         const auto line_angle  = std::atan2(dy, dx);
-        const auto angle_error = std::abs(util::normalize_angle(line_angle - predicted_angle));
+        const auto angle_diff  = util::normalize_angle(line_angle - predicted_angle);
+        const auto angle_error = std::min(std::abs(angle_diff),
+            std::abs(util::normalize_angle(angle_diff + std::numbers::pi)));
         if (angle_error > util::deg2rad(20.0)) continue;
 
-        const auto length = std::hypot(dx, dy);
+        const auto length   = std::hypot(dx, dy);
         auto const midpoint = cv::Point2d {
             0.5 * static_cast<double>(line[0] + line[2]),
             0.5 * static_cast<double>(line[1] + line[3]),
         };
-        const auto midpoint_error = std::hypot(
-            midpoint.x - predicted_midpoint.x, midpoint.y - predicted_midpoint.y);
-        const auto score = angle_error * 180.0 / std::numbers::pi + 0.15 * midpoint_error - 0.05 * length;
+        const auto midpoint_error =
+            std::hypot(midpoint.x - predicted_midpoint.x, midpoint.y - predicted_midpoint.y);
+        const auto score =
+            angle_error * 180.0 / std::numbers::pi + 0.15 * midpoint_error - 0.05 * length;
         if (score >= best_score) continue;
 
         best_score = score;

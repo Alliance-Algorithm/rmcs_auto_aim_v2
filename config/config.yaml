@@ -1,6 +1,8 @@
 localhost_develop: true
+
 use_visualization: true
 use_painted_image: true
+use_painted_roi: true
 
 capturer:
   show_loss_framerate: false

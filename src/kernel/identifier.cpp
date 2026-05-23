@@ -114,7 +114,9 @@ auto Identifier::sync_identify(const Image& src) noexcept -> std::optional<Resul
     return pimpl->identify(src);
 }
 
-auto Identifier::draw_green_light(Image& image) noexcept -> void { return pimpl->draw_green_light(image); }
+auto Identifier::draw_green_light(Image& image) noexcept -> void {
+    return pimpl->draw_green_light(image);
+}
 
 auto Identifier::draw_green_light_roi(Image& image) noexcept -> void {
     return pimpl->draw_green_light_roi(image);

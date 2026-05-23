@@ -122,9 +122,9 @@ struct PoseEstimator::Impl {
             armor3ds, [](const Armor3D& armor) { return armor.genre == DeviceId::OUTPOST; });
         if (outpost3d != armor3ds.end() && outpost2d != armor2ds.end()) {
             if (auto lightbar = adjacency_finder.find(image, *outpost2d, *outpost3d)) {
-                adjacency_finder.draw_roi(image);
                 adjacency_finder.draw_lightbar(image);
             }
+            adjacency_finder.draw_roi(image);
         }
         return armor3ds;
     }

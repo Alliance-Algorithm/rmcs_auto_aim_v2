@@ -2,7 +2,6 @@
 #include "module/identifier/lightbar.hpp"
 
 #include "utility/image/image.details.hpp"
-#include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
 
@@ -21,8 +20,11 @@ namespace rmcs {
 struct AdjacencyLightbarFinder::Impl {
     struct CandidateRoi {
         cv::Rect2i roi;
+        cv::Point2f predicted_higher;
+        cv::Point2f predicted_lowwer;
         cv::Point2f higher;
         cv::Point2f lowwer;
+        bool detected { false };
     };
     std::vector<CandidateRoi> candidates { };
     std::optional<Lightbar> detected_lightbar { };
@@ -35,7 +37,7 @@ struct AdjacencyLightbarFinder::Impl {
         has_camera_feature = true;
     }
 
-    auto find(const Image& image, const Armor2D&, const Armor3D& armor3d)
+    auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
         -> std::optional<Lightbar> {
 
         candidates.clear();
@@ -45,38 +47,31 @@ struct AdjacencyLightbarFinder::Impl {
         if (!has_camera_feature) return std::nullopt;
         if (image.details().mat.empty()) return std::nullopt;
 
-        const auto yaw          = util::eulers(armor3d.orientation.make<Eigen::Quaterniond>())[0];
-        const auto prefer_right = yaw >= 0.0;
+        const auto translation = armor3d.translation.make<Eigen::Vector3d>();
+        const auto rotation    = armor3d.orientation.make<Eigen::Quaterniond>().toRotationMatrix();
 
-        auto right_solution           = util::NeighborBarSolution { };
-        right_solution.input.source   = armor3d;
-        right_solution.input.in_right = true;
-        right_solution.solve();
+        const auto lunit  = Eigen::Vector3d { 0.0, 1.0, 0.0 };
+        const auto runit  = Eigen::Vector3d { 0.0, -1.0, 0.0 };
+        const auto lpoint = Eigen::Vector3d { (translation + rotation * lunit).eval() };
+        const auto rpoint = Eigen::Vector3d { (translation + rotation * runit).eval() };
 
-        auto left_solution           = util::NeighborBarSolution { };
-        left_solution.input.source   = armor3d;
-        left_solution.input.in_right = false;
-        left_solution.solve();
+        const auto lnorm = lpoint.x() * lpoint.x() + lpoint.y() * lpoint.y();
+        const auto rnorm = rpoint.x() * rpoint.x() + rpoint.y() * rpoint.y();
 
-        const auto& preferred_solution = prefer_right ? right_solution : left_solution;
-        const auto& secondary_solution = prefer_right ? left_solution : right_solution;
+        // The side closer to the origin in the ROS xy plane is treated as the incoming side.
+        const auto prefer_right = rnorm < lnorm;
 
-        const auto preferred_yaw = prefer_right
-            ? util::normalize_angle(yaw + 2.0 * std::numbers::pi / 3.0)
-            : util::normalize_angle(yaw - 2.0 * std::numbers::pi / 3.0);
-        const auto secondary_yaw = prefer_right
-            ? util::normalize_angle(yaw - 2.0 * std::numbers::pi / 3.0)
-            : util::normalize_angle(yaw + 2.0 * std::numbers::pi / 3.0);
+        auto solution           = util::NeighborBarSolution { };
+        solution.input.source   = armor3d;
+        solution.input.in_right = prefer_right;
+        solution.solve();
 
         struct CandidateBar {
             std::pair<Point3d, Point3d> bar;
-            double neighbor_yaw;
         };
         const auto bars = std::array {
-            CandidateBar { preferred_solution.result.bars[0], preferred_yaw },
-            CandidateBar { preferred_solution.result.bars[1], preferred_yaw },
-            CandidateBar { secondary_solution.result.bars[0], secondary_yaw },
-            CandidateBar { secondary_solution.result.bars[1], secondary_yaw },
+            CandidateBar { solution.result.bars[0] },
+            CandidateBar { solution.result.bars[1] },
         };
 
         const auto& mat     = image.details().mat;
@@ -84,6 +79,14 @@ struct AdjacencyLightbarFinder::Impl {
         const auto margin_x = std::max(12, static_cast<int>(120.0 / distance + 8.0));
         const auto margin_y = std::max(12, static_cast<int>(090.0 / distance + 6.0));
         const auto camp     = armor_color2camp_color(armor3d.color);
+
+        auto self_roi = cv::boundingRect(
+            std::vector<cv::Point2f> { armor2d.tl, armor2d.tr, armor2d.br, armor2d.bl });
+        self_roi.x -= 5;
+        self_roi.y -= 5;
+        self_roi.width += 10;
+        self_roi.height += 10;
+        self_roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
         for (const auto& candidate : bars) {
             // 重投影候选灯条的两个端点。
@@ -115,8 +118,22 @@ struct AdjacencyLightbarFinder::Impl {
             roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
             if (roi.width <= 0 || roi.height <= 0) continue;
 
+            candidates.push_back({ roi, top, bottom, top, bottom, false });
+
+            auto roi_mat            = mat(roi).clone();
+            const auto self_overlap = self_roi & roi;
+            if (self_overlap.area() > 0) {
+                const auto local_overlap = cv::Rect2i {
+                    self_overlap.x - roi.x,
+                    self_overlap.y - roi.y,
+                    self_overlap.width,
+                    self_overlap.height,
+                };
+                roi_mat(local_overlap).setTo(cv::Scalar::all(0));
+            }
+
             auto finder                   = LightbarFinder { };
-            finder.input.roi              = mat(roi);
+            finder.input.roi              = roi_mat;
             finder.input.color            = camp;
             finder.input.predicted_point1 = { static_cast<int>(std::lround(top.x - 1.0 * roi.x)),
                 static_cast<int>(std::lround(top.y - 1.0 * roi.y)) };
@@ -124,19 +141,26 @@ struct AdjacencyLightbarFinder::Impl {
                 static_cast<int>(std::lround(bottom.y - 1.0 * roi.y)) };
             if (!finder.solve()) continue;
 
-            auto precise_top    = cv::Point2f { static_cast<float>(finder.result.point1.x + roi.x),
-                static_cast<float>(finder.result.point1.y + roi.y) };
-            auto precise_bottom = cv::Point2f { static_cast<float>(finder.result.point2.x + roi.x),
-                static_cast<float>(finder.result.point2.y + roi.y) };
-
-            candidates.push_back({ roi, precise_top, precise_bottom });
+            candidates.back().higher =
+                cv::Point2f { static_cast<float>(finder.result.point1.x + roi.x),
+                    static_cast<float>(finder.result.point1.y + roi.y) };
+            candidates.back().lowwer =
+                cv::Point2f { static_cast<float>(finder.result.point2.x + roi.x),
+                    static_cast<float>(finder.result.point2.y + roi.y) };
+            candidates.back().detected = true;
         }
 
         if (candidates.empty()) return std::nullopt;
 
+        const auto detected = std::ranges::find_if(
+            candidates, [](const CandidateRoi& candidate) { return candidate.detected; });
+        if (detected == candidates.end()) {
+            return std::nullopt;
+        }
+
         detected_lightbar = Lightbar {
-            .point1 = Point2d { candidates.front().higher },
-            .point2 = Point2d { candidates.front().lowwer },
+            .point1 = Point2d { detected->higher },
+            .point2 = Point2d { detected->lowwer },
         };
         return detected_lightbar;
     }
@@ -145,18 +169,19 @@ struct AdjacencyLightbarFinder::Impl {
         auto& mat = image.details().mat;
         if (mat.empty()) return;
 
-        static const auto kColors = std::array {
+        static const auto kRoiColors = std::array {
             cv::Scalar { 0, 255, 0 },
             cv::Scalar { 0, 255, 255 },
         };
+        static const auto kPredictedPointColor = cv::Scalar { 255, 255, 255 };
 
         for (std::size_t i = 0; i < candidates.size(); ++i) {
             const auto& candidate = candidates[i];
-            const auto& color     = kColors[i % kColors.size()];
+            const auto& color     = kRoiColors[i % kRoiColors.size()];
 
             cv::rectangle(mat, candidate.roi, color, 1, cv::LINE_AA);
-            cv::circle(mat, candidate.higher, 2, color, -1, cv::LINE_AA);
-            cv::circle(mat, candidate.lowwer, 2, color, -1, cv::LINE_AA);
+            cv::circle(mat, candidate.predicted_higher, 2, kPredictedPointColor, -1, cv::LINE_AA);
+            cv::circle(mat, candidate.predicted_lowwer, 2, kPredictedPointColor, -1, cv::LINE_AA);
         }
     }
 
