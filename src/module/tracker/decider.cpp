@@ -83,29 +83,30 @@ struct Decider::Impl {
             locked_target_id = DeviceId::UNKNOWN;
         }
 
-        // 优先保持已锁定且仍在短时失观测宽限期内的目标
+        // 优先保持当前锁定目标的连续性：本帧融合命中则继续控制，
+        // 短时失融时继续保留 target_id 但禁止控制。
         if (locked_target_id != DeviceId::UNKNOWN) {
-            auto locked_seen_it = last_seen_times.find(locked_target_id);
-            bool lock_alive     = trackers.contains(locked_target_id)
-                && locked_seen_it != last_seen_times.end()
-                && util::delta_time(t, locked_seen_it->second) <= kLockLostTimeout;
+            if (trackers.contains(locked_target_id)) {
+                if (fused_ids.contains(locked_target_id)) {
+                    return make_output(locked_target_id, true);
+                }
 
-            // 宽限期内即使本帧没观测到，也继续保持 target_id；
-            // 但 make_output 会把 allow_control 置为 false。
-            if (lock_alive)
-                return make_output(locked_target_id, fused_ids.contains(locked_target_id));
+                auto locked_seen_it = last_seen_times.find(locked_target_id);
+                bool within_grace   = locked_seen_it != last_seen_times.end()
+                    && util::delta_time(t, locked_seen_it->second) <= kLockLostTimeout;
+
+                if (within_grace) {
+                    return make_output(locked_target_id, false);
+                }
+            }
 
             locked_target_id = DeviceId::UNKNOWN;
         }
 
         auto fresh_target_id = arbitrate(fused_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
-            bool is_converged = trackers.at(fresh_target_id)->is_converged();
-            bool allow_lock   = fresh_target_id == DeviceId::OUTPOST || is_converged;
-
-            // 前哨站允许先锁定后收敛，避免在短时融合空窗内被其他兵种切走。
-            if (allow_lock) locked_target_id = fresh_target_id;
-
+            // 未命中当前锁定目标时，从本帧成功融合的目标里选出新的锁定目标。
+            locked_target_id = fresh_target_id;
             return make_output(fresh_target_id, true);
         }
 
