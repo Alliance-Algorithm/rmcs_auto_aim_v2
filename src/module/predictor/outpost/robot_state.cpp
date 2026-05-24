@@ -49,19 +49,10 @@ auto make_observation(rmcs::Armor3D const& armor) -> OutpostObservation {
     return { z, OutpostEKFParameters::R(xyz, ypr, ypd), xyz, ypd };
 }
 
-enum class SwitchEvent {
-    Stay,
-    ClockwiseSwitch,
-    CounterClockwiseSwitch,
-    Invalid,
-};
-
 struct AssociationDecision {
     int armor_id { kUnknownArmorId };
     double error { std::numeric_limits<double>::infinity() };
     bool is_valid { false };
-    SwitchEvent event { SwitchEvent::Invalid };
-    int inferred_spin_sign { 0 };
     double phase_offset { 0.0 };
     double height_offset { 0.0 };
     bool extends_layout { false };
@@ -84,9 +75,9 @@ struct MatchingConfig {
 
 struct TrackingConfig {
     std::chrono::duration<double> reset_interval { 1.5 };
-    int spin_confirm_switches { 2 };
-    int stop_confirm_stays { 4 };
-    double stop_phase_rate_gate { 0.8 };
+    int confirm_samples { 3 };
+    double rotate_rate_gate { 0.8 };
+    double stationary_rate_gate { 0.2 };
     MatchingConfig matching {};
 };
 
@@ -94,13 +85,27 @@ struct SpinTracker {
     std::optional<int> confirmed_sign {};
     std::optional<int> pending_sign {};
     int pending_count { 0 };
-    int stop_pending_count { 0 };
-    std::optional<std::pair<double, rmcs::TimePoint>> last_stay_sample {};
+    std::optional<std::pair<double, rmcs::TimePoint>> last_ref_phase_sample {};
 
     auto reset() -> void { *this = {}; }
 
-    auto current_sign() const -> int { return confirmed_sign.value_or(pending_sign.value_or(0)); }
+    auto model_sign() const -> int { return confirmed_sign.value_or(0); }
+
+    auto preferred_switch_sign() const -> std::optional<int> {
+        if (confirmed_sign.has_value() && *confirmed_sign != 0) return confirmed_sign;
+        if (pending_sign.has_value() && *pending_sign != 0) return pending_sign;
+        return std::nullopt;
+    }
 };
+
+auto classify_phase_rate(double phase_rate, TrackingConfig const& config) -> std::optional<int> {
+    if (phase_rate > config.rotate_rate_gate) return +1;
+    if (phase_rate < -config.rotate_rate_gate) return -1;
+
+    // Keep a dead zone between rotating and stationary to avoid classifying noisy samples.
+    if (std::abs(phase_rate) < config.stationary_rate_gate) return 0;
+    return std::nullopt;
+}
 
 auto assigned_count(OutpostArmorLayout const& layout) -> int {
     return static_cast<int>(std::ranges::count(layout.slots, true, &OutpostArmorSlot::assigned));
@@ -149,49 +154,67 @@ auto consider_candidate(AssociationDecision const& candidate, AssociationDecisio
 class AssociationEngine {
 public:
     AssociationEngine(OutpostEKF::XVec const& x, OutpostEKF::PMat const& P,
-        OutpostArmorLayout const& layout, int current_armor_id, SpinTracker const& spin,
-        MatchingConfig const& config) noexcept
+        OutpostArmorLayout const& layout, int current_armor_id,
+        std::optional<int> preferred_switch_sign, MatchingConfig const& config) noexcept
         : x_ { x }
         , P_ { P }
         , layout_ { layout }
         , current_armor_id_ { current_armor_id }
-        , spin_ { spin }
+        , preferred_switch_sign_ { preferred_switch_sign }
         , config_ { config } { }
 
     auto decide(OutpostObservation const& observation) const -> AssociationDecision {
         if (!has_assigned_slot(layout_, current_armor_id_)) return {};
 
-        auto best_decision        = AssociationDecision {};
-        auto const current_phase  = layout_.slots[current_armor_id_].phase_offset;
-        auto const current_height = layout_.slots[current_armor_id_].height_offset;
-
-        consider_candidate(evaluate_candidate(observation, current_armor_id_, current_phase,
-                               current_height, SwitchEvent::Stay, 0, false),
-            best_decision);
-
-        if (spin_.confirmed_sign == 0) return best_decision;
-
-        if (spin_.confirmed_sign.has_value()) {
-            auto const sign = *spin_.confirmed_sign;
-            auto const event =
-                sign > 0 ? SwitchEvent::CounterClockwiseSwitch : SwitchEvent::ClockwiseSwitch;
-            consider_switch_direction(
-                observation, current_phase, current_height, sign, event, best_decision);
-            return best_decision;
-        }
-
-        consider_switch_direction(observation, current_phase, current_height, -1,
-            SwitchEvent::ClockwiseSwitch, best_decision);
-        consider_switch_direction(observation, current_phase, current_height, +1,
-            SwitchEvent::CounterClockwiseSwitch, best_decision);
+        auto best_decision = AssociationDecision {};
+        consider_current_slot(observation, best_decision);
+        consider_assigned_slots(observation, best_decision);
+        consider_layout_extensions(observation, best_decision);
 
         return best_decision;
     }
 
 private:
+    auto consider_current_slot(
+        OutpostObservation const& observation, AssociationDecision& best_decision) const -> void {
+        auto const& slot = layout_.slots[current_armor_id_];
+        consider_candidate(evaluate_candidate(observation, current_armor_id_, slot.phase_offset,
+                               slot.height_offset, true, false),
+            best_decision);
+    }
+
+    auto consider_assigned_slots(
+        OutpostObservation const& observation, AssociationDecision& best_decision) const -> void {
+        for (int armor_id = 0; armor_id < OutpostEKFParameters::kOutpostArmorCount; ++armor_id) {
+            if (armor_id == current_armor_id_ || !layout_.slots[armor_id].assigned) continue;
+
+            auto const& slot = layout_.slots[armor_id];
+            consider_candidate(evaluate_candidate(observation, armor_id, slot.phase_offset,
+                                   slot.height_offset, false, false),
+                best_decision);
+        }
+    }
+
+    auto consider_layout_extensions(
+        OutpostObservation const& observation, AssociationDecision& best_decision) const -> void {
+        if (assigned_count(layout_) >= OutpostEKFParameters::kOutpostArmorCount) return;
+
+        auto const& current_slot = layout_.slots[current_armor_id_];
+        if (preferred_switch_sign_.has_value()) {
+            consider_switch_direction(observation, current_slot.phase_offset,
+                current_slot.height_offset, *preferred_switch_sign_, best_decision);
+            return;
+        }
+
+        consider_switch_direction(
+            observation, current_slot.phase_offset, current_slot.height_offset, -1, best_decision);
+        consider_switch_direction(
+            observation, current_slot.phase_offset, current_slot.height_offset, +1, best_decision);
+    }
+
     auto evaluate_candidate(OutpostObservation const& observation, int armor_id,
-        double phase_offset, double height_offset, SwitchEvent event, int inferred_spin_sign,
-        bool extends_layout) const -> AssociationDecision {
+        double phase_offset, double height_offset, bool is_stay, bool extends_layout) const
+        -> AssociationDecision {
         auto const predicted_xyz =
             OutpostEKFParameters::h_armor_xyz(x_, phase_offset, height_offset);
         auto const predicted_ypd = rmcs::util::xyz2ypd(predicted_xyz);
@@ -216,10 +239,10 @@ private:
 
         auto error = *mahalanobis;
         if (extends_layout) error += config_.layout_extension_penalty;
-        if (event == SwitchEvent::Stay) error -= config_.continuity_bonus;
+        if (is_stay) error -= config_.continuity_bonus;
 
-        return { armor_id, error, true, event, normalize_spin_sign(inferred_spin_sign),
-            rmcs::util::normalize_angle(phase_offset), height_offset, extends_layout };
+        return { armor_id, error, true, rmcs::util::normalize_angle(phase_offset), height_offset,
+            extends_layout };
     }
 
     auto find_matching_slot(double phase_offset, double height_offset, int excluded_armor_id) const
@@ -248,25 +271,37 @@ private:
     }
 
     auto consider_switch_direction(OutpostObservation const& observation, double current_phase,
-        double current_height, int inferred_spin_sign, SwitchEvent event,
-        AssociationDecision& best_decision) const -> void {
+        double current_height, int spin_sign, AssociationDecision& best_decision) const -> void {
         auto const candidate_phase =
-            rmcs::util::normalize_angle(current_phase + switch_phase_delta(inferred_spin_sign));
+            rmcs::util::normalize_angle(current_phase + switch_phase_delta(spin_sign));
 
-        for (auto const height_delta : switch_height_deltas(inferred_spin_sign)) {
+        for (auto const height_delta : switch_height_deltas(spin_sign)) {
             auto const candidate_height = current_height + height_delta;
 
             auto armor_id =
                 find_matching_slot(candidate_phase, candidate_height, current_armor_id_);
             auto extends_layout = false;
             if (armor_id == kUnknownArmorId) {
+                auto phase_occupied = false;
+                for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {
+                    if (!layout_.slots[id].assigned || id == current_armor_id_) continue;
+
+                    auto const phase_error = std::abs(rmcs::util::normalize_angle(
+                        layout_.slots[id].phase_offset - candidate_phase));
+                    if (phase_error > config_.slot_phase_tolerance) continue;
+
+                    phase_occupied = true;
+                    break;
+                }
+                if (phase_occupied) continue;
+
                 armor_id       = first_unassigned_slot(layout_);
                 extends_layout = (armor_id != kUnknownArmorId);
             }
             if (armor_id == kUnknownArmorId) continue;
 
             consider_candidate(evaluate_candidate(observation, armor_id, candidate_phase,
-                                   candidate_height, event, inferred_spin_sign, extends_layout),
+                                   candidate_height, false, extends_layout),
                 best_decision);
         }
     }
@@ -275,7 +310,7 @@ private:
     OutpostEKF::PMat const& P_;
     OutpostArmorLayout const& layout_;
     int current_armor_id_ { kUnknownArmorId };
-    SpinTracker const& spin_;
+    std::optional<int> preferred_switch_sign_ {};
     MatchingConfig const& config_;
 };
 
@@ -312,7 +347,7 @@ struct OutpostRobotState::Impl {
 
             auto const dt_s = dt.count();
             ekf.predict(
-                OutpostEKFParameters::f(dt_s, spin.current_sign()),
+                OutpostEKFParameters::f(dt_s, spin.model_sign()),
                 [dt_s](EKF::XVec const&) { return OutpostEKFParameters::F(dt_s); },
                 OutpostEKFParameters::Q(dt_s));
         }
@@ -335,13 +370,11 @@ struct OutpostRobotState::Impl {
         return true;
     }
 
-    auto is_converged() const -> bool {
-        return initialized && (spin.confirmed_sign.has_value() || spin.pending_sign.has_value());
-    }
+    auto is_converged() const -> bool { return initialized && spin.confirmed_sign.has_value(); }
 
     auto get_snapshot() const -> Snapshot {
         return detail::make_outpost_snapshot(
-            ekf.x, color, assigned_count(layout), time_stamp, spin.current_sign(), layout);
+            ekf.x, color, assigned_count(layout), time_stamp, spin.model_sign(), layout);
     }
 
     auto distance() const -> double { return std::sqrt(ekf.x[0] * ekf.x[0] + ekf.x[2] * ekf.x[2]); }
@@ -360,8 +393,8 @@ private:
 
     auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
         auto best_match = std::optional<BestMatch> {};
-        auto matcher =
-            AssociationEngine { ekf.x, ekf.P(), layout, current_armor_id, spin, config.matching };
+        auto matcher    = AssociationEngine { ekf.x, ekf.P(), layout, current_armor_id,
+            spin.preferred_switch_sign(), config.matching };
 
         for (auto const& armor : armors) {
             auto observation = make_observation(armor);
@@ -377,15 +410,6 @@ private:
 
     auto apply_association(
         AssociationDecision const& decision, OutpostObservation const& observation) -> void {
-        auto const stay_ref_phase = [&]() -> std::optional<double> {
-            if (decision.event != SwitchEvent::Stay) return std::nullopt;
-
-            auto const slot_phase =
-                std::atan2(ekf.x[2] - observation.xyz[1], ekf.x[0] - observation.xyz[0]);
-            return rmcs::util::normalize_angle(
-                slot_phase - layout.slots[decision.armor_id].phase_offset);
-        }();
-
         auto const next_layout = layout_after_association(layout, decision);
 
         ekf.update(
@@ -399,61 +423,39 @@ private:
         layout           = next_layout;
         current_armor_id = decision.armor_id;
 
-        if (spin.confirmed_sign == 0) {
-            update_count++;
-            return;
-        }
+        auto observe_pending = [&](std::optional<int> sign) {
+            if (spin.confirmed_sign.has_value() || !sign.has_value()) return;
 
-        auto observe_pending = [&](int sign, int confirm_count) {
             if (spin.pending_sign == sign) {
                 spin.pending_count++;
             } else {
-                spin.pending_sign  = sign;
+                spin.pending_sign  = *sign;
                 spin.pending_count = 1;
             }
 
-            if (spin.pending_count >= confirm_count) {
-                spin.confirmed_sign = sign;
+            if (spin.pending_count >= config.confirm_samples) {
+                spin.confirmed_sign = *sign;
                 spin.pending_sign.reset();
                 spin.pending_count = 0;
             }
         };
 
-        if (decision.event != SwitchEvent::Stay) {
-            spin.last_stay_sample.reset();
-            spin.stop_pending_count = 0;
+        auto const slot_phase =
+            std::atan2(ekf.x[2] - observation.xyz[1], ekf.x[0] - observation.xyz[0]);
+        auto const ref_phase =
+            rmcs::util::normalize_angle(slot_phase - layout.slots[decision.armor_id].phase_offset);
 
-            if (spin.pending_sign == 0) {
-                spin.pending_sign.reset();
-                spin.pending_count = 0;
+        if (spin.last_ref_phase_sample.has_value()) {
+            auto const [last_ref_phase, last_ref_stamp] = *spin.last_ref_phase_sample;
+            auto const dt = rmcs::util::delta_time(time_stamp, last_ref_stamp).count();
+            if (dt > 0.0) {
+                auto const phase_rate =
+                    rmcs::util::normalize_angle(ref_phase - last_ref_phase) / dt;
+                observe_pending(classify_phase_rate(phase_rate, config));
             }
-
-            if (!spin.confirmed_sign.has_value()) {
-                observe_pending(decision.inferred_spin_sign, config.spin_confirm_switches);
-            }
-        } else {
-            if (spin.last_stay_sample.has_value()) {
-                auto const [last_ref_phase, last_stay_stamp] = *spin.last_stay_sample;
-                auto const dt = rmcs::util::delta_time(time_stamp, last_stay_stamp).count();
-                if (dt > 0.0) {
-                    auto const phase_rate =
-                        std::abs(rmcs::util::normalize_angle(*stay_ref_phase - last_ref_phase))
-                        / dt;
-                    if (phase_rate < config.stop_phase_rate_gate) {
-                        spin.stop_pending_count++;
-                        if (spin.stop_pending_count >= config.stop_confirm_stays) {
-                            spin.confirmed_sign = 0;
-                            spin.pending_sign.reset();
-                            spin.pending_count = 0;
-                        }
-                    } else {
-                        spin.stop_pending_count = 0;
-                    }
-                }
-            }
-
-            spin.last_stay_sample = std::pair { *stay_ref_phase, time_stamp };
         }
+
+        spin.last_ref_phase_sample = std::pair { ref_phase, time_stamp };
 
         update_count++;
     }

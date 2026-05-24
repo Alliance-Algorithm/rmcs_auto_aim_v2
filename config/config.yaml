@@ -79,11 +79,11 @@ pose_estimator:
     [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
-  initial_bullet_speed: 23.2 # m/s
-  shoot_delay: 0.07 # s
+  initial_bullet_speed: 22.3 # m/s
+  shoot_delay: 0.065 # s
   mpc_enable: true
-  yaw_offset: 0.0 # degree
-  pitch_offset: 0.0 # degree
+  yaw_offset: +1.7 # degree
+  pitch_offset: +4.6 # degree
 
   aim_point_chooser:
     coming_angle: 70.0 # degree
@@ -110,7 +110,7 @@ fire_control:
 visualization:
   framerate: 60
   # e.g. monitor_host: "192.168.3.125"
-  monitor_host: "127.0.0.1"
+  monitor_host: "192.168.1.41"
   monitor_port: "5000"
   stream_type: "RTP_JEPG"
 
