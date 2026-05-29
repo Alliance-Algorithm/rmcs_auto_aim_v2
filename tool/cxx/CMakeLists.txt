@@ -4,7 +4,7 @@ project(rmcs_auto_aim_v2_tools)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
 find_package(rclcpp REQUIRED)

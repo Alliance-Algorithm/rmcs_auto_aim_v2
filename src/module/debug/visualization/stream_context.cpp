@@ -22,7 +22,7 @@ constexpr auto make_rtph264 = [](int w, int h, int hz, std::string_view host,
         "appsrc "
         "! videoconvert "
         "! video/x-raw,format=I420,width={},height={},framerate={}/1 "
-        "! x264enc tune=zerolatency bitrate=600 speed-preset=ultrafast "
+        "! x264enc tune=zerolatency bitrate=8000 speed-preset=ultrafast key-int-max=30 "
         "! rtph264pay config-interval=1 pt=96 "
         "! udpsink host={} port={}",
     };
@@ -60,7 +60,7 @@ auto StreamContext::check_support() noexcept -> std::expected<void, std::string_
             "Reinstall OpenCV with GStreamer support.\n",
         };
     }
-    return {};
+    return { };
 }
 
 auto StreamContext::open() noexcept -> std::expected<void, std::string> {
@@ -86,13 +86,14 @@ auto StreamContext::open() noexcept -> std::expected<void, std::string> {
             "\nUnable to open pipeline."
             "\nPlease install required packages or check your pipeline config"
             "\n  sudo apt install "
-            "gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good"
+            "gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good "
+            "gstreamer1.0-plugins-ugly"
             "\n  current pipeline:\n"
                 + pipeline_,
         };
     }
 
-    return {};
+    return { };
 }
 
 auto StreamContext::opened() const noexcept -> bool { return sender_ && sender_->isOpened(); }

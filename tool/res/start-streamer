@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+
+import os
+import signal
+import subprocess
+import sys
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+INSTALL_ROOT = Path("/opt/autoaim")
+PLAYER_PORT = 18080
+MEDIAMTX_PORT = 8889
+PLAYER_ROUTE = "/res/playing.html"
+PLAYER_FILE = "playing.html"
+
+
+def require_file(path: Path) -> None:
+    if not path.is_file():
+        raise SystemExit(f"Missing file: {path}")
+
+
+class Handler(SimpleHTTPRequestHandler):
+    root_directory = INSTALL_ROOT
+
+    def do_GET(self):
+        if self.path in ("/autoaim", "/autoaim/"):
+            self.path = PLAYER_ROUTE
+        return super().do_GET()
+
+
+def terminate_process(process: subprocess.Popen[str] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+
+    os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=5)
+
+
+def main() -> int:
+    install_root = Path(sys.argv[1]) if len(sys.argv) > 1 else INSTALL_ROOT
+    bin_dir = install_root / "bin"
+    res_dir = install_root / "res"
+    player_port = int(os.environ.get("AUTOAIM_PLAYER_PORT", str(PLAYER_PORT)))
+    mediamtx_port = int(os.environ.get("AUTOAIM_MEDIAMTX_PORT", str(MEDIAMTX_PORT)))
+
+    mediamtx_bin = bin_dir / "mediamtx"
+    mediamtx_config = res_dir / "mediamtx.yml"
+    player_entry = res_dir / PLAYER_FILE
+
+    require_file(mediamtx_bin)
+    require_file(mediamtx_config)
+    require_file(player_entry)
+
+    Handler.root_directory = install_root
+
+    mediamtx = subprocess.Popen(
+        [str(mediamtx_bin), str(mediamtx_config)],
+        cwd=install_root,
+        start_new_session=True,
+    )
+
+    server = ThreadingHTTPServer(
+        ("0.0.0.0", player_port),
+        partial(Handler, directory=str(install_root)),
+    )
+
+    shutdown_started = threading.Event()
+
+    def shutdown(*_args):
+        if shutdown_started.is_set():
+            return
+        shutdown_started.set()
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    def watch_mediamtx():
+        exit_code = mediamtx.wait()
+        if exit_code != 0:
+            print(f"MediaMTX exited with code {exit_code}", file=sys.stderr)
+        shutdown()
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+    threading.Thread(target=watch_mediamtx, daemon=True).start()
+
+    host = os.environ.get("HOSTNAME", "<ip>")
+    print("AutoAim stream server started.")
+    print()
+    print(f"Player page:\n  http://127.0.0.1:{player_port}/autoaim")
+    print()
+    print(f"Remote page:\n  http://{host}:{player_port}/autoaim")
+    print()
+    print(f"WHEP endpoint:\n  http://127.0.0.1:{mediamtx_port}/autoaim/whep")
+    print()
+    print("Press Ctrl+C to stop.")
+
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+        terminate_process(mediamtx)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
