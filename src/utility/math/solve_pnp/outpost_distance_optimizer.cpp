@@ -69,6 +69,7 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     const auto bar1_center_z = 0.5
         * (neighbor_bar_solution.result.bars[1].first.z
             + neighbor_bar_solution.result.bars[1].second.z);
+
     const auto selected_bar = [&]() -> const std::pair<Point3d, Point3d>& {
         if (input.is_upper) {
             return bar0_center_z > bar1_center_z ? neighbor_bar_solution.result.bars[0]

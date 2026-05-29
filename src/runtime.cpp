@@ -185,7 +185,7 @@ auto main() -> int {
         ///
         auto target  = tracker.decide(armors_3d, image->get_timestamp());
         auto command = AutoAimState::kInvalid();
-        if (target.allow_control && target.snapshot) {
+        if (target.snapshot) {
             auto& snapshot = target.snapshot;
             auto armors    = snapshot->predicted_armors(Clock::now());
             visualization.update_visible_robot(armors);

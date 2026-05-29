@@ -31,7 +31,7 @@ struct Decider::Impl {
 
         if (priority_mode.empty()) priority_mode = mode2;
 
-        return {};
+        return { };
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
@@ -43,7 +43,7 @@ struct Decider::Impl {
         }
 
         auto fused_ids      = DeviceIds::None();
-        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> {};
+        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> { };
 
         for (const auto& armor : armors) {
             grouped_armors[armor.genre].emplace_back(armor);
@@ -77,28 +77,29 @@ struct Decider::Impl {
             return expired;
         });
 
-        // 优先保持已锁定且仍在短时失观测宽限期内的目标
+        // 将 locked_target_id 作为当前保留目标使用，优先保持当前目标的连续性。
         if (locked_target_id != DeviceId::UNKNOWN) {
-            auto locked_seen_it = last_seen_times.find(locked_target_id);
-            bool lock_alive     = trackers.contains(locked_target_id)
-                && locked_seen_it != last_seen_times.end()
-                && util::delta_time(t, locked_seen_it->second) <= kLockLostTimeout;
+            if (trackers.contains(locked_target_id)) {
+                if (fused_ids.contains(locked_target_id)) {
+                    return make_output(locked_target_id, true);
+                }
 
-            // 宽限期内即使本帧没观测到，也继续保持 target_id；
-            // 但 make_output 会把 allow_control 置为 false。
-            if (lock_alive)
-                return make_output(locked_target_id, fused_ids.contains(locked_target_id));
+                auto locked_seen_it = last_seen_times.find(locked_target_id);
+                bool within_grace   = locked_seen_it != last_seen_times.end()
+                    && util::delta_time(t, locked_seen_it->second) <= kLockLostTimeout;
+
+                // 宽限期内即使本帧没观测到，也继续保持 target_id；
+                // 但 make_output 会把 allow_control 置为 false。
+                if (within_grace) return make_output(locked_target_id, false);
+            }
 
             locked_target_id = DeviceId::UNKNOWN;
         }
 
         auto fresh_target_id = arbitrate(fused_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
-            bool allow_control = trackers.at(fresh_target_id)->is_converged();
-
-            // 只有收敛后的目标才会进入锁定；未收敛目标可以输出，但不会写成锁定目标。
-            if (allow_control) locked_target_id = fresh_target_id;
-
+            // 未命中当前保留目标时，从本帧成功融合的目标里选出新的保留目标。
+            locked_target_id = fresh_target_id;
             return make_output(fresh_target_id, true);
         }
 

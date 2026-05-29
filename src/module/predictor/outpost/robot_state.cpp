@@ -43,7 +43,7 @@ auto make_observation(rmcs::Armor3D const& armor) -> OutpostObservation {
     auto const ypr = rmcs::util::eulers(orientation);
     auto const ypd = rmcs::util::xyz2ypd(xyz);
 
-    auto z = OutpostEKF::ZVec {};
+    auto z = OutpostEKF::ZVec { };
     z << ypd[0], ypd[1], ypd[2], ypr[0];
 
     return { z, OutpostEKFParameters::R(xyz, ypr, ypd), xyz, ypd };
@@ -87,17 +87,17 @@ struct TrackingConfig {
     int spin_confirm_switches { 2 };
     int stop_confirm_stays { 4 };
     double stop_phase_rate_gate { 0.8 };
-    MatchingConfig matching {};
+    MatchingConfig matching { };
 };
 
 struct SpinTracker {
-    std::optional<int> confirmed_sign {};
-    std::optional<int> pending_sign {};
+    std::optional<int> confirmed_sign { };
+    std::optional<int> pending_sign { };
     int pending_count { 0 };
     int stop_pending_count { 0 };
-    std::optional<std::pair<double, rmcs::TimePoint>> last_stay_sample {};
+    std::optional<std::pair<double, rmcs::TimePoint>> last_stay_sample { };
 
-    auto reset() -> void { *this = {}; }
+    auto reset() -> void { *this = { }; }
 
     auto current_sign() const -> int { return confirmed_sign.value_or(pending_sign.value_or(0)); }
 };
@@ -159,9 +159,9 @@ public:
         , config_ { config } { }
 
     auto decide(OutpostObservation const& observation) const -> AssociationDecision {
-        if (!has_assigned_slot(layout_, current_armor_id_)) return {};
+        if (!has_assigned_slot(layout_, current_armor_id_)) return { };
 
-        auto best_decision        = AssociationDecision {};
+        auto best_decision        = AssociationDecision { };
         auto const current_phase  = layout_.slots[current_armor_id_].phase_offset;
         auto const current_height = layout_.slots[current_armor_id_].height_offset;
 
@@ -202,7 +202,7 @@ private:
 
         // 这里没有加yaw约束，一是因为yaw的抖动太大，二是因为大部分图像中 一帧只有一块装甲板
         if (azimuth_error > config_.azimuth_gate || z_error > config_.z_gate) {
-            return {};
+            return { };
         }
 
         auto const H           = OutpostEKFParameters::H(x_, phase_offset, height_offset);
@@ -211,7 +211,7 @@ private:
         auto const S           = H * P_ * H.transpose() + observation.R;
         auto const mahalanobis = rmcs::util::mahalanobis_distance(innovation, S);
         if (!mahalanobis.has_value() || *mahalanobis > config_.mahalanobis_gate) {
-            return {};
+            return { };
         }
 
         auto error = *mahalanobis;
@@ -260,6 +260,19 @@ private:
                 find_matching_slot(candidate_phase, candidate_height, current_armor_id_);
             auto extends_layout = false;
             if (armor_id == kUnknownArmorId) {
+                auto phase_occupied = false;
+                for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {
+                    if (!layout_.slots[id].assigned || id == current_armor_id_) continue;
+
+                    auto const phase_error = std::abs(rmcs::util::normalize_angle(
+                        layout_.slots[id].phase_offset - candidate_phase));
+                    if (phase_error > config_.slot_phase_tolerance) continue;
+
+                    phase_occupied = true;
+                    break;
+                }
+                if (phase_occupied) continue;
+
                 armor_id       = first_unassigned_slot(layout_);
                 extends_layout = (armor_id != kUnknownArmorId);
             }
@@ -288,10 +301,10 @@ struct OutpostRobotState::Impl {
     auto initialize(Armor3D const& armor, TimePoint t) -> void {
         color      = armor_color2camp_color(armor.color);
         ekf        = EKF { OutpostEKFParameters::x(armor),
-            OutpostEKFParameters::P_initial_dig().asDiagonal() };
+                   OutpostEKFParameters::P_initial_dig().asDiagonal() };
         time_stamp = t;
 
-        layout                   = OutpostArmorLayout {};
+        layout                   = OutpostArmorLayout { };
         layout.slots[0].assigned = true;
 
         spin.reset();
@@ -335,7 +348,9 @@ struct OutpostRobotState::Impl {
         return true;
     }
 
-    auto is_converged() const -> bool { return initialized && spin.confirmed_sign.has_value(); }
+    auto is_converged() const -> bool {
+        return initialized && (spin.confirmed_sign.has_value() || spin.pending_sign.has_value());
+    }
 
     auto get_snapshot() const -> Snapshot {
         return detail::make_outpost_snapshot(
@@ -347,8 +362,8 @@ struct OutpostRobotState::Impl {
 private:
     auto reset_runtime_state(TimePoint t) -> void {
         color            = CampColor::UNKNOWN;
-        ekf              = EKF {};
-        layout           = OutpostArmorLayout {};
+        ekf              = EKF { };
+        layout           = OutpostArmorLayout { };
         time_stamp       = t;
         initialized      = false;
         current_armor_id = kUnknownArmorId;
@@ -357,7 +372,7 @@ private:
     }
 
     auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
-        auto best_match = std::optional<BestMatch> {};
+        auto best_match = std::optional<BestMatch> { };
         auto matcher =
             AssociationEngine { ekf.x, ekf.P(), layout, current_armor_id, spin, config.matching };
 
@@ -457,15 +472,15 @@ private:
     }
 
     CampColor color { CampColor::UNKNOWN };
-    EKF ekf { EKF {} };
-    OutpostArmorLayout layout {};
+    EKF ekf { EKF { } };
+    OutpostArmorLayout layout { };
     TimePoint time_stamp;
 
     bool initialized { false };
     int current_armor_id { kUnknownArmorId };
-    SpinTracker spin {};
+    SpinTracker spin { };
     int update_count { 0 };
-    TrackingConfig config {};
+    TrackingConfig config { };
 };
 
 OutpostRobotState::OutpostRobotState() noexcept
