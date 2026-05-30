@@ -6,6 +6,7 @@
 #include <limits>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace rmcs::tracker;
@@ -15,7 +16,6 @@ using namespace std::chrono_literals;
 struct Decider::Impl {
     static constexpr auto kDefaultCleanupInterval = 1.0s;
     static constexpr auto kOutpostCleanupInterval = 1.5s;
-    static constexpr auto kLockLostTimeout        = 150ms;
 
     static constexpr auto get_cleanup_interval(DeviceId device_id) {
         switch (device_id) {
@@ -42,7 +42,7 @@ struct Decider::Impl {
             tracker->predict(t);
         }
 
-        auto fused_ids      = DeviceIds::None();
+        auto observed_ids   = std::unordered_set<DeviceId> { };
         auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> { };
 
         for (const auto& armor : armors) {
@@ -60,7 +60,7 @@ struct Decider::Impl {
             bool fused        = trackers[id]->update(grouped_span);
 
             if (fused) {
-                fused_ids.append(id);
+                observed_ids.insert(id);
                 last_seen_times[id] = t;
             }
         }
@@ -68,7 +68,7 @@ struct Decider::Impl {
         std::erase_if(trackers, [&](const auto& item) {
             auto last_seen_it     = last_seen_times.find(item.first);
             auto cleanup_interval = get_cleanup_interval(item.first);
-            bool expired          = last_seen_it == last_seen_times.end()
+            bool expired = last_seen_it == last_seen_times.end()
                 || util::delta_time(t, last_seen_it->second) > cleanup_interval;
             if (expired) {
                 last_seen_times.erase(item.first);
@@ -77,30 +77,9 @@ struct Decider::Impl {
             return expired;
         });
 
-        // 将 locked_target_id 作为当前保留目标使用，优先保持当前目标的连续性。
-        if (locked_target_id != DeviceId::UNKNOWN) {
-            if (trackers.contains(locked_target_id)) {
-                if (fused_ids.contains(locked_target_id)) {
-                    return make_output(locked_target_id, true);
-                }
-
-                auto locked_seen_it = last_seen_times.find(locked_target_id);
-                bool within_grace   = locked_seen_it != last_seen_times.end()
-                    && util::delta_time(t, locked_seen_it->second) <= kLockLostTimeout;
-
-                // 宽限期内即使本帧没观测到，也继续保持 target_id；
-                // 但 make_output 会把 allow_control 置为 false。
-                if (within_grace) return make_output(locked_target_id, false);
-            }
-
-            locked_target_id = DeviceId::UNKNOWN;
-        }
-
-        auto fresh_target_id = arbitrate(fused_ids);
+        auto fresh_target_id = arbitrate(observed_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
-            // 未命中当前保留目标时，从本帧成功融合的目标里选出新的保留目标。
-            locked_target_id = fresh_target_id;
-            return make_output(fresh_target_id, true);
+            return make_output(fresh_target_id, trackers.at(fresh_target_id)->is_converged());
         }
 
         return Output {
@@ -110,11 +89,11 @@ struct Decider::Impl {
         };
     }
 
-    auto arbitrate(DeviceIds fused_ids) -> DeviceId {
+    auto arbitrate(const std::unordered_set<DeviceId>& observed_ids) -> DeviceId {
         auto best_target_id = DeviceId::UNKNOWN;
 
         for (const auto& [device_id, _] : trackers) {
-            if (!fused_ids.contains(device_id)) continue;
+            if (!observed_ids.contains(device_id)) continue;
 
             if (best_target_id == DeviceId::UNKNOWN
                 || is_better_target(device_id, best_target_id)) {
@@ -125,11 +104,11 @@ struct Decider::Impl {
         return best_target_id;
     }
 
-    auto make_output(DeviceId device_id, bool fused) const -> Output {
+    auto make_output(DeviceId device_id, bool allow_takeover) const -> Output {
         return Output {
             .target_id     = device_id,
             .snapshot      = trackers.at(device_id)->get_snapshot(),
-            .allow_control = fused && trackers.at(device_id)->is_converged(),
+            .allow_control = allow_takeover,
         };
     }
 
@@ -147,11 +126,11 @@ struct Decider::Impl {
             auto safe_distance =
                 std::isfinite(distance) ? distance : std::numeric_limits<double>::infinity();
 
-            // 比较顺序：距离 -> 收敛状态 -> 优先级 -> 固定 ID 兜底。
+            // 比较顺序：优先级 -> 收敛状态 -> 距离 -> 固定 ID 兜底。
             return std::tuple {
-                safe_distance,             // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
-                !tracker.is_converged(),   // 收敛目标映射为 0，未收敛目标映射为 1。
                 priority_of(device_id),    // 数值越小，优先级越高。
+                !tracker.is_converged(),   // 收敛目标映射为 0，未收敛目标映射为 1。
+                safe_distance,             // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
                 rmcs::to_index(device_id), // 完全相同时按固定顺序兜底，避免容器遍历顺序抖动。
             };
         };
@@ -161,7 +140,6 @@ struct Decider::Impl {
 
     std::unordered_map<DeviceId, std::unique_ptr<RobotState>> trackers;
     std::unordered_map<DeviceId, TimePoint> last_seen_times;
-    DeviceId locked_target_id { DeviceId::UNKNOWN };
 
     PriorityMode priority_mode;
 
@@ -185,7 +163,7 @@ struct Decider::Impl {
         { DeviceId::INFANTRY_5, 5 },
         { DeviceId::SENTRY, 3 },
         { DeviceId::OUTPOST, 1 },
-        { DeviceId::BASE, 4 },
+        { DeviceId::BASE, 5 },
         { DeviceId::UNKNOWN, 5 },
     };
 };
