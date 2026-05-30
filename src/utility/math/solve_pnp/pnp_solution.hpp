@@ -17,6 +17,13 @@ struct PnpSolution {
         DeviceId genre;
         CampColor color;
     } input;
+
+    /// @NOTE: Armor 局部坐标系的 X 轴朝向背面
+    ///                              .   ^   .
+    ///                              |  (y)  |
+    ///  camera  ---------->  [正面] | armor |-(x)-> [背面]
+    ///                              |       |
+    ///                              .       .
     struct Result {
         Translation translation;
         Orientation orientation;

@@ -1,16 +1,16 @@
-localhost_develop: false
+localhost_develop: true
 
 use_visualization: true
 use_painted_image: true
-use_painted_roi: true
+use_painted_roi: false
 
 capturer:
   show_loss_framerate: false
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
 
-  # source: "local_video"
-  source: "hikcamera"
+  source: "local_video"
+  # source: "hikcamera"
   hikcamera:
     # int
     timeout_ms: 500
@@ -29,7 +29,7 @@ capturer:
     # 替换为你具体的路径
     location: "/workspaces/data/autoaim/静止看前哨站.avi"
     # double 帧率
-    frame_rate: 60
+    frame_rate: 40
     # bool 是否循环播放
     loop_play: true
     # bool 是否允许跳帧以满足实时性

@@ -12,11 +12,11 @@
 namespace rmcs {
 
 auto LightbarFinder::solve() -> bool {
-    if (input.roi.empty()) return false;
+    if (input.source.empty()) return false;
     if (input.color == CampColor::UNKNOWN) return false;
 
     auto channel = cv::Mat { };
-    cv::extractChannel(input.roi, channel, input.color == CampColor::BLUE ? 0 : 2);
+    cv::extractChannel(input.source, channel, input.color == CampColor::BLUE ? 0 : 2);
 
     auto mask = cv::Mat { };
     cv::threshold(channel, mask, 180.0, 255.0, cv::THRESH_BINARY);
@@ -42,7 +42,7 @@ auto LightbarFinder::solve() -> bool {
 
     for (const auto& contour : contours) {
         if (contour.size() < 5) continue;
-        if (cv::contourArea(contour) < 8.0) continue;
+        if (cv::contourArea(contour) < 3.0) continue;
 
         const auto box    = cv::minAreaRect(contour);
         const auto width  = static_cast<double>(box.size.width);
@@ -77,7 +77,7 @@ auto LightbarFinder::solve() -> bool {
         const auto angle_diff  = util::normalize_angle(line_angle - predicted_angle);
         const auto angle_error = std::min(
             std::abs(angle_diff), std::abs(util::normalize_angle(angle_diff + std::numbers::pi)));
-        if (angle_error > util::deg2rad(20.0)) continue;
+        if (angle_error > util::deg2rad(30.0)) continue;
 
         auto midpoint = cv::Point2d {
             0.5 * static_cast<double>(point_a.x + point_b.x),

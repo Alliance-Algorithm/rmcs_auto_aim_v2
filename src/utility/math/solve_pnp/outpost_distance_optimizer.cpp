@@ -19,15 +19,15 @@ using namespace rmcs::util;
 auto OutpostDistanceOptimizer::solve() -> bool {
     constexpr double kTieEpsilon = 1e-6;
 
-    auto top    = input.point1.make<cv::Point2f>();
-    auto bottom = input.point2.make<cv::Point2f>();
-    if (bottom.y < top.y || (std::abs(bottom.y - top.y) < kTieEpsilon && bottom.x < top.x)) {
-        std::swap(top, bottom);
+    auto upper = input.point1.make<cv::Point2f>();
+    auto lower = input.point2.make<cv::Point2f>();
+    if (lower.y < upper.y || (std::abs(lower.y - upper.y) < kTieEpsilon && lower.x < upper.x)) {
+        std::swap(upper, lower);
     }
 
     const auto q_ac_ros = input.initial.orientation.make<Eigen::Quaterniond>();
-    const auto r_ac_ros = q_ac_ros.toRotationMatrix();
     const auto t_ac_ros = input.initial.translation.make<Eigen::Vector3d>();
+    const auto r_ac_ros = q_ac_ros.toRotationMatrix();
 
     auto object_points = std::vector<cv::Point3f> { };
     object_points.reserve(6);
@@ -43,8 +43,8 @@ auto OutpostDistanceOptimizer::solve() -> bool {
         input.armor.tr,
         input.armor.br,
         input.armor.bl,
-        top,
-        bottom,
+        upper,
+        lower,
     };
 
     auto camera_matrix = input.camera.intrinsic();
@@ -58,37 +58,22 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     auto initial_tvec = cv::Vec3d { t_ac_ocv.x(), t_ac_ocv.y(), t_ac_ocv.z() };
     cv::Rodrigues(r_ac_ocv_cv, initial_rvec);
 
-    auto neighbor_bar_solution           = NeighborBarSolution { };
-    neighbor_bar_solution.input.source   = input.initial;
-    neighbor_bar_solution.input.in_right = input.is_right;
-    neighbor_bar_solution.solve();
+    auto solution           = NeighborBarSolution { };
+    solution.input.source   = input.initial;
+    solution.input.in_right = input.is_right;
+    solution.solve();
 
-    const auto bar0_center_z = 0.5
-        * (neighbor_bar_solution.result.bars[0].first.z
-            + neighbor_bar_solution.result.bars[0].second.z);
-    const auto bar1_center_z = 0.5
-        * (neighbor_bar_solution.result.bars[1].first.z
-            + neighbor_bar_solution.result.bars[1].second.z);
+    const auto& selected_bar =
+        input.is_upper ? solution.result.upper_near : solution.result.lower_near;
 
-    const auto selected_bar = [&]() -> const std::pair<Point3d, Point3d>& {
-        if (input.is_upper) {
-            return bar0_center_z > bar1_center_z ? neighbor_bar_solution.result.bars[0]
-                                                 : neighbor_bar_solution.result.bars[1];
-        }
-        return bar0_center_z < bar1_center_z ? neighbor_bar_solution.result.bars[0]
-                                             : neighbor_bar_solution.result.bars[1];
-    }();
-
-    constexpr auto kRadiusScale = 1.13; // @NOTE: 娘的半径错了，试了老半天没找出问题
     for (const auto& point : { selected_bar.first, selected_bar.second }) {
         const auto point_in_camera_ros = point.make<Eigen::Vector3d>();
         auto point_in_local_ros =
             Eigen::Vector3d { (r_ac_ros.transpose() * (point_in_camera_ros - t_ac_ros)).eval() };
 
         const auto point_in_local_ocv = ros2opencv_position(point_in_local_ros);
-        object_points.emplace_back(static_cast<float>(point_in_local_ocv.x() * kRadiusScale),
-            static_cast<float>(point_in_local_ocv.y()),
-            static_cast<float>(point_in_local_ocv.z() * kRadiusScale));
+        object_points.emplace_back(static_cast<float>(point_in_local_ocv.x()),
+            static_cast<float>(point_in_local_ocv.y()), static_cast<float>(point_in_local_ocv.z()));
     }
 
     auto optimized_rvec = initial_rvec;
@@ -112,5 +97,6 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     result.armor.translation = opencv2ros_position(optimized_translation_ocv);
     result.armor.orientation =
         Eigen::Quaterniond { opencv2ros_rotation(optimized_rotation_ocv) }.normalized();
+
     return true;
 }

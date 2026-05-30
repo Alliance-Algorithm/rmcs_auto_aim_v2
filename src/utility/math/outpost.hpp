@@ -1,7 +1,5 @@
 #pragma once
 #include "utility/robot/armor.hpp"
-
-#include <array>
 #include <utility>
 
 namespace rmcs::util {
@@ -15,7 +13,12 @@ public:
 
     struct Result {
         using Bar = std::pair<Point3d, Point3d>;
-        std::array<Bar, 2> bars;
+
+        Bar upper_near;
+        Bar upper_away;
+
+        Bar lower_near;
+        Bar lower_away;
     } result;
 
     auto solve() -> void;
