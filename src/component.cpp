@@ -28,8 +28,15 @@ private:
     RclcppNode rclcpp;
     Feishu<SystemContext, AutoAimState> feishu;
 
+    // 当自瞄跟踪上某目标时，会开启此标志，代表需要云台跟踪
     OutputInterface<bool> should_control;
+
+    // 当火控认为可以发弹时，会开启此标志
     OutputInterface<bool> should_shoot;
+
+    // 一个手动开火的标志，开启此项，则下游需要将开火意图也纳入判断
+    // OutputInterface<bool> should_manual;
+
     OutputInterface<Eigen::Vector3d> target_direction;
     OutputInterface<Eigen::Vector3d> robot_center;
     OutputInterface<double> yaw_rate;

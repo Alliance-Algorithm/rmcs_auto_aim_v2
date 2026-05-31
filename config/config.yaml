@@ -1,6 +1,8 @@
 localhost_develop: false
+
 use_visualization: true
 use_painted_image: true
+use_painted_roi: false
 
 capturer:
   show_loss_framerate: false
@@ -51,12 +53,19 @@ identifier:
   score_threshold: 0.7
   nms_threshold: 0.3
 
+  green_light_filter:
+    green_threshold: 120
+    min_area: 20
+    min_circularity: 0.6
+    max_aspect_ratio: 1.5
+
 tracker:
   # enemy_color: red
   enemy_color: blue
 
 pose_estimator:
   yaw_optimizer: true
+  distance_optimizer: true
   camera_matrix:
     [
       1.722231837421459e+03,
@@ -106,7 +115,7 @@ visualization:
   # e.g. monitor_host: "192.168.3.125"
   monitor_host: "127.0.0.1"
   monitor_port: "5000"
-  stream_type: "RTP_JEPG"
+  stream_type: "RTP_H264"
 
   image_enabled: true
   visible_armors_enabled: true

@@ -1,26 +1,25 @@
 #pragma once
-#include "utility/image/image.hpp"
+#include "utility/robot/color.hpp"
+
+#include <opencv2/core/mat.hpp>
+#include <opencv2/core/types.hpp>
 
 namespace rmcs {
 
-struct Lightbar {
-    enum class Color { RED, BLUE, MIX, DARK };
-
-    struct Details;
-    std::unique_ptr<Details> details;
-
-    auto solve_distance(const Lightbar&) const noexcept -> double;
-};
-
 struct LightbarFinder {
-    double max_angle_error;
+    struct Input {
+        cv::Mat source;
+        CampColor color { CampColor::UNKNOWN };
+        cv::Point2i predicted_point1;
+        cv::Point2i predicted_point2;
+    } input;
 
-    double min_aspect_ratio;
-    double max_aspect_ratio;
+    struct Result {
+        cv::Point2i point1;
+        cv::Point2i point2;
+    } result;
 
-    double min_length;
-
-    auto process(const Image&) const noexcept -> std::vector<Lightbar>;
+    auto solve() -> bool;
 };
 
 }

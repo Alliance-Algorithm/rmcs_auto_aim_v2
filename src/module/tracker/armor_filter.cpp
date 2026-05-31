@@ -10,7 +10,7 @@ struct ArmorFilter::Impl {
 
     auto filter(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
         auto filtered = armors | std::views::filter([&](Armor2D const& armor) {
-            return (armor.genre != DeviceId::INFANTRY_5)
+            return (armor.genre != DeviceId::INFANTRY_5) && (armor.genre != DeviceId::UNKNOWN)
                 && (armor_color2camp_color(armor.color) == enemy_color)
                 && (!invincible_armors.contains(armor.genre));
         });

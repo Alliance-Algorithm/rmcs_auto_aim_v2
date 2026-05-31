@@ -4,7 +4,7 @@ project(rmcs_auto_aim_v2_tools)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
 find_package(rclcpp REQUIRED)
@@ -47,6 +47,21 @@ add_executable(
 )
 target_link_libraries(
     visualization
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+)
+
+add_executable(
+    see_outpost
+    ${TOOL_DIR}/see_outpost.cpp
+    ${RMCS_SRC_DIR}/utility/math/outpost.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    see_outpost
     rclcpp::rclcpp
     ${visualization_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}

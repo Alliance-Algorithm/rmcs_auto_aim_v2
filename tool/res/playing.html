@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AutoAim Stream</title>
+    <style>
+        :root {
+            --md-sys-color-primary: #0059c7;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-primary-container: #d9e2ff;
+            --md-sys-color-on-primary-container: #001a43;
+            --md-sys-color-secondary: #575e71;
+            --md-sys-color-secondary-container: #dbe2f9;
+            --md-sys-color-surface: #fefbff;
+            --md-sys-color-surface-container-low: #f2f3fc;
+            --md-sys-color-surface-container: #eaeefb;
+            --md-sys-color-surface-container-high: #e2e8f8;
+            --md-sys-color-outline-variant: #c5c6d0;
+            --md-sys-color-on-surface: #1b1b1f;
+            --md-sys-color-on-surface-variant: #44464f;
+            --md-sys-color-video: #10131a;
+            --md-sys-color-shadow: rgba(0, 0, 0, 0.08);
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --gap-lg: 12px;
+            --gap-sm: 8px;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            background: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            font-family: "Noto Sans", "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 320px;
+            gap: var(--gap-lg);
+            height: 100%;
+            padding: var(--gap-lg);
+        }
+
+        .stream-pane,
+        .side-panel {
+            border: 1px solid var(--md-sys-color-outline-variant);
+            background: var(--md-sys-color-surface-container-low);
+            box-shadow: 0 10px 24px -18px var(--md-sys-color-shadow);
+        }
+
+        .stream-pane {
+            min-height: 0;
+            overflow: hidden;
+            border-radius: var(--radius-lg);
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: var(--md-sys-color-video);
+        }
+
+        .side-panel,
+        .panel-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .side-panel {
+            min-height: 0;
+            gap: var(--gap-lg);
+            padding: 14px;
+            border-radius: var(--radius-lg);
+        }
+
+        .panel-header h1,
+        .panel-header p,
+        .panel-group h2,
+        .panel-group p {
+            margin: 0;
+        }
+
+        .panel-header {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap-sm);
+            color: var(--md-sys-color-on-primary-container);
+            background: var(--md-sys-color-primary-container);
+        }
+
+        .panel-header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .panel-header p {
+            color: var(--md-sys-color-on-primary-container);
+            line-height: 1.5;
+        }
+
+        .panel-group p {
+            color: var(--md-sys-color-on-surface-variant);
+            line-height: 1.5;
+        }
+
+        .panel-group {
+            gap: var(--gap-sm);
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+            background: var(--md-sys-color-surface-container-high);
+        }
+
+        .panel-group h2 {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .capture-button,
+        .record-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 10px 24px;
+            border: 1px solid var(--md-sys-color-outline-variant);
+            border-radius: 999px;
+            background: var(--md-sys-color-surface-container-high);
+            color: var(--md-sys-color-primary);
+            font: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 20px;
+            cursor: pointer;
+            transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+        }
+
+        .capture-button:hover,
+        .record-button:hover {
+            border-color: var(--md-sys-color-primary);
+            background: var(--md-sys-color-primary-container);
+        }
+
+        .capture-button:focus-visible,
+        .record-button:focus-visible {
+            outline: 2px solid var(--md-sys-color-primary);
+            outline-offset: 2px;
+        }
+
+        .capture-button:active,
+        .record-button:active {
+            background: #cfdcff;
+        }
+
+        @media (max-width: 960px) {
+            body {
+                overflow: auto;
+            }
+
+            .layout {
+                grid-template-columns: 1fr;
+                height: auto;
+                min-height: 100%;
+            }
+
+            .stream-pane {
+                min-height: 50vh;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="layout">
+        <section class="stream-pane">
+            <video id="video" autoplay muted controls playsinline></video>
+        </section>
+        <aside class="side-panel">
+            <section class="panel-group">
+                <h2>自瞄串流播放器</h2>
+                <p>关注 Alliance 战队喵！</p>
+            </section>
+            <button id="capture-button" class="capture-button" type="button">捕获画面</button>
+            <button id="record-button" class="record-button" type="button">
+                <span class="record-button-label">开始录制</span>
+            </button>
+        </aside>
+    </main>
+
+    <script>
+        const WHEP_URL = `${window.location.protocol}//${window.location.hostname || 'localhost'}:8889/autoaim/whep`;
+
+        /** @type {RTCPeerConnection | null} */
+        let peerConnection = null;
+        /** @type {string | null} */
+        let sessionUrl = null;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        let retryTimer = null;
+        /** @type {MediaStream | null} */
+        let currentStream = null;
+        /** @type {MediaRecorder | null} */
+        let recorder = null;
+
+        let stopped = false;
+        let lastFrameAt = 0;
+        let lastPlaybackTime = 0;
+        let recordingWanted = false;
+        /** @type {BlobPart[]} */
+        let recordedChunks = [];
+        /** @type {'playing' | 'paused'} */
+        let playbackStatus = 'playing';
+
+        /** @type {HTMLVideoElement} */
+        const video = document.getElementById('video');
+        /** @type {HTMLButtonElement} */
+        const recordButton = document.getElementById('record-button');
+        /** @type {HTMLButtonElement} */
+        const captureButton = document.getElementById('capture-button');
+        /** @type {HTMLSpanElement} */
+        const recordButtonLabel = document.querySelector('.record-button-label');
+
+        video.addEventListener('play', () => {
+            playbackStatus = 'playing';
+            lastFrameAt = Date.now();
+            lastPlaybackTime = video.currentTime;
+        });
+
+        video.addEventListener('pause', () => {
+            playbackStatus = 'paused';
+        });
+        recordButton.addEventListener('click', () => {
+            if (recordingWanted) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+        captureButton.addEventListener('click', captureFrame);
+
+        function updateRecordButton() {
+            if (recordingWanted) {
+                recordButtonLabel.textContent = '录制中';
+            } else {
+                recordButtonLabel.textContent = '开始录制';
+            }
+            recordButton.classList.toggle('is-recording', recordingWanted);
+        }
+
+        function downloadRecording() {
+            if (!recordedChunks.length) {
+                return;
+            }
+
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `autoaim-${Date.now()}.webm`;
+            link.click();
+            URL.revokeObjectURL(url);
+            recordedChunks = [];
+        }
+
+        function ensureRecording() {
+            if (!recordingWanted || recorder || !currentStream) {
+                return;
+            }
+
+            recorder = new MediaRecorder(currentStream, { mimeType: 'video/webm' });
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            recorder.onstop = () => {
+                recorder = null;
+                if (!recordingWanted) {
+                    downloadRecording();
+                    return;
+                }
+                ensureRecording();
+            };
+            recorder.start();
+        }
+
+        function startRecording() {
+            recordingWanted = true;
+            updateRecordButton();
+            ensureRecording();
+        }
+
+        function stopRecording() {
+            recordingWanted = false;
+            updateRecordButton();
+
+            if (recorder) {
+                recorder.stop();
+                return;
+            }
+
+            downloadRecording();
+        }
+
+        function captureFrame() {
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const context = canvas.getContext('2d');
+            if (!context) {
+                return;
+            }
+
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    return;
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `autoaim-frame-${Date.now()}.png`;
+                link.click();
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        }
+
+        /** @param {RTCPeerConnection} peer @returns {Promise<void>} */
+        function waitForIceComplete(peer) {
+            if (peer.iceGatheringState === 'complete') {
+                return Promise.resolve();
+            }
+
+            return new Promise((resolve) => {
+                const onStateChange = () => {
+                    if (peer.iceGatheringState !== 'complete') {
+                        return;
+                    }
+
+                    peer.removeEventListener('icegatheringstatechange', onStateChange);
+                    resolve();
+                };
+
+                peer.addEventListener('icegatheringstatechange', onStateChange);
+            });
+        }
+
+        function cleanup() {
+            lastFrameAt = 0;
+            lastPlaybackTime = 0;
+            currentStream = null;
+
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.ontrack = null;
+                peerConnection.onconnectionstatechange = null;
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            if (sessionUrl) {
+                fetch(sessionUrl, { method: 'DELETE' }).catch(() => { });
+                sessionUrl = null;
+            }
+        }
+
+        /** @param {RTCPeerConnection} peer */
+        function watchVideoFrames(peer) {
+            if (typeof video.requestVideoFrameCallback !== 'function') {
+                return;
+            }
+
+            video.requestVideoFrameCallback(() => {
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                lastFrameAt = Date.now();
+                watchVideoFrames(peer);
+            });
+        }
+
+        /** @param {number} [delayMs=2000] */
+        function scheduleReconnect(delayMs = 2000) {
+            if (stopped || retryTimer) {
+                return;
+            }
+
+            cleanup();
+            retryTimer = setTimeout(() => {
+                retryTimer = null;
+                connect();
+            }, delayMs);
+        }
+
+        async function connect() {
+            cleanup();
+
+            const peer = new RTCPeerConnection({ iceServers: [] });
+            peerConnection = peer;
+
+            peer.addTransceiver('video', { direction: 'recvonly' });
+            peer.ontrack = (event) => {
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                lastFrameAt = Date.now();
+                lastPlaybackTime = video.currentTime;
+
+                event.track.onended = () => {
+                    if (peer === peerConnection) {
+                        scheduleReconnect(0);
+                    }
+                };
+
+                video.srcObject = event.streams[0];
+                currentStream = event.streams[0];
+                ensureRecording();
+                watchVideoFrames(peer);
+            };
+            peer.onconnectionstatechange = () => {
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                const state = peer.connectionState;
+                if (state === 'disconnected') {
+                    scheduleReconnect(0);
+                    return;
+                }
+
+                if (state === 'failed' || state === 'closed') {
+                    scheduleReconnect();
+                }
+            };
+
+            try {
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                await waitForIceComplete(peer);
+
+                if (peer !== peerConnection || !peer.localDescription) {
+                    return;
+                }
+
+                const response = await fetch(WHEP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/sdp' },
+                    body: peer.localDescription.sdp,
+                });
+                if (response.status !== 201) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                sessionUrl = new URL(response.headers.get('location'), WHEP_URL).toString();
+                const answer = await response.text();
+                await peer.setRemoteDescription({ type: 'answer', sdp: answer });
+            } catch (error) {
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                console.error('[playing]', error);
+                scheduleReconnect();
+            }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            stopped = true;
+            recordingWanted = false;
+            if (recorder) {
+                recorder.stop();
+            }
+            cleanup();
+        });
+
+        setInterval(() => {
+            if (stopped || retryTimer || !peerConnection || !video.srcObject || playbackStatus !== 'playing') {
+                return;
+            }
+
+            const now = Date.now();
+
+            if (typeof video.requestVideoFrameCallback !== 'function') {
+                if (video.currentTime !== lastPlaybackTime) {
+                    lastPlaybackTime = video.currentTime;
+                    lastFrameAt = now;
+                }
+            }
+
+            if (lastFrameAt && now - lastFrameAt > 1200) {
+                scheduleReconnect(0);
+            }
+        }, 400);
+
+        updateRecordButton();
+        connect();
+    </script>
+</body>
+
+</html>
