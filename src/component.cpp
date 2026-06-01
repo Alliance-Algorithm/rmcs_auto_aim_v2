@@ -72,8 +72,17 @@ private:
         if (!keyboard.ready()) return;
 
         if (!last_keyboard_.g && keyboard->g) {
-            target_mode_ = target_mode_ == TargetMode::COMBAT ? TargetMode::OUTPOST_ONLY
-                                                              : TargetMode::COMBAT;
+            switch (target_mode_) {
+            case TargetMode::COMBAT:
+                target_mode_ = TargetMode::OUTPOST_ONLY;
+                break;
+            case TargetMode::OUTPOST_ONLY:
+                target_mode_ = TargetMode::ENGINEER;
+                break;
+            case TargetMode::ENGINEER:
+                target_mode_ = TargetMode::COMBAT;
+                break;
+            }
         }
         last_keyboard_ = *keyboard;
     }
