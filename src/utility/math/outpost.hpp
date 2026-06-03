@@ -9,6 +9,7 @@ public:
     struct Input {
         Armor3D source;
         bool in_right = false;
+        double armor_thickness = 0;
     } input;
 
     struct Result {

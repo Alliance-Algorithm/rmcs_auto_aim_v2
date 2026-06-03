@@ -22,6 +22,8 @@ public:
 
     auto set_camera_feature(const util::CameraFeature& feature) -> void;
 
+    auto set_armor_thickness(double thickness) -> void;
+
     auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
         -> std::optional<Lightbar>;
 

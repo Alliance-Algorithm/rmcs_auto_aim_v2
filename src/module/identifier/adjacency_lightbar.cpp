@@ -28,10 +28,13 @@ struct AdjacencyLightbarFinder::Impl {
 
     util::CameraFeature camera_feature { };
     util::NeighborBarSolution neighbor_solution { };
+    double armor_thickness { 0 };
 
     std::optional<Lightbar> detected { };
 
     auto set_camera_feature(const util::CameraFeature& feature) { camera_feature = feature; }
+
+    auto set_armor_thickness(double thickness) { armor_thickness = thickness; }
 
     auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
         -> std::optional<Lightbar> {
@@ -49,9 +52,10 @@ struct AdjacencyLightbarFinder::Impl {
         const auto pose_right = lpoint.norm() < rpoint.norm();
         const auto find_right = !pose_right;
 
-        auto& solution          = neighbor_solution;
-        solution.input.source   = armor3d;
-        solution.input.in_right = find_right;
+        auto& solution               = neighbor_solution;
+        solution.input.source        = armor3d;
+        solution.input.in_right      = find_right;
+        solution.input.armor_thickness = armor_thickness;
         solution.solve();
 
         // 开始选取 ROI，识别灯条
@@ -243,6 +247,10 @@ struct AdjacencyLightbarFinder::Impl {
 
 auto AdjacencyLightbarFinder::set_camera_feature(const util::CameraFeature& feature) -> void {
     return pimpl->set_camera_feature(feature);
+}
+
+auto AdjacencyLightbarFinder::set_armor_thickness(double thickness) -> void {
+    return pimpl->set_armor_thickness(thickness);
 }
 
 auto AdjacencyLightbarFinder::find(

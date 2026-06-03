@@ -6,7 +6,7 @@
 namespace rmcs::util {
 
 auto NeighborBarSolution::solve() -> void {
-    const auto radius = kOutpostRadius;
+    const auto radius = kOutpostRadius + input.armor_thickness;
     const auto pitch  = kPredictedOutpostArmorPitch;
 
     const auto& armor = input.source;

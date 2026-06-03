@@ -41,11 +41,12 @@ struct PoseEstimator::Impl {
         std::array<float, 5> distort_coeff;
         bool yaw_optimizer;
         bool distance_optimizer;
+        double outpost_armor_thickness;
 
         constexpr static std::tuple metas { //
             &Config::camera_matrix, "camera_matrix", &Config::distort_coeff, "distort_coeff",
             &Config::yaw_optimizer, "yaw_optimizer", &Config::distance_optimizer,
-            "distance_optimizer"
+            "distance_optimizer", &Config::outpost_armor_thickness, "outpost_armor_thickness"
         };
     };
 
@@ -111,6 +112,9 @@ struct PoseEstimator::Impl {
         yaw_optimizer.input.camera              = camera_feature;
         outpost_distance_optimizer.input.camera = camera_feature;
         adjacency_finder.set_camera_feature(camera_feature);
+
+        outpost_distance_optimizer.input.armor_thickness = config.outpost_armor_thickness;
+        adjacency_finder.set_armor_thickness(config.outpost_armor_thickness);
 
         return { };
     } catch (const std::exception& e) {
@@ -253,13 +257,14 @@ struct PoseEstimator::Impl {
         if (debug_state.optimized_outpost.has_value()) {
             const auto& armor = *debug_state.optimized_outpost;
 
-            auto solution           = NeighborBarSolution { };
-            solution.input.source   = armor;
-            solution.input.in_right = debug_state.optimized_bar_is_right;
+            auto solution                   = NeighborBarSolution { };
+            solution.input.source           = armor;
+            solution.input.in_right         = debug_state.optimized_bar_is_right;
+            solution.input.armor_thickness  = config.outpost_armor_thickness;
             solution.solve();
 
             const auto& near_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_near
-                                                                      : solution.result.lower_near;
+                                                                       : solution.result.lower_near;
             const auto& away_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_away
                                                                       : solution.result.lower_away;
 
@@ -306,9 +311,10 @@ struct PoseEstimator::Impl {
         if (debug_state.optimized_outpost.has_value()) {
             const auto& armor = *debug_state.optimized_outpost;
 
-            auto solution           = NeighborBarSolution { };
-            solution.input.source   = armor;
-            solution.input.in_right = debug_state.optimized_bar_is_right;
+            auto solution                  = NeighborBarSolution { };
+            solution.input.source          = armor;
+            solution.input.in_right        = debug_state.optimized_bar_is_right;
+            solution.input.armor_thickness = config.outpost_armor_thickness;
             solution.solve();
 
             const auto color    = ArmorVisualColor { armor.color };

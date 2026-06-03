@@ -16,6 +16,8 @@ struct OutpostDistanceOptimizer {
         bool is_right { false };
         bool is_upper { false };
 
+        double armor_thickness = 0;
+
         CameraFeature camera;
     } input;
 

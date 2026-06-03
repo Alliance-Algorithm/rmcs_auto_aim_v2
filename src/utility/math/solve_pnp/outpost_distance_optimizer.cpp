@@ -52,9 +52,10 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     auto initial_tvec = cv::Vec3d { t_ac_ocv.x(), t_ac_ocv.y(), t_ac_ocv.z() };
     cv::Rodrigues(r_ac_ocv_cv, initial_rvec);
 
-    auto solution           = NeighborBarSolution { };
-    solution.input.source   = input.initial;
-    solution.input.in_right = input.is_right;
+    auto solution                  = NeighborBarSolution { };
+    solution.input.source          = input.initial;
+    solution.input.in_right        = input.is_right;
+    solution.input.armor_thickness = input.armor_thickness;
     solution.solve();
 
     const auto& selected_lightbar =
