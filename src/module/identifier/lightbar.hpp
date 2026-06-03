@@ -10,13 +10,13 @@ struct LightbarFinder {
     struct Input {
         cv::Mat source;
         CampColor color { CampColor::UNKNOWN };
-        cv::Point2i predicted_point1;
-        cv::Point2i predicted_point2;
+        cv::Point2i predicted_upper;
+        cv::Point2i predicted_lower;
     } input;
 
     struct Result {
-        cv::Point2i point1;
-        cv::Point2i point2;
+        cv::Point2i upper;
+        cv::Point2i lower;
     } result;
 
     auto solve() -> bool;

@@ -26,14 +26,14 @@ auto LightbarFinder::solve() -> bool {
     if (contours.empty()) return false;
 
     const auto predicted_dx =
-        static_cast<double>(input.predicted_point2.x - input.predicted_point1.x);
+        static_cast<double>(input.predicted_upper.x - input.predicted_lower.x);
     const auto predicted_dy =
-        static_cast<double>(input.predicted_point2.y - input.predicted_point1.y);
+        static_cast<double>(input.predicted_upper.y - input.predicted_lower.y);
     const auto predicted_angle    = std::atan2(predicted_dy, predicted_dx);
     const auto predicted_length   = std::hypot(predicted_dx, predicted_dy);
     const auto predicted_midpoint = cv::Point2d {
-        0.5 * static_cast<double>(input.predicted_point1.x + input.predicted_point2.x),
-        0.5 * static_cast<double>(input.predicted_point1.y + input.predicted_point2.y),
+        0.5 * static_cast<double>(input.predicted_upper.x + input.predicted_lower.x),
+        0.5 * static_cast<double>(input.predicted_upper.y + input.predicted_lower.y),
     };
 
     auto best_top    = cv::Point2f { };
@@ -109,16 +109,16 @@ auto LightbarFinder::solve() -> bool {
         static_cast<int>(std::lround(best_bottom.y)) };
 
     const auto distance_a1 =
-        std::hypot(point_a.x - input.predicted_point1.x, point_a.y - input.predicted_point1.y);
+        std::hypot(point_a.x - input.predicted_upper.x, point_a.y - input.predicted_upper.y);
     const auto distance_b1 =
-        std::hypot(point_b.x - input.predicted_point1.x, point_b.y - input.predicted_point1.y);
+        std::hypot(point_b.x - input.predicted_upper.x, point_b.y - input.predicted_upper.y);
 
     if (distance_a1 <= distance_b1) {
-        result.point1 = point_a;
-        result.point2 = point_b;
+        result.upper = point_a;
+        result.lower = point_b;
     } else {
-        result.point1 = point_b;
-        result.point2 = point_a;
+        result.upper = point_b;
+        result.lower = point_a;
     }
 
     return true;

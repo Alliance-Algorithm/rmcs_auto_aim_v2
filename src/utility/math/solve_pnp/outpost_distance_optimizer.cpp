@@ -5,7 +5,6 @@
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <vector>
@@ -17,17 +16,12 @@
 using namespace rmcs::util;
 
 auto OutpostDistanceOptimizer::solve() -> bool {
-    constexpr double kTieEpsilon = 1e-6;
+    const auto upper = input.upper_point.make<cv::Point2f>();
+    const auto lower = input.lower_point.make<cv::Point2f>();
 
-    auto upper = input.point1.make<cv::Point2f>();
-    auto lower = input.point2.make<cv::Point2f>();
-    if (lower.y < upper.y || (std::abs(lower.y - upper.y) < kTieEpsilon && lower.x < upper.x)) {
-        std::swap(upper, lower);
-    }
-
-    const auto q_ac_ros = input.initial.orientation.make<Eigen::Quaterniond>();
-    const auto t_ac_ros = input.initial.translation.make<Eigen::Vector3d>();
-    const auto r_ac_ros = q_ac_ros.toRotationMatrix();
+    auto q_ac_ros = input.initial.orientation.make<Eigen::Quaterniond>();
+    auto t_ac_ros = input.initial.translation.make<Eigen::Vector3d>();
+    auto r_ac_ros = q_ac_ros.toRotationMatrix();
 
     auto object_points = std::vector<cv::Point3f> { };
     object_points.reserve(6);
@@ -63,10 +57,10 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     solution.input.in_right = input.is_right;
     solution.solve();
 
-    const auto& selected_bar =
+    const auto& selected_lightbar =
         input.is_upper ? solution.result.upper_near : solution.result.lower_near;
 
-    for (const auto& point : { selected_bar.first, selected_bar.second }) {
+    for (const auto& point : { selected_lightbar.first, selected_lightbar.second }) {
         const auto point_in_camera_ros = point.make<Eigen::Vector3d>();
         auto point_in_local_ros =
             Eigen::Vector3d { (r_ac_ros.transpose() * (point_in_camera_ros - t_ac_ros)).eval() };

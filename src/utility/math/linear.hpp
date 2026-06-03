@@ -150,6 +150,8 @@ struct Scalar2d {
 using Point2d = Scalar2d;
 
 struct Scalar3d {
+    static constexpr auto kZero() { return Scalar3d { 0, 0, 0 }; }
+
     double x = 0;
     double y = 0;
     double z = 0;
@@ -175,7 +177,16 @@ struct Scalar3d {
         return linear::details::clone_scalar3d(*this, result);
     }
 
-    static constexpr auto kZero() { return Scalar3d { 0, 0, 0 }; }
+    template <class Final>
+    auto operator*(this const Final& self, double scale) {
+        auto result = Final { };
+
+        result.x = self.x * scale;
+        result.y = self.y * scale;
+        result.z = self.z * scale;
+
+        return result;
+    }
 };
 using Vector3d    = Scalar3d;
 using Point3d     = Scalar3d;

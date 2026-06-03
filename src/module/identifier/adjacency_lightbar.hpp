@@ -14,8 +14,8 @@ class AdjacencyLightbarFinder {
 
 public:
     struct Lightbar {
-        Point2d point1;
-        Point2d point2;
+        Point2d upper;
+        Point2d lower;
         bool is_right { false };
         bool is_upper { false };
     };

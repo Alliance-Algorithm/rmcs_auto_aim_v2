@@ -9,7 +9,6 @@
 #include "module/debug/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/image/text.hpp"
-#include "utility/logging_util.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
@@ -36,9 +35,6 @@ auto main() -> int {
 
     auto node = RclcppNode { "AutoAim" };
     node.set_pub_topic_prefix("/rmcs/auto_aim/");
-
-    auto logging = LoggingUtil { node };
-    logging.reset("detection", 5);
 
     /// Runtime
     auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };

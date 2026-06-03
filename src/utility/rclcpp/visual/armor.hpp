@@ -28,6 +28,7 @@ public:
     Armor(const Armor&)            = delete;
     Armor& operator=(const Armor&) = delete;
 
+    auto set_camp(CampColor camp) noexcept -> void;
     auto update() noexcept -> void;
 
 private:

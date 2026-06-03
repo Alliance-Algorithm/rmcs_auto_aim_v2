@@ -10,8 +10,8 @@ struct OutpostDistanceOptimizer {
         Armor3D initial;
 
         Armor2D armor;
-        Point2d point1;
-        Point2d point2;
+        Point2d upper_point;
+        Point2d lower_point;
 
         bool is_right { false };
         bool is_upper { false };

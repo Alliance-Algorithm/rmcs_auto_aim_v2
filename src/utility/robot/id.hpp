@@ -54,7 +54,7 @@ constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
         case DeviceId::BASE:       return 11;
         // clang-format on
     }
-    return {};
+    return { };
 }
 constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
     switch (id) {
@@ -73,7 +73,7 @@ constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
         case DeviceId::BASE:       return "BASE";
         // clang-format on
     }
-    return {};
+    return { };
 }
 constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
     return (data < id::details::id_underlyings.size())
@@ -84,7 +84,7 @@ constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
 struct DeviceIds {
     uint16_t data = std::to_underlying(DeviceId::UNKNOWN);
 
-    static constexpr auto None() { return DeviceIds {}; }
+    static constexpr auto None() { return DeviceIds { }; }
     static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
 
     constexpr DeviceIds()                            = default;
@@ -118,7 +118,7 @@ struct DeviceIds {
     constexpr auto remove(DeviceId id) noexcept -> void { data &= ~std::to_underlying(id); }
 
     constexpr auto elements() const -> std::vector<DeviceId> {
-        auto result = std::vector<DeviceId> {};
+        auto result = std::vector<DeviceId> { };
         for (std::size_t i = 1; i <= id::details::id_underlyings.size(); ++i) {
             auto id = from_index(i);
             if (contains(id)) result.emplace_back(id);
@@ -130,7 +130,6 @@ struct DeviceIds {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::ENGINEER,
-            DeviceId::BASE,
         };
     }
     constexpr static auto kSmallArmor() {
@@ -140,6 +139,7 @@ struct DeviceIds {
             DeviceId::INFANTRY_5,
             DeviceId::SENTRY,
             DeviceId::OUTPOST,
+            DeviceId::BASE,
         };
     }
     constexpr static auto kGround() {
@@ -176,4 +176,5 @@ struct DeviceIds {
     }
 };
 
+static_assert((DeviceIds::kSmallArmor() & DeviceIds::kLargeArmor()) == DeviceIds::None());
 }

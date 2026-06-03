@@ -62,6 +62,13 @@ struct LightBar::Impl {
         marker.points[1].z = bottom.z;
     }
 
+    auto set_color(float r, float g, float b, float a) noexcept -> void {
+        marker.color.r = r;
+        marker.color.g = g;
+        marker.color.b = b;
+        marker.color.a = a;
+    }
+
     auto update() noexcept -> void {
         if (!rclcpp_pub) {
             rclcpp_pub = create_rclcpp_publisher(config);
@@ -72,8 +79,12 @@ struct LightBar::Impl {
     }
 };
 
-auto LightBar::set(const Point3d& top, const Point3d& bottom) noexcept -> void {
+auto LightBar::set_point(const Point3d& top, const Point3d& bottom) noexcept -> void {
     pimpl->set(top, bottom);
+}
+
+auto LightBar::set_color(float r, float g, float b, float a) noexcept -> void {
+    pimpl->set_color(r, g, b, a);
 }
 
 auto LightBar::update() noexcept -> void { pimpl->update(); }

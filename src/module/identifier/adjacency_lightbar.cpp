@@ -1,6 +1,5 @@
 #include "adjacency_lightbar.hpp"
 #include "module/identifier/lightbar.hpp"
-
 #include "utility/image/image.details.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
@@ -18,56 +17,42 @@
 namespace rmcs {
 
 struct AdjacencyLightbarFinder::Impl {
-    struct DetectResult {
+    struct DetectArea {
         cv::Rect2i roi;
-
-        cv::Point2f predicted_upper;
-        cv::Point2f predicted_lower;
-
-        cv::Point2f upper;
-        cv::Point2f lower;
-
-        bool is_right { false };
-        bool is_upper { false };
-
-        bool detected { false };
+        cv::Point2f near_upper;
+        cv::Point2f near_lower;
+        cv::Point2f away_upper;
+        cv::Point2f away_lower;
     };
-    std::vector<DetectResult> results { };
+    std::array<DetectArea, 2> areas { };
 
     util::CameraFeature camera_feature { };
-    std::optional<Lightbar> detected_lightbar { };
+    util::NeighborBarSolution neighbor_solution { };
+
+    std::optional<Lightbar> detected { };
 
     auto set_camera_feature(const util::CameraFeature& feature) { camera_feature = feature; }
 
     auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
         -> std::optional<Lightbar> {
 
-        results.clear();
-        detected_lightbar.reset();
+        detected.reset();
 
         if (image.details().mat.empty()) return std::nullopt;
 
         const auto t = armor3d.translation.make<Eigen::Vector3d>();
         const auto q = armor3d.orientation.make<Eigen::Quaterniond>();
 
-        const auto lunit = Eigen::Vector3d { 0.0, +1.0, 0.0 };
-        const auto runit = Eigen::Vector3d { 0.0, -1.0, 0.0 };
+        const auto lpoint = Eigen::Vector3d { t + q * Eigen::Vector3d::UnitY() };
+        const auto rpoint = Eigen::Vector3d { t + q * -Eigen::Vector3d::UnitY() };
 
-        const auto lpoint = Eigen::Vector3d { (t + q * lunit).eval() };
-        const auto rpoint = Eigen::Vector3d { (t + q * runit).eval() };
+        const auto pose_right = lpoint.norm() < rpoint.norm();
+        const auto find_right = !pose_right;
 
-        const auto lnorm = lpoint.x() * lpoint.x() + lpoint.y() * lpoint.y();
-        const auto rnorm = rpoint.x() * rpoint.x() + rpoint.y() * rpoint.y();
-
-        const auto in_right = rnorm < lnorm;
-
-        auto solution           = util::NeighborBarSolution { };
+        auto& solution          = neighbor_solution;
         solution.input.source   = armor3d;
-        solution.input.in_right = in_right;
+        solution.input.in_right = find_right;
         solution.solve();
-
-        const auto upper_bar = solution.result.upper_near;
-        const auto lower_bar = solution.result.lower_near;
 
         // 开始选取 ROI，识别灯条
         const auto& mat = image.details().mat;
@@ -85,10 +70,8 @@ struct AdjacencyLightbarFinder::Impl {
         removed_mask.height += 10;
         removed_mask &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
-        for (auto&& [bar, is_upper] :
-            std::views::zip(std::array { upper_bar, lower_bar }, std::array { true, false })) {
-
-            // 重投影候选灯条的两个端点。
+        const auto project_bar = [&](const util::NeighborBarSolution::Result::Bar& bar)
+            -> std::optional<std::pair<cv::Point2f, cv::Point2f>> {
             auto segment_points = std::array<cv::Point3f, 2> { };
             for (std::size_t i = 0; i < segment_points.size(); ++i) {
                 const auto point  = i == 0 ? bar.first : bar.second;
@@ -97,49 +80,60 @@ struct AdjacencyLightbarFinder::Impl {
                     static_cast<float>(p[0]), static_cast<float>(p[1]), static_cast<float>(p[2]));
             }
 
-            auto projected_segment = std::vector<cv::Point2f> { };
+            auto projected = std::vector<cv::Point2f> { };
             cv::projectPoints(segment_points, cv::Vec3d { 0.0, 0.0, 0.0 },
                 cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
-                camera_feature.distortion(), projected_segment);
-            if (projected_segment.size() != 2) continue;
+                camera_feature.distortion(), projected);
+            if (projected.size() != 2) return std::nullopt;
 
-            auto upper_point = projected_segment[0];
-            auto lower_point = projected_segment[1];
-            if (upper_point.y > lower_point.y) std::swap(upper_point, lower_point);
+            const auto upper = projected[0];
+            const auto lower = projected[1];
 
-            // 以两点中点为中心生成候选 ROI。
-            auto center = (upper_point + lower_point) * 0.5f;
-            auto roi    = cv::Rect2i {
+            return std::pair { upper, lower };
+        };
+
+        for (auto&& [area, is_upper] : std::views::zip(areas, std::array { true, false })) {
+            const auto& near_bar =
+                is_upper ? solution.result.upper_near : solution.result.lower_near;
+            const auto& away_bar =
+                is_upper ? solution.result.upper_away : solution.result.lower_away;
+
+            const auto near_result = project_bar(near_bar);
+            if (!near_result) continue;
+
+            const auto [near_upper, near_lower] = *near_result;
+
+            const auto center = (near_upper + near_lower) * 0.5f;
+            const auto roi    = cv::Rect2i {
                 static_cast<int>(center.x) - margin_x,
                 static_cast<int>(center.y) - margin_y,
                 margin_x * 2,
                 margin_y * 2,
+            } & cv::Rect2i { 0, 0, mat.cols, mat.rows };
+
+            const auto away_result = project_bar(away_bar);
+            const auto [away_upper, away_lower] =
+                away_result ? *away_result : std::pair { near_upper, near_lower };
+
+            area = DetectArea {
+                .roi        = roi,
+                .near_upper = near_upper,
+                .near_lower = near_lower,
+                .away_upper = away_upper,
+                .away_lower = away_lower,
             };
+        }
 
-            roi &= cv::Rect2i { 0, 0, mat.cols, mat.rows };
-            if (roi.width <= 0 || roi.height <= 0) continue;
+        // 遍历 areas，检测灯条
+        for (auto&& [is_upper, area] : std::views::zip(std::array { true, false }, areas)) {
+            if (area.roi.width <= 0 || area.roi.height <= 0) continue;
 
-            results.push_back(DetectResult {
-                .roi = roi,
-
-                .predicted_upper = upper_point,
-                .predicted_lower = lower_point,
-
-                .upper = upper_point,
-                .lower = lower_point,
-
-                .is_right = in_right,
-                .is_upper = is_upper,
-
-                .detected = false,
-            });
-
-            const auto roi_mat      = mat(roi).clone();
-            const auto self_overlap = removed_mask & roi;
+            const auto roi_mat      = mat(area.roi).clone();
+            const auto self_overlap = removed_mask & area.roi;
             if (self_overlap.area() > 0) {
                 const auto local_overlap = cv::Rect2i {
-                    self_overlap.x - roi.x,
-                    self_overlap.y - roi.y,
+                    self_overlap.x - area.roi.x,
+                    self_overlap.y - area.roi.y,
                     self_overlap.width,
                     self_overlap.height,
                 };
@@ -153,79 +147,97 @@ struct AdjacencyLightbarFinder::Impl {
                 input.source = roi_mat;
                 input.color  = camp;
 
-                input.predicted_point1 = {
-                    static_cast<int>(std::lround(upper_point.x - 1.0 * roi.x)),
-                    static_cast<int>(std::lround(upper_point.y - 1.0 * roi.y)),
+                input.predicted_upper = {
+                    static_cast<int>(std::lround(area.near_upper.x - 1.0 * area.roi.x)),
+                    static_cast<int>(std::lround(area.near_upper.y - 1.0 * area.roi.y)),
                 };
-                input.predicted_point2 = {
-                    static_cast<int>(std::lround(lower_point.x - 1.0 * roi.x)),
-                    static_cast<int>(std::lround(lower_point.y - 1.0 * roi.y)),
+                input.predicted_lower = {
+                    static_cast<int>(std::lround(area.near_lower.x - 1.0 * area.roi.x)),
+                    static_cast<int>(std::lround(area.near_lower.y - 1.0 * area.roi.y)),
                 };
                 if (!finder.solve()) continue;
-            }
-            {
+
                 auto& result = finder.result;
 
-                results.back().upper = cv::Point2f {
-                    static_cast<float>(result.point1.x + roi.x),
-                    static_cast<float>(result.point1.y + roi.y),
+                /// @NOTE:
+                /// @TODO: 写一个 NOTE
+                ///
+                const auto length_detected = cv::norm(result.upper - result.lower);
+                const auto length_predict  = cv::norm(area.near_upper - area.near_lower);
+
+                if (length_detected > 1e-6) {
+                    const auto scale  = length_predict / length_detected;
+                    const auto center = (result.upper + result.lower) * 0.5f;
+                    result.upper      = center + (result.upper - center) * scale;
+                    result.lower      = center + (result.lower - center) * scale;
+                }
+
+                detected = Lightbar {
+                    .upper =
+                        Point2d {
+                            1. * (result.upper.x + area.roi.x),
+                            1. * (result.upper.y + area.roi.y),
+                        },
+                    .lower =
+                        Point2d {
+                            1. * (result.lower.x + area.roi.x),
+                            1. * (result.lower.y + area.roi.y),
+                        },
+                    .is_right = find_right,
+                    .is_upper = is_upper,
                 };
-                results.back().lower = cv::Point2f {
-                    static_cast<float>(result.point2.x + roi.x),
-                    static_cast<float>(result.point2.y + roi.y),
-                };
-                results.back().detected = true;
+                break;
             }
         }
-
-        if (results.empty()) {
-            return std::nullopt;
-        }
-
-        const auto detected = std::ranges::find_if(
-            results, [](const DetectResult& candidate) { return candidate.detected; });
-        if (detected == results.end()) {
-            return std::nullopt;
-        }
-
-        detected_lightbar = Lightbar {
-            .point1   = Point2d { detected->upper },
-            .point2   = Point2d { detected->lower },
-            .is_right = detected->is_right,
-            .is_upper = detected->is_upper,
-        };
-        return detected_lightbar;
+        return detected;
     }
 
-    auto draw_roi(Image& image) -> void {
+    auto draw_roi(Image& image) const -> void {
+        static const auto kAreaColor   = cv::Scalar { 000, 255, 000 };
+        static const auto kNearColor   = cv::Scalar { 255, 255, 255 };
+        static const auto kAwayColor   = cv::Scalar { 128, 128, 128 };
+        static const auto kCenterColor = cv::Scalar { 255, 255, 255 };
+
         auto& mat = image.details().mat;
         if (mat.empty()) return;
 
-        static const auto kRoiColors = std::array {
-            cv::Scalar { 0, 255, 0 },
-            cv::Scalar { 0, 255, 255 },
-        };
-        static const auto kPredictedPointColor = cv::Scalar { 255, 255, 255 };
+        const auto center_3d  = neighbor_solution.result.center.make<Eigen::Vector3d>();
+        const auto center_ocv = util::ros2opencv_position(center_3d);
 
-        for (std::size_t i = 0; i < results.size(); ++i) {
-            const auto& candidate = results[i];
-            const auto& color     = kRoiColors[i % kRoiColors.size()];
+        auto center_projected = std::vector<cv::Point2f> { };
+        cv::projectPoints(
+            std::vector {
+                cv::Point3f {
+                    static_cast<float>(center_ocv.x()),
+                    static_cast<float>(center_ocv.y()),
+                    static_cast<float>(center_ocv.z()),
+                },
+            },
+            cv::Vec3d { 0, 0, 0 }, cv::Vec3d { 0, 0, 0 }, camera_feature.intrinsic(),
+            camera_feature.distortion(), center_projected);
 
-            cv::rectangle(mat, candidate.roi, color, 1, cv::LINE_AA);
-            cv::circle(mat, candidate.predicted_upper, 1, kPredictedPointColor, -1, cv::LINE_AA);
-            cv::circle(mat, candidate.predicted_lower, 1, kPredictedPointColor, -1, cv::LINE_AA);
+        if (!center_projected.empty()) {
+            cv::circle(mat, center_projected[0], 2, kCenterColor, -1, cv::LINE_AA);
+        }
+
+        for (const auto& area : areas) {
+            cv::rectangle(mat, area.roi, kAreaColor, 1, cv::LINE_AA);
+            cv::circle(mat, area.near_upper, 1, kNearColor, -1, cv::LINE_AA);
+            cv::circle(mat, area.near_lower, 1, kNearColor, -1, cv::LINE_AA);
+            cv::circle(mat, area.away_upper, 1, kAwayColor, -1, cv::LINE_AA);
+            cv::circle(mat, area.away_lower, 1, kAwayColor, -1, cv::LINE_AA);
         }
     }
 
     auto draw_lightbar(Image& image) -> void {
         auto& mat = image.details().mat;
         if (mat.empty()) return;
-        if (!detected_lightbar.has_value()) return;
+        if (!detected.has_value()) return;
 
-        cv::circle(mat, detected_lightbar->point1.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 },
-            -1, cv::LINE_AA);
-        cv::circle(mat, detected_lightbar->point2.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 },
-            -1, cv::LINE_AA);
+        cv::circle(
+            mat, detected->upper.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 }, -1, cv::LINE_AA);
+        cv::circle(
+            mat, detected->lower.make<cv::Point2f>(), 2, cv::Scalar { 0, 0, 255 }, -1, cv::LINE_AA);
     }
 };
 

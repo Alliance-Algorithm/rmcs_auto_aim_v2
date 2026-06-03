@@ -19,6 +19,8 @@ public:
 
         Bar lower_near;
         Bar lower_away;
+
+        Point3d center;
     } result;
 
     auto solve() -> void;

@@ -67,7 +67,36 @@ struct PoseEstimator::Impl {
     Eigen::Vector3d camera_translation { Eigen::Vector3d::Zero() };
     Eigen::Quaterniond camera_orientation { Eigen::Quaterniond::Identity() };
 
-    Impl() noexcept { visual_node.set_pub_topic_prefix("/rmcs/auto_aim/"); }
+    Impl() noexcept {
+        using namespace visual;
+
+        visual_node.set_pub_topic_prefix("/rmcs/auto_aim/");
+
+        optimized_neighbor_bar_near = std::make_unique<LightBar>(LightBar::Config {
+            .rclcpp = visual_node,
+            .id     = 0,
+            .name   = "optimized_neighbor_bar_near",
+            .tf     = kCameraLink,
+            .width  = 0.01,
+        });
+
+        optimized_neighbor_bar_away = std::make_unique<LightBar>(LightBar::Config {
+            .rclcpp = visual_node,
+            .id     = 1,
+            .name   = "optimized_neighbor_bar_away",
+            .tf     = kCameraLink,
+            .width  = 0.01,
+        });
+
+        pre_optimized_outpost = std::make_unique<Armor>(Armor::Config {
+            .rclcpp = visual_node,
+            .device = DeviceId::OUTPOST,
+            .camp   = CampColor::BLUE,
+            .id     = 0,
+            .name   = "pre_optimized_outpost",
+            .tf     = kCameraLink,
+        });
+    }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
         auto result = config.serialize(yaml);
@@ -152,19 +181,18 @@ struct PoseEstimator::Impl {
             armor2ds, [](const Armor2D& armor) { return armor.genre == DeviceId::OUTPOST; });
         auto outpost3d = std::ranges::find_if(
             armor3ds, [](const Armor3D& armor) { return armor.genre == DeviceId::OUTPOST; });
+
         if (outpost3d != armor3ds.end() && outpost2d != armor2ds.end()) {
             debug_state.pre_optimized_outpost = *outpost3d;
 
             if (auto lightbar = adjacency_finder.find(image, *outpost2d, *outpost3d)) {
-                debug_state.has_detected_lightbar = true;
-                debug_state.has_candidate_roi     = true;
                 if (config.distance_optimizer) {
                     auto& input   = outpost_distance_optimizer.input;
                     input.initial = *outpost3d;
 
-                    input.armor  = *outpost2d;
-                    input.point1 = lightbar->point1;
-                    input.point2 = lightbar->point2;
+                    input.armor       = *outpost2d;
+                    input.upper_point = lightbar->upper;
+                    input.lower_point = lightbar->lower;
 
                     input.is_right = lightbar->is_right;
                     input.is_upper = lightbar->is_upper;
@@ -177,6 +205,9 @@ struct PoseEstimator::Impl {
                         debug_state.optimized_bar_is_upper = lightbar->is_upper;
                     }
                 }
+
+                debug_state.has_detected_lightbar = true;
+                debug_state.has_candidate_roi     = true;
             } else {
                 debug_state.has_candidate_roi = true;
             }
@@ -218,90 +249,44 @@ struct PoseEstimator::Impl {
         return result;
     }
 
-    auto draw_optimized_outpost_neighbor_bar(
-        Image& image, const Armor3D& armor, bool is_right, bool is_upper) const -> void {
-        auto solution           = NeighborBarSolution { };
-        solution.input.source   = armor;
-        solution.input.in_right = is_right;
-        solution.solve();
-
-        const auto& selected_bar =
-            is_upper ? solution.result.upper_near : solution.result.lower_near;
-
-        auto object_points = std::vector<cv::Point3f> { };
-        object_points.reserve(2);
-        for (const auto& point : { selected_bar.first, selected_bar.second }) {
-            const auto p = ros2opencv_position(point.make<Eigen::Vector3d>());
-            object_points.emplace_back(
-                static_cast<float>(p.x()), static_cast<float>(p.y()), static_cast<float>(p.z()));
-        }
-
-        auto projected = std::vector<cv::Point2f> { };
-        cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 }, cv::Vec3d { 0.0, 0.0, 0.0 },
-            camera_feature.intrinsic(), camera_feature.distortion(), projected);
-        if (projected.size() != 2) return;
-
-        auto& mat = image.details().mat;
-        for (const auto& point : projected) {
-            cv::circle(mat, point, 2, cv::Scalar { 0, 255, 255 }, -1, cv::LINE_AA);
-        }
-    }
-
-    auto publish_optimized_outpost_neighbor_bar(const Armor3D& armor, bool is_right, bool is_upper)
-        -> void {
-        auto solution           = NeighborBarSolution { };
-        solution.input.source   = armor;
-        solution.input.in_right = is_right;
-        solution.solve();
-
-        const auto& near_bar = is_upper ? solution.result.upper_near : solution.result.lower_near;
-        const auto& away_bar = is_upper ? solution.result.upper_away : solution.result.lower_away;
-
-        const auto color = ArmorVisualColor { armor_color2camp_color(armor.color) };
-        const auto r     = static_cast<float>(color.x);
-        const auto g     = static_cast<float>(color.y);
-        const auto b     = static_cast<float>(color.z);
-
-        if (!optimized_neighbor_bar_near) {
-            optimized_neighbor_bar_near =
-                std::make_unique<visual::LightBar>(visual::LightBar::Config {
-                    .rclcpp = visual_node,
-                    .id     = 0,
-                    .name   = "optimized_neighbor_bar_near",
-                    .tf     = kCameraLink,
-                    .r      = r,
-                    .g      = g,
-                    .b      = b,
-                    .a      = 1.0F,
-                    .width  = 0.01,
-                });
-        }
-        if (!optimized_neighbor_bar_away) {
-            optimized_neighbor_bar_away =
-                std::make_unique<visual::LightBar>(visual::LightBar::Config {
-                    .rclcpp = visual_node,
-                    .id     = 1,
-                    .name   = "optimized_neighbor_bar_away",
-                    .tf     = kCameraLink,
-                    .r      = r,
-                    .g      = g,
-                    .b      = b,
-                    .a      = 1.0F,
-                    .width  = 0.01,
-                });
-        }
-
-        optimized_neighbor_bar_near->set(near_bar.first, near_bar.second);
-        optimized_neighbor_bar_near->update();
-
-        optimized_neighbor_bar_away->set(away_bar.first, away_bar.second);
-        optimized_neighbor_bar_away->update();
-    }
-
     auto draw_debug(Image& image) -> void {
         if (debug_state.optimized_outpost.has_value()) {
-            draw_optimized_outpost_neighbor_bar(image, *debug_state.optimized_outpost,
-                debug_state.optimized_bar_is_right, debug_state.optimized_bar_is_upper);
+            const auto& armor = *debug_state.optimized_outpost;
+
+            auto solution           = NeighborBarSolution { };
+            solution.input.source   = armor;
+            solution.input.in_right = debug_state.optimized_bar_is_right;
+            solution.solve();
+
+            const auto& near_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_near
+                                                                      : solution.result.lower_near;
+            const auto& away_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_away
+                                                                      : solution.result.lower_away;
+
+            auto object_points = std::vector<cv::Point3f> { };
+            object_points.reserve(4);
+            for (const auto& point :
+                { near_bar.first, near_bar.second, away_bar.first, away_bar.second }) {
+                const auto p = ros2opencv_position(point.make<Eigen::Vector3d>());
+                object_points.emplace_back(static_cast<float>(p.x()), static_cast<float>(p.y()),
+                    static_cast<float>(p.z()));
+            }
+
+            auto projected = std::vector<cv::Point2f> { };
+            cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 },
+                cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
+                camera_feature.distortion(), projected);
+            if (projected.size() == 4) {
+                const auto color       = ArmorVisualColor { armor.color };
+                const auto near_scalar = cv::Scalar { color.z * 255, color.y * 255, color.x * 255 };
+                const auto away_scalar = near_scalar * 0.5;
+
+                auto& mat = image.details().mat;
+                cv::circle(mat, projected[0], 2, near_scalar, -1, cv::LINE_AA);
+                cv::circle(mat, projected[1], 2, near_scalar, -1, cv::LINE_AA);
+                cv::circle(mat, projected[2], 2, away_scalar, -1, cv::LINE_AA);
+                cv::circle(mat, projected[3], 2, away_scalar, -1, cv::LINE_AA);
+            }
         }
         if (debug_state.has_detected_lightbar) {
             adjacency_finder.draw_lightbar(image);
@@ -313,28 +298,36 @@ struct PoseEstimator::Impl {
 
     auto publish_debug() -> void {
         if (debug_state.pre_optimized_outpost.has_value()) {
-            publish_pre_optimized_outpost(*debug_state.pre_optimized_outpost);
+            const auto& armor = *debug_state.pre_optimized_outpost;
+            pre_optimized_outpost->set_camp(armor_color2camp_color(armor.color));
+            pre_optimized_outpost->move(armor.translation, armor.orientation);
+            pre_optimized_outpost->update();
         }
         if (debug_state.optimized_outpost.has_value()) {
-            publish_optimized_outpost_neighbor_bar(*debug_state.optimized_outpost,
-                debug_state.optimized_bar_is_right, debug_state.optimized_bar_is_upper);
-        }
-    }
+            const auto& armor = *debug_state.optimized_outpost;
 
-    auto publish_pre_optimized_outpost(const Armor3D& armor) -> void {
-        const auto camp = armor_color2camp_color(armor.color);
-        if (!pre_optimized_outpost) {
-            pre_optimized_outpost = std::make_unique<visual::Armor>(visual::Armor::Config {
-                .rclcpp = visual_node,
-                .device = armor.genre,
-                .camp   = camp,
-                .id     = 0,
-                .name   = "pre_optimized_outpost",
-                .tf     = kCameraLink,
-            });
+            auto solution           = NeighborBarSolution { };
+            solution.input.source   = armor;
+            solution.input.in_right = debug_state.optimized_bar_is_right;
+            solution.solve();
+
+            const auto color    = ArmorVisualColor { armor.color };
+            const auto is_upper = debug_state.optimized_bar_is_upper;
+
+            const auto& near_bar =
+                is_upper ? solution.result.upper_near : solution.result.lower_near;
+
+            optimized_neighbor_bar_near->set_color(color);
+            optimized_neighbor_bar_near->set_point(near_bar.first, near_bar.second);
+            optimized_neighbor_bar_near->update();
+
+            const auto& away_bar =
+                is_upper ? solution.result.upper_away : solution.result.lower_away;
+
+            optimized_neighbor_bar_away->set_color(color * 0.5);
+            optimized_neighbor_bar_away->set_point(away_bar.first, away_bar.second);
+            optimized_neighbor_bar_away->update();
         }
-        pre_optimized_outpost->move(armor.translation, armor.orientation);
-        pre_optimized_outpost->update();
     }
 };
 

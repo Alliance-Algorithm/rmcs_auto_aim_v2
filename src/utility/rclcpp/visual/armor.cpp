@@ -81,9 +81,16 @@ struct Armor::Impl {
         t.copy_to(marker.pose.position);
         q.copy_to(marker.pose.orientation);
     }
+
+    auto set_camp(CampColor camp) noexcept {
+        ArmorVisualColor { camp }.to(marker.color);
+        ArmorVisualColor { camp }.to(arrow_marker.color);
+    }
 };
 
 auto Armor::update() noexcept -> void { pimpl->update(); }
+
+auto Armor::set_camp(CampColor camp) noexcept -> void { pimpl->set_camp(camp); }
 
 auto Armor::impl_move(const Translation& t, const Orientation& q) noexcept -> void {
     pimpl->move(t, q);
