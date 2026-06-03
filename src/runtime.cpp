@@ -171,7 +171,7 @@ auto main() -> int {
             pose_estimator.draw_debug(*image);
             pose_estimator.publish_debug();
 
-            armors_3d = pose_estimator.into_odom_link(result);
+            armors_3d = result;
             if (armors_3d.empty()) continue;
 
             visualization.update_visible_armors(armors_3d);

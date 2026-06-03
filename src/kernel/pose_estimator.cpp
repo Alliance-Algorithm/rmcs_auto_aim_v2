@@ -157,14 +157,11 @@ struct PoseEstimator::Impl {
                 armor_3d.translation = pnp_solution.result.translation;
                 armor_3d.orientation = pnp_solution.result.orientation;
             }
-            if (config.yaw_optimizer) { // yaw
-                auto t_in_camera = pnp_solution.result.translation.make<Eigen::Vector3d>();
-                auto t_in_world  = Eigen::Vector3d {
-                    (q_camera_to_odom * t_in_camera + camera_translation).eval()
-                };
+            into_odom_link(armor_3d);
 
+            if (config.yaw_optimizer) { // yaw
                 input.armor_shape  = shape;
-                input.xyz_in_world = Translation { t_in_world };
+                input.xyz_in_world = armor_3d.translation;
                 input.center_yaw   = center_yaw;
                 input.genre        = armor.genre;
                 std::ranges::copy(armor.corners(), input.detected_corners.begin());
@@ -257,14 +254,14 @@ struct PoseEstimator::Impl {
         if (debug_state.optimized_outpost.has_value()) {
             const auto& armor = *debug_state.optimized_outpost;
 
-            auto solution                   = NeighborBarSolution { };
-            solution.input.source           = armor;
-            solution.input.in_right         = debug_state.optimized_bar_is_right;
-            solution.input.armor_thickness  = config.outpost_armor_thickness;
+            auto solution                  = NeighborBarSolution { };
+            solution.input.source          = armor;
+            solution.input.in_right        = debug_state.optimized_bar_is_right;
+            solution.input.armor_thickness = config.outpost_armor_thickness;
             solution.solve();
 
             const auto& near_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_near
-                                                                       : solution.result.lower_near;
+                                                                      : solution.result.lower_near;
             const auto& away_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_away
                                                                       : solution.result.lower_away;
 
