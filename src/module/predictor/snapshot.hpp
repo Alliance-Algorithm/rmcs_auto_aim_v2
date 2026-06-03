@@ -21,7 +21,7 @@ namespace detail {
 class Snapshot {
 public:
     using NormalEKF  = util::EKF<11, 4>;
-    using OutpostEKF = util::EKF<6, 4>;
+    using OutpostEKF = util::EKF<7, 4>;
 
     struct Kinematics {
         Eigen::Vector3d center_position;
