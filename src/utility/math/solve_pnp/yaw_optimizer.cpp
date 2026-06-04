@@ -44,7 +44,7 @@ auto compute_reprojection_error(double yaw, double pitch, Eigen::Matrix3d const&
 auto YawOptimizer::solve() -> Output {
     constexpr double kSearchRangeDeg { 140.0 };
     constexpr double kSearchStepDeg { 1.0 };
-    constexpr double kDefaultPitchDeg { 15.0 };
+    constexpr double kDefaultPitchDeg { +15.0 };
     constexpr double kOutpostPitchDeg { -15.0 };
 
     const auto pitch = double { (input.genre == DeviceId::OUTPOST) ? deg2rad(kOutpostPitchDeg)

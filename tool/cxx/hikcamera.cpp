@@ -1,14 +1,15 @@
-#include "module/debug/framerate.hpp"
 #include "util/snapshot.hpp"
 #include "util/terminal.hpp"
+#include "utility/framerate.hpp"
 #include "utility/image/recorder.hpp"
+#include <module/debug/visualization/stream_session.hpp>
 
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <condition_variable>
 #include <csignal>
 #include <deque>
+#include <fstream>
 #include <mutex>
 #include <print>
 #include <string>
@@ -23,10 +24,9 @@ using TimePoint = Clock::time_point;
 namespace {
 
 struct Recording {
-    static constexpr auto kQueueSize    = std::size_t { 120 };
-    static constexpr auto kStatInterval = std::chrono::seconds { 2 };
+    static constexpr auto kQueueSize = std::size_t { 120 };
 
-    rmcs::ImageRecorder recorder;
+    rmcs::VideoRecorder recorder;
 
     std::mutex mutex           = { };
     std::condition_variable cv = { };
@@ -36,34 +36,25 @@ struct Recording {
     std::uint64_t written = 0;
     std::uint64_t dropped = 0;
 
-    TimePoint started_at                      = { };
-    std::chrono::nanoseconds total_write_time = { };
-    TimePoint stat_last                       = { };
-    std::uint64_t stat_written                = 0;
-    std::chrono::nanoseconds stat_write_time  = { };
+    std::atomic<bool> enabled        = false;
+    std::atomic<bool> stop_requested = false;
 
-    bool enabled        = false;
-    bool stop_requested = false;
-    bool stop_pending   = false;
+    auto start() -> void {
+        recorder.update_config({
+            .directories     = { "/tmp/hikcamera_recordings/" },
+            .max_duration    = std::chrono::minutes { 10 },
+            .record_fps      = 60,
+            .max_videos_size = 50ull * 1024 * 1024 * 1024,
+        });
+        if (auto result = recorder.start(); !result) {
+            std::println("[recording] Failed to start: {}", result.error());
+            return;
+        }
 
-    auto start(std::size_t framerate) -> void {
-        recorder.set_saving_location("/tmp/hikcamera_recordings");
-        recorder.set_framerate(framerate);
-        recorder.set_auto_save(true);
-        recorder.set_max_history_count(10);
-        recorder.set_min_recording_duration(std::chrono::seconds { 0 });
-        recorder.set_max_recording_duration(std::chrono::hours { 24 });
-
-        auto lock        = std::lock_guard { mutex };
-        started_at       = Clock::now();
-        written          = 0;
-        dropped          = 0;
-        total_write_time = std::chrono::nanoseconds { 0 };
-        stat_last        = started_at;
-        stat_written     = 0;
-        stat_write_time  = std::chrono::nanoseconds { 0 };
-        enabled          = true;
-        stop_pending     = false;
+        auto lock = std::lock_guard { mutex };
+        written   = 0;
+        dropped   = 0;
+        enabled   = true;
 
         worker = std::jthread { [this] {
             for (;;) {
@@ -87,40 +78,14 @@ struct Recording {
                 }
 
                 if (!frame.empty()) {
-                    const auto t_before = Clock::now();
-                    recorder.write_frame(frame);
-                    const auto t_after = Clock::now();
-
+                    recorder.tick(frame);
                     auto lock = std::lock_guard { mutex };
                     written += 1;
-                    stat_written += 1;
-                    const auto elapsed = t_after - t_before;
-                    total_write_time += elapsed;
-                    stat_write_time += elapsed;
-
-                    if (t_after - stat_last >= kStatInterval) {
-                        const auto fps = static_cast<double>(stat_written)
-                            / std::chrono::duration<double>(t_after - stat_last).count();
-                        const auto avg_ms = stat_written > 0
-                            ? std::chrono::duration_cast<std::chrono::milliseconds>(stat_write_time)
-                                    .count()
-                                / stat_written
-                            : 0;
-
-                        std::println("[recording] write fps={:.1f}, avg write latency={}ms, q={}",
-                            fps, avg_ms, queue.size());
-                        stat_last       = t_after;
-                        stat_written    = 0;
-                        stat_write_time = std::chrono::nanoseconds { 0 };
-                    }
                     continue;
                 }
 
                 if (do_stop) {
                     recorder.stop();
-                    auto lock    = std::lock_guard { mutex };
-                    stop_pending = false;
-                    cv.notify_all();
                     continue;
                 }
 
@@ -129,21 +94,14 @@ struct Recording {
         } };
     }
 
-    auto request_stop() -> void {
-        auto lock      = std::lock_guard { mutex };
-        stop_requested = true;
-        stop_pending   = true;
-        cv.notify_one();
-    }
-
-    auto wait_stop(std::string& saved_path, std::uint64_t& out_written, std::uint64_t& out_dropped,
-        std::chrono::nanoseconds& out_duration) -> void {
-        auto lock = std::unique_lock { mutex };
-        cv.wait(lock, [this] { return !stop_pending; });
-        saved_path   = recorder.last_saved_path();
-        out_written  = written;
-        out_dropped  = dropped;
-        out_duration = Clock::now() - started_at;
+    auto stop() -> void {
+        {
+            auto lock      = std::lock_guard { mutex };
+            stop_requested = true;
+            enabled        = false;
+            cv.notify_one();
+        }
+        if (worker.joinable()) worker.join();
     }
 
     auto shutdown() -> void {
@@ -160,6 +118,54 @@ struct Recording {
         }
         queue.push_back(mat.clone());
         cv.notify_one();
+    }
+};
+
+struct Streaming {
+    static constexpr auto kHost = "127.0.0.1";
+    static constexpr auto kPort = "5000";
+
+    rmcs::debug::StreamSession session;
+    bool enabled = false;
+
+    auto start(int w, int h, int hz) -> void {
+        auto check = rmcs::debug::StreamContext::check_support();
+        if (!check) {
+            std::println("[streaming] {}", check.error());
+            return;
+        }
+
+        auto config   = rmcs::debug::StreamSession::Config { };
+        config.target = { std::string { kHost }, std::string { kPort } };
+        config.type   = rmcs::debug::StreamType::RTP_H264;
+        config.format = { w, h, hz };
+
+        session.set_notifier([](auto msg) { std::println("[streaming] {}", msg); });
+
+        if (auto result = session.open(config); !result) {
+            std::println("[streaming] Failed to open: {}", result.error());
+            return;
+        }
+
+        if (auto sdp = session.session_description_protocol()) {
+            const auto path = "/tmp/hikcamera_stream.sdp";
+            if (auto ofs = std::ofstream { path }) {
+                ofs << sdp.value();
+                std::println("[streaming] SDP written to: {}", path);
+            }
+        }
+
+        enabled = true;
+        std::println("[streaming] Started -> {}:{}, fps={}", kHost, kPort, hz);
+    }
+
+    auto stop() -> void {
+        enabled = false;
+        std::println("[streaming] Stopped");
+    }
+
+    auto push(const cv::Mat& mat) -> void {
+        if (enabled) session.push_frame(mat);
     }
 };
 
@@ -183,8 +189,9 @@ auto main() -> int {
     framerate.set_interval(std::chrono::seconds { 2 });
 
     auto config = hikcamera::Config {
-        .timeout_ms  = 2'000,
-        .exposure_us = 1'500,
+        .timeout_ms      = 2'000,
+        .exposure_us     = 1'500,
+        .fixed_framerate = false,
     };
     auto camera = hikcamera::Camera { };
     camera.configure(config);
@@ -194,13 +201,10 @@ auto main() -> int {
         std::println("[hikcamera] {}", r.error());
     }
 
-    auto const recording_fps = static_cast<std::size_t>(
-        std::max<long long>(1, static_cast<long long>(std::llround(config.framerate))));
-
     auto latest     = cv::Mat { };
     auto latest_mtx = std::mutex { };
     Recording recording;
-    auto rec_enabled = std::atomic<bool> { false };
+    Streaming streaming;
 
     auto capture_thread = std::jthread { [&] {
         while (running.load(std::memory_order::relaxed)) {
@@ -212,7 +216,8 @@ auto main() -> int {
                 }
             }
             if (auto mat = camera.read_image()) {
-                if (rec_enabled.load(std::memory_order::relaxed)) recording.push(*mat);
+                if (recording.enabled) recording.push(*mat);
+                streaming.push(*mat);
 
                 {
                     auto lk = std::lock_guard { latest_mtx };
@@ -226,15 +231,16 @@ auto main() -> int {
         }
     } };
 
-    auto _raw = rmcs::tool::util::TerminalRawMode { };
+    auto raw = rmcs::tool::util::TerminalRawMode { };
     std::println("[main] Hikcamera tool is ready");
     std::println("[main] Controls:");
     std::println("[main]   S/s  : save current frame to /tmp as PNG");
     std::println("[main]   R/r  : start / stop raw video recording");
+    std::println("[main]   W/w  : start / stop RTP streaming");
     std::println("[main]   Q/q  : quit");
     std::println("[main]   Ctrl+C : quit");
     std::println("[main] Recording output: /tmp/hikcamera_recordings");
-    std::println("[main] Recording framerate: {} fps", recording_fps);
+    std::println("[main] Streaming target: {}:{}", Streaming::kHost, Streaming::kPort);
 
     while (running.load(std::memory_order::relaxed)) {
         if (auto key = rmcs::tool::util::poll_key(std::chrono::milliseconds(100));
@@ -246,32 +252,13 @@ auto main() -> int {
             }
 
             if (*key == 'r' || *key == 'R') {
-                if (!rec_enabled.load(std::memory_order::relaxed)) {
-                    rec_enabled.store(true, std::memory_order::relaxed);
-                    recording.start(recording_fps);
+                if (!recording.enabled) {
+                    recording.start();
                     std::println("[main] Recording started");
                 } else {
-                    if (recording.stop_pending) {
-                        std::println("[main] Stop in progress, please wait");
-                        continue;
-                    }
-                    rec_enabled.store(false, std::memory_order::relaxed);
-                    recording.request_stop();
-                    std::println("[main] Stopping...");
-
-                    auto saved = std::string { };
-                    auto w = std::uint64_t { }, d = std::uint64_t { };
-                    auto dur = std::chrono::nanoseconds { };
-                    recording.wait_stop(saved, w, d, dur);
-
-                    if (saved.empty()) {
-                        std::println("[main] Recording stopped, no file saved");
-                    } else {
-                        std::println("[main] Saved: {}", saved);
-                        std::println("[main] Stats: {}ms, written={}, dropped={}",
-                            std::chrono::duration_cast<std::chrono::milliseconds>(dur).count(), w,
-                            d);
-                    }
+                    recording.stop();
+                    std::println("[main] Recording stopped: written={}, dropped={}",
+                        recording.written, recording.dropped);
                 }
                 continue;
             }
@@ -289,10 +276,25 @@ auto main() -> int {
                 }
                 continue;
             }
+
+            if (*key == 'w' || *key == 'W') {
+                if (!streaming.enabled) {
+                    auto lk = std::lock_guard { latest_mtx };
+                    if (latest.empty()) {
+                        std::println("[streaming] No frame available");
+                    } else {
+                        auto hz = static_cast<int>(framerate.fps());
+                        if (hz <= 0) hz = 30;
+                        streaming.start(latest.cols, latest.rows, hz);
+                    }
+                } else {
+                    streaming.stop();
+                }
+                continue;
+            }
         }
     }
 
-    rec_enabled.store(false, std::memory_order::relaxed);
     recording.shutdown();
     capture_thread.join();
 }

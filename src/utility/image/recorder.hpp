@@ -2,29 +2,37 @@
 #include "utility/pimpl.hpp"
 
 #include <chrono>
+#include <expected>
 #include <string>
+#include <vector>
 
 #include <opencv2/core/mat.hpp>
 
 namespace rmcs {
 
-class ImageRecorder {
-    RMCS_PIMPL_DEFINITION(ImageRecorder)
-
+class VideoRecorder {
+    RMCS_PIMPL_DEFINITION(VideoRecorder)
 public:
-    auto set_saving_location(const std::string&) -> void;
-    auto set_framerate(std::size_t) -> void;
-    auto set_auto_save(bool) -> void;
-    auto set_max_history_count(std::size_t) -> void;
-    auto set_max_recording_duration(std::chrono::seconds) -> void;
-    auto set_min_recording_duration(std::chrono::seconds) -> void;
+    struct Config {
+        std::vector<std::string> directories {
+            "/home/root/autoaim/",
+            "/home/ubuntu/autoaim/",
+            "/tmp/autoaim/",
+        };
+        std::chrono::seconds max_duration { 60 };
+        std::size_t record_fps = 0;
 
-    auto write_frame(const cv::Mat&) -> void;
+        std::uintmax_t max_videos_size = 30ull * 1024 * 1024 * 1024; // 30 GB
+    };
+    auto update_config(Config) -> void;
+
+    auto tick(const cv::Mat&) -> void;
+
+    auto start() -> std::expected<void, std::string>;
     auto stop() -> void;
 
-    [[nodiscard]] auto recording() const -> bool;
-    [[nodiscard]] auto current_file_path() const -> std::string;
-    [[nodiscard]] auto last_saved_path() const -> std::string;
+    auto recording() const -> bool;
+    auto filename() const -> std::optional<std::string>;
 };
 
 }

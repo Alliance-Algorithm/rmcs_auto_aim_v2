@@ -94,17 +94,6 @@ ament_add_gtest(
     ${TEST_DIR}/device_id.cpp
 )
 
-# Image Recorder
-ament_add_gtest(
-    test_image_recorder
-    ${TEST_DIR}/image_recorder.cpp
-    ${RMCS_SRC_DIR}/utility/image/recorder.cpp
-)
-target_link_libraries(
-    test_image_recorder
-    ${OpenCV_LIBRARIES}
-)
-
 # Solve pnp
 ament_add_gtest(
     test_solve_pnp
