@@ -6,7 +6,7 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
-#include "module/debug/framerate.hpp"
+#include "utility/framerate.hpp"
 #include "utility/image/armor.hpp"
 #include "utility/image/text.hpp"
 #include "utility/math/linear.hpp"
@@ -167,6 +167,7 @@ auto main() -> int {
         auto armors_3d = Armor3Ds { };
         {
             pose_estimator.update_camera_transform(context.camera_transform);
+
             auto result = pose_estimator.estimate_armor(armors_2d, *image);
             pose_estimator.draw_debug(*image);
             pose_estimator.publish_debug();

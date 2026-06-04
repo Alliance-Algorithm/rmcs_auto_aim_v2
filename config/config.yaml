@@ -11,6 +11,7 @@ capturer:
 
   source: "local_video"
   # source: "hikcamera"
+
   hikcamera:
     # int
     timeout_ms: 500
@@ -21,10 +22,11 @@ capturer:
     # float
     gain: 16.9807
 
-    invert_image: false
+    invert_image: true
     software_sync: false
     trigger_mode: false
-    fixed_framerate: true
+    fixed_framerate: false
+
   local_video:
     # 替换为你具体的路径
     location: "/workspaces/data/autoaim/静止看前哨站.avi"
@@ -66,7 +68,7 @@ tracker:
 pose_estimator:
   yaw_optimizer: true
   distance_optimizer: true
-  outpost_armor_thickness: 0.023
+  outpost_armor_thickness: 0.02
   camera_matrix:
     [
       1.722231837421459e+03,
@@ -93,7 +95,7 @@ fire_control:
     coming_angle: 70.0 # degree
     leaving_angle: 20.0 # degree
     outpost_coming_angle: 70.0 # degree
-    outpost_leaving_angle: 30.0 # degree
+    outpost_leaving_angle: 20.0 # degree
 
   mpc:
     mpc_max_yaw_acc: 50.0

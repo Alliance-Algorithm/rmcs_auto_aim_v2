@@ -16,8 +16,6 @@
 using namespace rmcs::util;
 
 auto OutpostDistanceOptimizer::solve() -> bool {
-    const auto upper = input.upper_point.make<cv::Point2f>();
-    const auto lower = input.lower_point.make<cv::Point2f>();
 
     auto q_ac_ros = input.initial.orientation.make<Eigen::Quaterniond>();
     auto t_ac_ros = input.initial.translation.make<Eigen::Vector3d>();
@@ -31,15 +29,6 @@ auto OutpostDistanceOptimizer::solve() -> bool {
         object_points.emplace_back(static_cast<float>(point_ocv.x()),
             static_cast<float>(point_ocv.y()), static_cast<float>(point_ocv.z()));
     }
-
-    auto image_points = std::vector<cv::Point2f> {
-        input.armor.tl,
-        input.armor.tr,
-        input.armor.br,
-        input.armor.bl,
-        upper,
-        lower,
-    };
 
     auto camera_matrix = input.camera.intrinsic();
     auto distort_coeff = input.camera.distortion();
@@ -71,13 +60,20 @@ auto OutpostDistanceOptimizer::solve() -> bool {
             static_cast<float>(point_in_local_ocv.y()), static_cast<float>(point_in_local_ocv.z()));
     }
 
-    auto optimized_rvec = initial_rvec;
-    auto optimized_tvec = initial_tvec;
+    const auto image_points = std::vector {
+        input.armor.tl,
+        input.armor.tr,
+        input.armor.br,
+        input.armor.bl,
+        input.upper_point.make<cv::Point2f>(),
+        input.lower_point.make<cv::Point2f>(),
+    };
+
+    auto optimized_rvec = cv::Vec3d { initial_rvec };
+    auto optimized_tvec = cv::Vec3d { initial_tvec };
     const auto solved   = cv::solvePnP(object_points, image_points, camera_matrix, distort_coeff,
         optimized_rvec, optimized_tvec, true, cv::SOLVEPNP_ITERATIVE);
-    if (!solved) return false;
-
-    if (optimized_tvec[2] <= 0.0) return false;
+    if (!solved || optimized_tvec[2] <= 0.0) return false;
 
     auto optimized_rotation_cv = cv::Mat { };
     cv::Rodrigues(optimized_rvec, optimized_rotation_cv);

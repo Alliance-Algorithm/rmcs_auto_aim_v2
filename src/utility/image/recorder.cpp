@@ -1,234 +1,188 @@
 #include "recorder.hpp"
+#include "utility/framerate.hpp"
 
 #include <filesystem>
+#include <format>
 #include <memory>
-#include <ranges>
+#include <print>
 #include <string>
-#include <system_error>
-#include <vector>
+#include <utility>
 
 #include <opencv2/videoio.hpp>
 
 using namespace rmcs;
 
-struct ImageRecorder::Impl {
-    using Clock     = std::chrono::steady_clock;
-    using TimePoint = Clock::time_point;
+struct VideoRecorder::Impl {
+    struct Session : private cv::VideoWriter {
+        using super = VideoWriter;
 
-    std::string location = "/tmp/auto_aim_recordings";
+        FramerateCounter framerate;
+        std::size_t fps = 0;
 
-    std::size_t framerate   = 30;
-    bool auto_save          = true;
-    std::size_t max_history = 5;
+        std::chrono::steady_clock::time_point append_timestamp =
+            std::chrono::steady_clock::time_point::min();
+        std::chrono::steady_clock::time_point opened_timestamp =
+            std::chrono::steady_clock::time_point::min();
 
-    std::chrono::seconds max_duration { 60 };
-    std::chrono::seconds min_duration { 1 };
+        int cols = 0;
+        int rows = 0;
 
-    bool is_recording = false;
+        std::filesystem::path path { };
+        bool remove_later = false;
 
-    TimePoint recording_start { };
+        explicit Session(const std::filesystem::path& dir) {
+            // 创建一个人类可读的录制文件名称并将其打开
+            const auto now       = std::chrono::system_clock::now();
+            const auto our_zone  = std::chrono::locate_zone("Asia/Shanghai");
+            const auto zone_time = std::chrono::zoned_time { our_zone, now };
 
-    int frame_count = 0;
-    int width       = 0;
-    int height      = 0;
+            const auto filename  = std::format("autoaim-{:%Y%m%d_%H%M%S}.avi", zone_time);
+            const auto file_path = dir / filename;
 
-    std::string current_file_path = { };
-    std::string last_saved_path   = { };
-
-    std::unique_ptr<cv::VideoWriter> writer = { };
-
-    ~Impl() noexcept {
-        if (auto_save) {
-            stop();
-        } else {
-            finalize_recording(false);
-        }
-    }
-
-    auto generate_output_path() const -> std::string {
-        const auto now = std::chrono::system_clock::now();
-        const auto timestamp =
-            std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-        return location + "/" + std::to_string(timestamp) + ".avi";
-    }
-
-    auto start_recording(const cv::Mat& mat) -> void {
-        if (mat.empty()) {
-            return;
+            path = file_path;
         }
 
-        last_saved_path = { };
-
-        std::error_code error = { };
-        std::filesystem::create_directories(location, error);
-        if (error) {
-            return;
+        ~Session() override {
+            super::release();
+            if (std::filesystem::exists(path) && remove_later) {
+                std::filesystem::remove(path);
+            }
         }
 
-        width  = mat.cols;
-        height = mat.rows;
+        auto append(const cv::Mat& mat) {
+            static const auto kEncode = cv::VideoWriter::fourcc('H', 'F', 'Y', 'U');
+            framerate.tick();
 
-        current_file_path = generate_output_path();
-        writer            = std::make_unique<cv::VideoWriter>();
-
-        if (!writer->open(current_file_path, cv::VideoWriter::fourcc('H', 'F', 'Y', 'U'),
-                static_cast<double>(framerate), cv::Size { width, height })) {
-            writer.reset();
-            current_file_path = { };
-            width             = 0;
-            height            = 0;
-            frame_count       = 0;
-            is_recording      = false;
-            return;
-        }
-
-        const auto now  = Clock::now();
-        recording_start = now;
-        frame_count     = 0;
-        is_recording    = true;
-    }
-
-    auto is_valid_duration() const noexcept -> bool {
-        if (!is_recording && recording_start == TimePoint { }) {
-            return false;
-        }
-
-        const auto duration = Clock::now() - recording_start;
-        return duration >= min_duration && duration <= max_duration;
-    }
-
-    auto cleanup_old_recordings() noexcept -> void {
-        if (max_history == 0) {
-            return;
-        }
-
-        std::error_code error = { };
-        if (!std::filesystem::exists(location, error) || error) {
-            return;
-        }
-
-        auto recordings = std::vector<std::filesystem::directory_entry> { };
-        for (const auto& entry : std::filesystem::directory_iterator { location, error }) {
-            if (error) {
+            const auto now = std::chrono::steady_clock::now();
+            if (fps == 0 && !mat.empty()) [[unlikely]] {
+                if (append_timestamp == std::chrono::steady_clock::time_point::min()) {
+                    append_timestamp = now;
+                }
+                using namespace std::chrono_literals;
+                if (std::chrono::steady_clock::now() - append_timestamp > 2s) {
+                    fps = framerate.fps();
+                    fps = fps > 80 ? fps - 20 : fps; // 给 20 帧的冗余
+                }
                 return;
             }
-
-            if (entry.is_regular_file(error) && !error && entry.path().extension() == ".avi") {
-                recordings.push_back(entry);
+            if (opened_timestamp == std::chrono::steady_clock::time_point::min()) {
+                opened_timestamp = now;
             }
-            error.clear();
-        }
 
-        if (recordings.size() <= max_history) {
-            return;
-        }
-
-        std::ranges::sort(recordings, [](const auto& lhs, const auto& rhs) {
-            std::error_code lhs_error = { };
-            std::error_code rhs_error = { };
-            const auto lhs_time       = std::filesystem::last_write_time(lhs, lhs_error);
-            const auto rhs_time       = std::filesystem::last_write_time(rhs, rhs_error);
-
-            if (lhs_error || rhs_error) {
-                return lhs.path().filename().string() > rhs.path().filename().string();
-            }
-            return lhs_time > rhs_time;
-        });
-
-        for (const auto& entry : recordings | std::views::drop(max_history)) {
-            std::filesystem::remove(entry.path(), error);
-            error.clear();
-        }
-    }
-
-    auto finalize_recording(bool keep) noexcept -> void {
-        if (writer) {
-            writer->release();
-            writer.reset();
-        }
-
-        if (!current_file_path.empty()) {
-            std::error_code error = { };
-            if (keep) {
-                last_saved_path = current_file_path;
-                cleanup_old_recordings();
-            } else {
-                std::filesystem::remove(current_file_path, error);
-                last_saved_path = { };
-            }
-        }
-
-        current_file_path = { };
-        recording_start   = TimePoint { };
-        frame_count       = 0;
-        width             = 0;
-        height            = 0;
-        is_recording      = false;
-    }
-
-    auto write_frame(const cv::Mat& mat) -> void {
-        if (mat.empty()) {
-            return;
-        }
-
-        if (!is_recording) {
-            start_recording(mat);
-        }
-
-        if (!writer || !is_recording) {
-            return;
-        }
-
-        if (mat.cols != width || mat.rows != height) {
-            finalize_recording(false);
-            start_recording(mat);
-            if (!writer || !is_recording) {
+            cols = mat.cols;
+            rows = mat.rows;
+            if (!super::isOpened()) {
+                super::open(path, kEncode, static_cast<double>(fps), { cols, rows });
                 return;
             }
+            using namespace std::chrono_literals;
+            if (now - append_timestamp < 1000ms / fps) {
+                return;
+            }
+            super::write(mat);
+            append_timestamp = now;
         }
 
-        writer->write(mat.clone());
-        frame_count += 1;
+        auto filename() const { return path.string(); }
+
+        auto duration() const { return std::chrono::steady_clock::now() - opened_timestamp; }
+
+        auto set_remove_later() { remove_later = true; }
+
+        auto set_fps(std::size_t hz) { fps = hz; }
+    };
+    std::unique_ptr<Session> session = nullptr;
+
+    Config config;
+    std::filesystem::path selected_directory { };
+
+    auto stop(bool save = true) {
+        if (!save) {
+            session->set_remove_later();
+        }
+        session = nullptr;
     }
 
-    auto stop() -> void {
-        if (!writer || !is_recording) {
+    auto tick(const cv::Mat& mat) -> void {
+        if (!session) {
             return;
         }
+        // 时长过长，则自动停止录制，保存至本地
+        if (session->duration() > config.max_duration) {
+            stop(true);
+            std::println("到点了，哥");
+            return;
+        }
+        session->append(mat);
+    }
 
-        const auto keep = auto_save && is_valid_duration() && frame_count > 0;
-        finalize_recording(keep);
+    auto start() -> std::expected<void, std::string> {
+        { // 从配置中选择第一个有效的目录
+            const auto& directories = config.directories;
+            for (const auto& dir : directories) {
+                try {
+                    if (std::filesystem::exists(dir) || std::filesystem::create_directories(dir)) {
+                        selected_directory = dir;
+                        break;
+                    }
+                } catch (const std::filesystem::filesystem_error& e) {
+                    continue;
+                }
+            }
+            if (selected_directory.empty()) {
+                return std::unexpected { "未能选择有效目录，请确认配置中的保存路径是否可达" };
+            }
+        }
+        { // 判断系统空间是否充足
+            constexpr auto kAllowSpaceFree = 50ull * 1024 * 1024 * 1024;
+
+            const auto space = std::filesystem::space(selected_directory);
+            if (space.available < kAllowSpaceFree) {
+                const auto warn = std::format("空闲空间不足，剩余 {:.3f} GB，无法开始录制",
+                    static_cast<double>(space.available) / 1024 / 1024 / 1024);
+                return std::unexpected { warn };
+            }
+        }
+        { // 查看录制保存目录下的视频是否超出限制
+            auto total_size = std::uintmax_t { 0 };
+            for (const auto& entry : std::filesystem::directory_iterator(selected_directory)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".avi") {
+                    total_size += entry.file_size();
+                }
+            }
+            if (total_size >= config.max_videos_size) {
+                const auto warn = std::format("已录制文件总大小已达上限，当前大小 {:.3f} GB",
+                    static_cast<double>(total_size) / 1024 / 1024 / 1024);
+                return std::unexpected { warn };
+            }
+        }
+        session = std::make_unique<Session>(selected_directory);
+        if (config.record_fps != 0) {
+            session->set_fps(config.record_fps);
+        }
+
+        return { };
     }
 };
 
-auto ImageRecorder::set_saving_location(const std::string& path) -> void { pimpl->location = path; }
+auto VideoRecorder::update_config(Config config) -> void { pimpl->config = std::move(config); }
 
-auto ImageRecorder::set_framerate(std::size_t rate) -> void { pimpl->framerate = rate; }
+auto VideoRecorder::tick(const cv::Mat& mat) -> void { pimpl->tick(mat); }
 
-auto ImageRecorder::set_auto_save(bool enabled) -> void { pimpl->auto_save = enabled; }
+auto VideoRecorder::start() -> std::expected<void, std::string> { return pimpl->start(); }
 
-auto ImageRecorder::set_max_history_count(std::size_t count) -> void { pimpl->max_history = count; }
+auto VideoRecorder::stop() -> void { pimpl->stop(true); }
 
-auto ImageRecorder::set_max_recording_duration(std::chrono::seconds duration) -> void {
-    pimpl->max_duration = duration;
+auto VideoRecorder::recording() const -> bool { return pimpl->session != nullptr; }
+
+auto VideoRecorder::filename() const -> std::optional<std::string> {
+    if (!pimpl->session) {
+        return std::nullopt;
+    }
+    return pimpl->session->filename();
 }
 
-auto ImageRecorder::set_min_recording_duration(std::chrono::seconds duration) -> void {
-    pimpl->min_duration = duration;
-}
-
-auto ImageRecorder::write_frame(const cv::Mat& mat) -> void { pimpl->write_frame(mat); }
-
-auto ImageRecorder::stop() -> void { pimpl->stop(); }
-
-auto ImageRecorder::recording() const -> bool { return pimpl->is_recording; }
-
-auto ImageRecorder::current_file_path() const -> std::string { return pimpl->current_file_path; }
-
-auto ImageRecorder::last_saved_path() const -> std::string { return pimpl->last_saved_path; }
-
-ImageRecorder::ImageRecorder() noexcept
+VideoRecorder::VideoRecorder() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 
-ImageRecorder::~ImageRecorder() noexcept = default;
+VideoRecorder::~VideoRecorder() noexcept = default;

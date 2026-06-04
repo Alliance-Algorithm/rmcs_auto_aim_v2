@@ -99,28 +99,12 @@ if(HIKCAMERA_AVAILABLE)
         hikcamera
         ${TOOL_DIR}/hikcamera.cpp
         ${RMCS_SRC_DIR}/utility/image/recorder.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
     )
     target_link_libraries(
         hikcamera
         tool_terminal
-        ${OpenCV_LIBS}
-        ${hikcamera_LIBRARIES}
-    )
-
-    # RTP Streaming
-    add_executable(
-        streaming
-        ${TOOL_DIR}/streaming.cpp
-        ${RMCS_SRC_DIR}/module/capturer/hikcamera.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
-        ${RMCS_SRC_DIR}/utility/image/image.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
-    )
-    target_link_libraries(
-        streaming
-        tool_terminal
-        rclcpp::rclcpp
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )

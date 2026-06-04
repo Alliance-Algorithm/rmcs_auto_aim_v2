@@ -12,26 +12,10 @@
 
 namespace {
 
-auto list_recordings(const std::filesystem::path& directory) -> std::vector<std::filesystem::path> {
-    auto recordings = std::vector<std::filesystem::path> { };
-
-    if (!std::filesystem::exists(directory)) {
-        return recordings;
-    }
-
-    for (const auto& entry : std::filesystem::directory_iterator { directory }) {
-        if (entry.is_regular_file() && entry.path().extension() == ".avi") {
-            recordings.push_back(entry.path());
-        }
-    }
-
-    return recordings;
-}
-
-class ImageRecorderTest : public ::testing::Test {
+class VideoRecorderTest : public ::testing::Test {
 protected:
     auto SetUp() -> void override {
-        base_directory = std::filesystem::temp_directory_path() / "rmcs_image_recorder_test";
+        base_directory = std::filesystem::temp_directory_path() / "rmcs_video_recorder_test";
         std::filesystem::remove_all(base_directory);
         std::filesystem::create_directories(base_directory);
     }
@@ -41,37 +25,42 @@ protected:
     std::filesystem::path base_directory = { };
 };
 
-TEST_F(ImageRecorderTest, saves_recording_when_duration_is_valid) {
-    auto recorder = rmcs::ImageRecorder { };
-    recorder.set_saving_location(base_directory.string());
-    recorder.set_framerate(60);
-    recorder.set_min_recording_duration(std::chrono::seconds { 1 });
-    recorder.set_max_recording_duration(std::chrono::seconds { 5 });
+TEST_F(VideoRecorderTest, start_and_stop_recording) {
+    auto recorder = rmcs::VideoRecorder { };
+    recorder.update_config(rmcs::VideoRecorder::Config {
+        .directories    = { base_directory.string() },
+        .max_duration   = std::chrono::minutes { 1 },
+        .max_videos_size = 1ull * 1024 * 1024 * 1024,
+    });
+
+    ASSERT_TRUE(recorder.start().has_value());
 
     auto frame = cv::Mat { 32, 32, CV_8UC3, cv::Scalar { 10, 20, 30 } };
+    recorder.tick(frame);
 
-    recorder.write_frame(frame);
-    std::this_thread::sleep_for(std::chrono::milliseconds { 1100 });
+    std::this_thread::sleep_for(std::chrono::milliseconds { 100 });
+    recorder.tick(frame);
+
     recorder.stop();
 
-    const auto recordings = list_recordings(base_directory);
-    ASSERT_EQ(recordings.size(), 1);
-    EXPECT_GT(std::filesystem::file_size(recordings.front()), 0);
+    EXPECT_FALSE(recorder.recording());
 }
 
-TEST_F(ImageRecorderTest, discards_recording_when_duration_is_too_short) {
-    auto recorder = rmcs::ImageRecorder { };
-    recorder.set_saving_location(base_directory.string());
-    recorder.set_framerate(60);
-    recorder.set_min_recording_duration(std::chrono::seconds { 2 });
-    recorder.set_max_recording_duration(std::chrono::seconds { 5 });
+TEST_F(VideoRecorderTest, start_fails_with_invalid_directory) {
+    auto recorder = rmcs::VideoRecorder { };
+    recorder.update_config(rmcs::VideoRecorder::Config {
+        .directories    = { "/nonexistent/path/that/should/not/exist" },
+        .max_duration   = std::chrono::minutes { 1 },
+        .max_videos_size = 1ull * 1024 * 1024 * 1024,
+    });
 
-    auto frame = cv::Mat { 32, 32, CV_8UC3, cv::Scalar { 10, 20, 30 } };
+    auto result = recorder.start();
+    EXPECT_FALSE(result.has_value());
+}
 
-    recorder.write_frame(frame);
-    recorder.stop();
-
-    EXPECT_TRUE(list_recordings(base_directory).empty());
+TEST_F(VideoRecorderTest, filename_returns_nullopt_when_not_recording) {
+    auto recorder = rmcs::VideoRecorder { };
+    EXPECT_FALSE(recorder.filename().has_value());
 }
 
 } // namespace

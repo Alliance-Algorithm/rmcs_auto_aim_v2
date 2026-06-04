@@ -1,29 +1,29 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <generator>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace rmcs {
 
 namespace id::details {
     constexpr auto id_underlyings = std::array {
-        uint16_t { 0 << 0 },
-        uint16_t { 1 << 0 },
-        uint16_t { 1 << 1 },
-        uint16_t { 1 << 2 },
-        uint16_t { 1 << 3 },
-        uint16_t { 1 << 4 },
-        uint16_t { 1 << 5 },
-        uint16_t { 1 << 6 },
-        uint16_t { 1 << 7 },
-        uint16_t { 1 << 8 },
-        uint16_t { 1 << 9 },
-        uint16_t { 1 << 10 },
+        std::uint16_t { 0 << 0 },
+        std::uint16_t { 1 << 0 },
+        std::uint16_t { 1 << 1 },
+        std::uint16_t { 1 << 2 },
+        std::uint16_t { 1 << 3 },
+        std::uint16_t { 1 << 4 },
+        std::uint16_t { 1 << 5 },
+        std::uint16_t { 1 << 6 },
+        std::uint16_t { 1 << 7 },
+        std::uint16_t { 1 << 8 },
+        std::uint16_t { 1 << 9 },
+        std::uint16_t { 1 << 10 },
     };
 }
-enum class DeviceId : uint16_t {
+enum class DeviceId : std::uint16_t {
     UNKNOWN    = id::details::id_underlyings[0],
     HERO       = id::details::id_underlyings[1],
     ENGINEER   = id::details::id_underlyings[2],
@@ -84,9 +84,6 @@ constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
 struct DeviceIds {
     uint16_t data = std::to_underlying(DeviceId::UNKNOWN);
 
-    static constexpr auto None() { return DeviceIds { }; }
-    static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
-
     constexpr DeviceIds()                            = default;
     constexpr DeviceIds(const DeviceIds&)            = default;
     constexpr DeviceIds& operator=(const DeviceIds&) = default;
@@ -117,22 +114,28 @@ struct DeviceIds {
     constexpr auto append(DeviceId id) noexcept -> void { data |= std::to_underlying(id); }
     constexpr auto remove(DeviceId id) noexcept -> void { data &= ~std::to_underlying(id); }
 
-    constexpr auto elements() const -> std::vector<DeviceId> {
-        auto result = std::vector<DeviceId> { };
-        for (std::size_t i = 1; i <= id::details::id_underlyings.size(); ++i) {
-            auto id = from_index(i);
-            if (contains(id)) result.emplace_back(id);
+    constexpr auto length() const noexcept -> std::size_t { return std::popcount(data); }
+
+    auto items() const -> std::generator<DeviceId> {
+        using namespace id::details;
+        for (const auto id : id_underlyings) {
+            const auto device_id = static_cast<DeviceId>(id);
+            if (contains(device_id)) {
+                co_yield device_id;
+            }
         }
-        return result;
     }
 
-    constexpr static auto kLargeArmor() {
+    static constexpr auto None() { return DeviceIds { }; }
+    static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
+
+    static constexpr auto kLargeArmor() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::ENGINEER,
         };
     }
-    constexpr static auto kSmallArmor() {
+    static constexpr auto kSmallArmor() {
         return DeviceIds {
             DeviceId::INFANTRY_3,
             DeviceId::INFANTRY_4,
@@ -142,7 +145,7 @@ struct DeviceIds {
             DeviceId::BASE,
         };
     }
-    constexpr static auto kGround() {
+    static constexpr auto kGround() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::ENGINEER,
@@ -152,7 +155,7 @@ struct DeviceIds {
             DeviceId::SENTRY,
         };
     }
-    constexpr static auto kOffensive() {
+    static constexpr auto kOffensive() {
         return DeviceIds {
             DeviceId::HERO,
             DeviceId::INFANTRY_3,
@@ -161,13 +164,13 @@ struct DeviceIds {
             DeviceId::SENTRY,
         };
     }
-    constexpr static auto kBuilding() {
+    static constexpr auto kBuilding() {
         return DeviceIds {
             DeviceId::OUTPOST,
             DeviceId::BASE,
         };
     }
-    constexpr static auto kInfantry() {
+    static constexpr auto kInfantry() {
         return DeviceIds {
             DeviceId::INFANTRY_3,
             DeviceId::INFANTRY_4,
@@ -175,6 +178,5 @@ struct DeviceIds {
         };
     }
 };
-
 static_assert((DeviceIds::kSmallArmor() & DeviceIds::kLargeArmor()) == DeviceIds::None());
 }
