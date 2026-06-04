@@ -33,7 +33,7 @@ struct PoseEstimator::Impl {
         bool optimized_bar_is_right { false };
         bool optimized_bar_is_upper { false };
 
-        auto clear() -> void { *this = { }; }
+        auto clear() -> void { *this = {}; }
     };
 
     struct Config : util::Serializable {
@@ -50,15 +50,15 @@ struct PoseEstimator::Impl {
         };
     };
 
-    DebugState debug_state { };
+    DebugState debug_state {};
 
     Config config;
     CameraFeature camera_feature;
 
-    PnpSolution pnp_solution { };
-    OutpostDistanceOptimizer outpost_distance_optimizer { };
-    YawOptimizer yaw_optimizer { };
-    AdjacencyLightbarFinder adjacency_finder { };
+    PnpSolution pnp_solution {};
+    OutpostDistanceOptimizer outpost_distance_optimizer {};
+    YawOptimizer yaw_optimizer {};
+    AdjacencyLightbarFinder adjacency_finder {};
 
     RclcppNode visual_node { "PoseEstimatorVisual" };
     std::unique_ptr<visual::Armor> pre_optimized_outpost;
@@ -116,7 +116,7 @@ struct PoseEstimator::Impl {
         outpost_distance_optimizer.input.armor_thickness = config.outpost_armor_thickness;
         adjacency_finder.set_armor_thickness(config.outpost_armor_thickness);
 
-        return { };
+        return {};
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
     }
@@ -133,13 +133,13 @@ struct PoseEstimator::Impl {
         input.camera.camera_translation =
             Eigen::Vector3d { -(q_odom_to_camera * camera_translation).eval() };
 
-        auto result = std::vector<Armor3D> { };
+        auto result = std::vector<Armor3D> {};
         for (auto&& [index, armor] : armors | std::views::enumerate) {
 
             const auto small = armor.shape == ArmorShape::SMALL;
             const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
 
-            auto armor_3d = Armor3D { };
+            auto armor_3d = Armor3D {};
             armor_3d.id   = static_cast<int>(index);
 
             { // pnp
@@ -157,7 +157,7 @@ struct PoseEstimator::Impl {
                 armor_3d.translation = pnp_solution.result.translation;
                 armor_3d.orientation = pnp_solution.result.orientation;
             }
-            into_odom_link(armor_3d);
+            armor_3d = into_odom_link(armor_3d);
 
             if (config.yaw_optimizer) { // yaw
                 input.armor_shape  = shape;
@@ -231,11 +231,11 @@ struct PoseEstimator::Impl {
     auto into_odom_link(const Armor3D& armor) const -> Armor3D {
         auto transformed = armor;
 
-        auto position = Eigen::Vector3d { };
+        auto position = Eigen::Vector3d {};
         transformed.translation.copy_to(position);
         transformed.translation = camera_orientation * position + camera_translation;
 
-        auto quat = Eigen::Quaterniond { };
+        auto quat = Eigen::Quaterniond {};
         transformed.orientation.copy_to(quat);
         transformed.orientation = camera_orientation * quat;
 
@@ -243,7 +243,7 @@ struct PoseEstimator::Impl {
     }
 
     auto into_odom_link(std::span<const Armor3D> armors) const {
-        auto result = std::vector<Armor3D> { };
+        auto result = std::vector<Armor3D> {};
         for (const auto& armor : armors) {
             result.emplace_back(into_odom_link(armor));
         }
@@ -254,7 +254,7 @@ struct PoseEstimator::Impl {
         if (debug_state.optimized_outpost.has_value()) {
             const auto& armor = *debug_state.optimized_outpost;
 
-            auto solution                  = NeighborBarSolution { };
+            auto solution                  = NeighborBarSolution {};
             solution.input.source          = armor;
             solution.input.in_right        = debug_state.optimized_bar_is_right;
             solution.input.armor_thickness = config.outpost_armor_thickness;
@@ -265,7 +265,7 @@ struct PoseEstimator::Impl {
             const auto& away_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_away
                                                                       : solution.result.lower_away;
 
-            auto object_points = std::vector<cv::Point3f> { };
+            auto object_points = std::vector<cv::Point3f> {};
             object_points.reserve(4);
             for (const auto& point :
                 { near_bar.first, near_bar.second, away_bar.first, away_bar.second }) {
@@ -274,7 +274,7 @@ struct PoseEstimator::Impl {
                     static_cast<float>(p.z()));
             }
 
-            auto projected = std::vector<cv::Point2f> { };
+            auto projected = std::vector<cv::Point2f> {};
             cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 },
                 cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
                 camera_feature.distortion(), projected);
@@ -308,7 +308,7 @@ struct PoseEstimator::Impl {
         if (debug_state.optimized_outpost.has_value()) {
             const auto& armor = *debug_state.optimized_outpost;
 
-            auto solution                  = NeighborBarSolution { };
+            auto solution                  = NeighborBarSolution {};
             solution.input.source          = armor;
             solution.input.in_right        = debug_state.optimized_bar_is_right;
             solution.input.armor_thickness = config.outpost_armor_thickness;
