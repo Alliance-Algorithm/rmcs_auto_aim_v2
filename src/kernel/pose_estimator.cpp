@@ -184,12 +184,14 @@ struct PoseEstimator::Impl {
             armor3ds, [](const Armor3D& armor) { return armor.genre == DeviceId::OUTPOST; });
 
         if (outpost3d != armor3ds.end() && outpost2d != armor2ds.end()) {
-            debug_state.pre_optimized_outpost = *outpost3d;
+            auto camera_frame_outpost = into_camera_link(*outpost3d);
 
-            if (auto lightbar = adjacency_finder.find(image, *outpost2d, *outpost3d)) {
+            debug_state.pre_optimized_outpost = camera_frame_outpost;
+
+            if (auto lightbar = adjacency_finder.find(image, *outpost2d, camera_frame_outpost)) {
                 if (config.distance_optimizer) {
                     auto& input   = outpost_distance_optimizer.input;
-                    input.initial = *outpost3d;
+                    input.initial = camera_frame_outpost;
 
                     input.armor       = *outpost2d;
                     input.upper_point = lightbar->upper;
@@ -199,11 +201,11 @@ struct PoseEstimator::Impl {
                     input.is_upper = lightbar->is_upper;
 
                     if (outpost_distance_optimizer.solve()) {
-                        *outpost3d = outpost_distance_optimizer.result.armor;
-
-                        debug_state.optimized_outpost      = *outpost3d;
+                        debug_state.optimized_outpost = outpost_distance_optimizer.result.armor;
                         debug_state.optimized_bar_is_right = lightbar->is_right;
                         debug_state.optimized_bar_is_upper = lightbar->is_upper;
+
+                        *outpost3d = into_odom_link(outpost_distance_optimizer.result.armor);
                     }
                 }
 
@@ -248,6 +250,20 @@ struct PoseEstimator::Impl {
             result.emplace_back(into_odom_link(armor));
         }
         return result;
+    }
+
+    auto into_camera_link(const Armor3D& armor) const -> Armor3D {
+        auto transformed = armor;
+
+        auto position = Eigen::Vector3d {};
+        transformed.translation.copy_to(position);
+        transformed.translation = camera_orientation.inverse() * (position - camera_translation);
+
+        auto quat = Eigen::Quaterniond {};
+        transformed.orientation.copy_to(quat);
+        transformed.orientation = camera_orientation.inverse() * quat;
+
+        return transformed;
     }
 
     auto draw_debug(Image& image) -> void {
