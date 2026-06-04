@@ -37,7 +37,7 @@ public:
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
         double yaw_acc, double pitch_acc) const -> void;
 
-    auto update_camera_pose(const Orientation&) const -> void;
+    auto update_camera_pose(const Translation&, const Orientation&) const -> void;
 };
 
 } // namespace rmcs::kernel

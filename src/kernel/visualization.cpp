@@ -188,10 +188,11 @@ struct Visualization::Impl {
         mpc_plan->publish_planned_pitch(pitch, pitch_rate, pitch_acc);
     }
 
-    auto update_camera_pose(const Orientation& orientation) const -> void {
+    auto update_camera_pose(const Translation& translation, const Orientation& orientation) const
+        -> void {
         if (!is_initialized) return;
         if (!config.camera_pose_enabled) return;
-        camera_transform->move(Translation::kZero(), orientation);
+        camera_transform->move(translation, orientation);
         camera_transform->update();
     }
 };
@@ -224,8 +225,9 @@ auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, d
     pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
-auto Visualization::update_camera_pose(const Orientation& orientation) const -> void {
-    pimpl->update_camera_pose(orientation);
+auto Visualization::update_camera_pose(
+    const Translation& translation, const Orientation& orientation) const -> void {
+    pimpl->update_camera_pose(translation, orientation);
 }
 
 Visualization::Visualization() noexcept

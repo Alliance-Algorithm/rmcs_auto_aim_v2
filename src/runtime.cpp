@@ -37,13 +37,13 @@ auto main() -> int {
     node.set_pub_topic_prefix("/rmcs/auto_aim/");
 
     /// Runtime
-    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> { };
-    auto capturer       = kernel::Capturer { };
-    auto identifier     = kernel::Identifier { };
-    auto tracker        = kernel::Tracker { };
-    auto pose_estimator = kernel::PoseEstimator { };
-    auto fire_control   = kernel::FireControl { };
-    auto visualization  = kernel::Visualization { };
+    auto feishu         = kernel::Feishu<AutoAimState, SystemContext> {};
+    auto capturer       = kernel::Capturer {};
+    auto identifier     = kernel::Identifier {};
+    auto tracker        = kernel::Tracker {};
+    auto pose_estimator = kernel::PoseEstimator {};
+    auto fire_control   = kernel::FireControl {};
+    auto visualization  = kernel::Visualization {};
 
     /// Configure
     auto configs           = util::configs();
@@ -102,7 +102,7 @@ auto main() -> int {
         handle_result("visualization", result);
     }
 
-    auto framerate = FramerateCounter { };
+    auto framerate = FramerateCounter {};
     framerate.set_interval(std::chrono::seconds { 5 });
 
     while (util::get_running()) {
@@ -121,7 +121,8 @@ auto main() -> int {
 
             context = *closest;
         }
-        visualization.update_camera_pose(context.camera_transform.orientation);
+        visualization.update_camera_pose(
+            context.camera_transform.translation, context.camera_transform.orientation);
 
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
@@ -133,7 +134,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds { };
+        auto armors_2d = Armor2Ds {};
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) continue; // 一般不会推理出错喵~
@@ -163,7 +164,7 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds { };
+        auto armors_3d = Armor3Ds {};
         {
             pose_estimator.update_camera_transform(context.camera_transform);
 
