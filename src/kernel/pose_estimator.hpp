@@ -1,11 +1,10 @@
 #pragma once
-
-#include <expected>
-#include <yaml-cpp/yaml.h>
-
 #include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
+
+#include <expected>
+#include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
 

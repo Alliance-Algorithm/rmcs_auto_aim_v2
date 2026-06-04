@@ -16,6 +16,7 @@ using namespace rmcs::identifier;
 
 struct Identifier::Impl {
     ArmorDetection armor_detection;
+
     GreenLightLocator green_light_locator;
     std::optional<cv::Rect2i> outpost_green_light;
     std::optional<cv::Rect2i> base_green_light;
@@ -25,6 +26,7 @@ struct Identifier::Impl {
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto armor_result = armor_detection.initialize(yaml);
         if (!armor_result.has_value()) return std::unexpected { armor_result.error() };
+
         auto locator_result = green_light_locator.initialize(yaml["green_light_filter"]);
         if (!locator_result.has_value()) return std::unexpected { locator_result.error() };
 
@@ -82,7 +84,7 @@ struct Identifier::Impl {
             }
         }
 
-        return Identifier::Result {
+        return Result {
             .armors = std::move(filtered),
         };
     }

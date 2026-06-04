@@ -47,7 +47,8 @@ def main() -> int:
     bin_dir = install_root / "bin"
     res_dir = install_root / "res"
     player_port = int(os.environ.get("AUTOAIM_PLAYER_PORT", str(PLAYER_PORT)))
-    mediamtx_port = int(os.environ.get("AUTOAIM_MEDIAMTX_PORT", str(MEDIAMTX_PORT)))
+    mediamtx_port = int(os.environ.get(
+        "AUTOAIM_MEDIAMTX_PORT", str(MEDIAMTX_PORT)))
 
     mediamtx_bin = bin_dir / "mediamtx"
     mediamtx_config = res_dir / "mediamtx.yml"

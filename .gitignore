@@ -58,3 +58,9 @@ CATKIN_IGNORE
 MvSdkLog/
 MvFGSdkLog/
 $(ALLUSERSPROFILE)/
+
+# Local config override
+config/custom.yaml
+config/custom.yml
+config/config.override.yaml
+config/config.override.yml

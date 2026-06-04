@@ -54,12 +54,12 @@ struct GreenLightDetection::Impl {
             return std::unexpected { "max_aspect_ratio must be >= 1" };
         }
 
-        return {};
+        return { };
     }
 
     auto sync_detect(const Image& image, const cv::Rect2i& roi) const noexcept
         -> std::optional<cv::Rect2i> {
-        auto green_light = std::optional<cv::Rect2i> {};
+        auto green_light = std::optional<cv::Rect2i> { };
 
         const auto& mat = image.details().mat;
         if (mat.empty()) {
@@ -78,17 +78,33 @@ struct GreenLightDetection::Impl {
 
         const auto roi_mat = mat(roi);
 
-        auto green_channel = cv::Mat {};
-        cv::extractChannel(roi_mat, green_channel, 1);
+        auto bchannel = cv::Mat { };
+        auto gchannel = cv::Mat { };
+        auto rchannel = cv::Mat { };
+        cv::extractChannel(roi_mat, bchannel, 0);
+        cv::extractChannel(roi_mat, gchannel, 1);
+        cv::extractChannel(roi_mat, rchannel, 2);
 
-        auto mask = cv::Mat {};
-        cv::threshold(green_channel, mask, static_cast<double>(config.green_threshold), 255.0,
+        constexpr auto kGreenMargin = 30.0;
+
+        auto mask_g_min  = cv::Mat { };
+        auto mask_g_gt_r = cv::Mat { };
+        auto mask_g_gt_b = cv::Mat { };
+        cv::threshold(gchannel, mask_g_min, static_cast<double>(config.green_threshold), 255.0,
             cv::THRESH_BINARY);
+        cv::subtract(gchannel, rchannel, mask_g_gt_r);
+        cv::subtract(gchannel, bchannel, mask_g_gt_b);
+        cv::threshold(mask_g_gt_r, mask_g_gt_r, kGreenMargin, 255.0, cv::THRESH_BINARY);
+        cv::threshold(mask_g_gt_b, mask_g_gt_b, kGreenMargin, 255.0, cv::THRESH_BINARY);
+
+        auto mask = cv::Mat { };
+        cv::bitwise_and(mask_g_min, mask_g_gt_r, mask);
+        cv::bitwise_and(mask, mask_g_gt_b, mask);
 
         auto kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size { 5, 5 });
         cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
 
-        auto contours = std::vector<std::vector<cv::Point>> {};
+        auto contours = std::vector<std::vector<cv::Point>> { };
         cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
         auto best_area = 0.0;

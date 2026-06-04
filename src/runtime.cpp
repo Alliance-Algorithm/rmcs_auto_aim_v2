@@ -46,11 +46,11 @@ auto main() -> int {
     auto visualization  = kernel::Visualization { };
 
     /// Configure
-    auto configuration     = util::configuration();
-    auto localhost_develop = configuration["localhost_develop"].as<bool>();
-    auto use_visualization = configuration["use_visualization"].as<bool>();
-    auto use_painted_image = configuration["use_painted_image"].as<bool>();
-    auto use_painted_roi   = configuration["use_painted_roi"].as<bool>();
+    auto configs           = util::configs();
+    auto localhost_develop = configs["localhost_develop"].as<bool>();
+    auto use_visualization = configs["use_visualization"].as<bool>();
+    auto use_painted_image = configs["use_painted_image"].as<bool>();
+    auto use_painted_roi   = configs["use_painted_roi"].as<bool>();
 
     auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
@@ -62,13 +62,13 @@ auto main() -> int {
 
     // CAPTURER
     {
-        auto config = configuration["capturer"];
+        auto config = configs["capturer"];
         auto result = capturer.initialize(config);
         handle_result("capturer", result);
     }
     // IDENTIFIER
     {
-        auto config = configuration["identifier"];
+        auto config = configs["identifier"];
 
         const auto model_location = std::filesystem::path { util::Parameters::share_location() }
             / std::filesystem::path { config["model_location"].as<std::string>() };
@@ -79,25 +79,25 @@ auto main() -> int {
     }
     // TRACKER
     {
-        auto config = configuration["tracker"];
+        auto config = configs["tracker"];
         auto result = tracker.initialize(config);
         handle_result("tracker", result);
     }
     // POSE ESTIMATOR
     {
-        auto config = configuration["pose_estimator"];
+        auto config = configs["pose_estimator"];
         auto result = pose_estimator.initialize(config);
         handle_result("pose_estimator", result);
     }
     // FIRE CONTROL
     {
-        auto config = configuration["fire_control"];
+        auto config = configs["fire_control"];
         auto result = fire_control.initialize(config);
         handle_result("fire_control", result);
     }
     // VISUALIZATION
     if (use_visualization) {
-        auto config = configuration["visualization"];
+        auto config = configs["visualization"];
         auto result = visualization.initialize(config, node);
         handle_result("visualization", result);
     }
@@ -148,8 +148,6 @@ auto main() -> int {
 
             tracker.set_invincible_armors(context.invincible_devices);
             armors_2d = tracker.filter_armors(result->armors);
-
-            if (armors_2d.empty()) continue;
         }
         [[maybe_unused]] auto paint_image = std::experimental::scope_exit { [&] {
             if (use_painted_roi) {
@@ -161,6 +159,7 @@ auto main() -> int {
                     util::draw(*image, armor);
             }
         } };
+        if (armors_2d.empty()) continue;
 
         /// 2. Transform 2d to 3d
         ///

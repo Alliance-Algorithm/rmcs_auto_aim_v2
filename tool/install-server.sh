@@ -38,7 +38,19 @@ run_privileged() {
 download_mediamtx() {
     local version="$1"
     local output_dir="$2"
-    local archive="mediamtx_${version}_linux_amd64.tar.gz"
+
+    local arch
+    case "$(uname -m)" in
+    x86_64) arch="linux_amd64" ;;
+    aarch64) arch="linux_arm64" ;;
+    armv7l) arch="linux_armv7" ;;
+    *)
+        echo "Unsupported architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+    esac
+
+    local archive="mediamtx_${version}_${arch}.tar.gz"
 
     curl -L --fail \
         "https://github.com/bluenviron/mediamtx/releases/download/${version}/${archive}" \
@@ -53,12 +65,12 @@ append_path_to_zshrc() {
     touch "${zshrc_path}"
     if ! grep -Fq "${line}" "${zshrc_path}"; then
         printf '\n%s\n' "${line}" >>"${zshrc_path}"
-  fi
+    fi
 }
 
 installed_runtime_matches() {
-  [[ -f "${BIN_DIR}/mediamtx" ]] \
-    && "${BIN_DIR}/mediamtx" --version 2>/dev/null | grep -Fq "${MEDIAMTX_VERSION}"
+    [[ -f "${BIN_DIR}/mediamtx" ]] &&
+        "${BIN_DIR}/mediamtx" --version 2>/dev/null | grep -Fq "${MEDIAMTX_VERSION}"
 }
 
 install_runtime_dependencies() {
@@ -140,22 +152,22 @@ EOF
 }
 
 prepare_payload() {
-  local payload_dir="$1"
+    local payload_dir="$1"
 
-  mkdir -p "${payload_dir}/bin" "${payload_dir}/res"
+    mkdir -p "${payload_dir}/bin" "${payload_dir}/res"
 
-  install -m 755 "${RES_DIR}/start-streamer" "${payload_dir}/bin/start-streamer"
-  install -m 644 "${RES_DIR}/mediamtx.yml" "${payload_dir}/res/mediamtx.yml"
-  install -m 644 "${RES_DIR}/playing.html" "${payload_dir}/res/playing.html"
+    install -m 755 "${RES_DIR}/start-streamer" "${payload_dir}/bin/start-streamer"
+    install -m 644 "${RES_DIR}/mediamtx.yml" "${payload_dir}/res/mediamtx.yml"
+    install -m 644 "${RES_DIR}/playing.html" "${payload_dir}/res/playing.html"
 
-  if installed_runtime_matches; then
-    printf 'Reusing installed mediamtx runtime: %s\n' "${MEDIAMTX_VERSION}"
-    install -m 755 "${BIN_DIR}/mediamtx" "${payload_dir}/bin/mediamtx"
-    return
-  fi
+    if installed_runtime_matches; then
+        printf 'Reusing installed mediamtx runtime: %s\n' "${MEDIAMTX_VERSION}"
+        install -m 755 "${BIN_DIR}/mediamtx" "${payload_dir}/bin/mediamtx"
+        return
+    fi
 
-  printf 'Downloading mediamtx runtime: %s\n' "${MEDIAMTX_VERSION}"
-  download_mediamtx "${MEDIAMTX_VERSION}" "${payload_dir}/bin"
+    printf 'Downloading mediamtx runtime: %s\n' "${MEDIAMTX_VERSION}"
+    download_mediamtx "${MEDIAMTX_VERSION}" "${payload_dir}/bin"
 }
 
 install_local() {

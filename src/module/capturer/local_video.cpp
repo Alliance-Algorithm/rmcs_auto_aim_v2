@@ -41,6 +41,28 @@ struct LocalVideo::Impl {
         }
 
         ~TerminalRawMode() noexcept { disable(); }
+
+        static auto poll_key(std::chrono::milliseconds timeout) noexcept -> std::optional<char> {
+            auto readfds = fd_set { };
+            FD_ZERO(&readfds);
+            FD_SET(STDIN_FILENO, &readfds);
+
+            auto tv = timeval {
+                .tv_sec  = static_cast<long>(timeout.count() / 1'000),
+                .tv_usec = static_cast<long>((timeout.count() % 1'000) * 1'000),
+            };
+
+            if (::select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv) <= 0) {
+                return std::nullopt;
+            }
+
+            char key = 0;
+            if (::read(STDIN_FILENO, &key, 1) != 1) {
+                return std::nullopt;
+            }
+
+            return key;
+        }
     };
 
     Config config;
@@ -64,28 +86,6 @@ struct LocalVideo::Impl {
             interval_duration = std::chrono::nanoseconds { 0 };
         }
     };
-
-    static auto poll_key(std::chrono::milliseconds timeout) noexcept -> std::optional<char> {
-        auto readfds = fd_set { };
-        FD_ZERO(&readfds);
-        FD_SET(STDIN_FILENO, &readfds);
-
-        auto tv = timeval {
-            .tv_sec  = static_cast<long>(timeout.count() / 1'000),
-            .tv_usec = static_cast<long>((timeout.count() % 1'000) * 1'000),
-        };
-
-        if (::select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv) <= 0) {
-            return std::nullopt;
-        }
-
-        char key = 0;
-        if (::read(STDIN_FILENO, &key, 1) != 1) {
-            return std::nullopt;
-        }
-
-        return key;
-    }
 
     auto configure(Config const& _config) -> std::expected<void, std::string> {
         if (_config.location.empty() || !std::filesystem::exists(_config.location)) {
@@ -139,7 +139,7 @@ struct LocalVideo::Impl {
 
         using namespace std::chrono_literals;
 
-        if (const auto key = poll_key(0ms); key == ' ') {
+        if (const auto key = TerminalRawMode::poll_key(0ms); key == ' ') {
             playing = !playing;
             if (playing) {
                 last_read_time = Clock::now();
@@ -168,8 +168,9 @@ struct LocalVideo::Impl {
                 if (capturer->set(cv::CAP_PROP_POS_FRAMES, 0) && capturer->read(frame)) {
                     last_read_time = Clock::now();
                 } else {
-                    return std::unexpected { "End of file reached and failed to "
-                                             "loop/reset." };
+                    return std::unexpected {
+                        "End of file reached and failed to loop/reset.",
+                    };
                 }
             } else {
                 return std::unexpected { "End of file reached." };
