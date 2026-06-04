@@ -4,7 +4,7 @@ project(rmcs_auto_aim_v2_tools)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
 find_package(rclcpp REQUIRED)
@@ -53,6 +53,21 @@ target_link_libraries(
 )
 
 add_executable(
+    see_outpost
+    ${TOOL_DIR}/see_outpost.cpp
+    ${RMCS_SRC_DIR}/utility/math/outpost.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/visual/armor.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    see_outpost
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+)
+
+add_executable(
     ov-model-status
     ${TOOL_DIR}/ov_model_status.cpp
 )
@@ -84,28 +99,12 @@ if(HIKCAMERA_AVAILABLE)
         hikcamera
         ${TOOL_DIR}/hikcamera.cpp
         ${RMCS_SRC_DIR}/utility/image/recorder.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
     )
     target_link_libraries(
         hikcamera
         tool_terminal
-        ${OpenCV_LIBS}
-        ${hikcamera_LIBRARIES}
-    )
-
-    # RTP Streaming
-    add_executable(
-        streaming
-        ${TOOL_DIR}/streaming.cpp
-        ${RMCS_SRC_DIR}/module/capturer/hikcamera.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
-        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
-        ${RMCS_SRC_DIR}/utility/image/image.cpp
-        ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
-    )
-    target_link_libraries(
-        streaming
-        tool_terminal
-        rclcpp::rclcpp
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )

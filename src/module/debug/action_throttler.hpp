@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "module/debug/framerate.hpp"
+#include "utility/framerate.hpp"
 #include "utility/times_limit.hpp"
 
 namespace rmcs::util {

@@ -98,6 +98,26 @@ struct ArmorVisualColor : public Scalar3d {
         }
     }
 
+    constexpr explicit ArmorVisualColor(ArmorColor color) noexcept {
+        if (color == ArmorColor::RED) {
+            x = 1.0, y = 0.0, z = 0.0;
+        } else if (color == ArmorColor::BLUE) {
+            x = 0.0, y = 0.0, z = 1.0;
+        } else if (color == ArmorColor::MIX) {
+            x = 1.0, y = 0.0, z = 1.0;
+        } else {
+            x = 0.0, y = 0.0, z = 0.0;
+        }
+    }
+
+    auto r() -> double& { return x; }
+    auto g() -> double& { return y; }
+    auto b() -> double& { return z; }
+
+    auto r() const -> double { return x; }
+    auto g() const -> double { return y; }
+    auto b() const -> double { return z; }
+
     template <class T>
     auto to(T& target) const noexcept -> void {
         target.r = x;

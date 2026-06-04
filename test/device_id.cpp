@@ -1,4 +1,6 @@
 #include "utility/robot/id.hpp"
+
+#include <array>
 #include <gtest/gtest.h>
 
 using namespace rmcs;
@@ -36,31 +38,50 @@ TEST(device_id, runtime_operations) {
     EXPECT_TRUE(d1.contains(DeviceId::ENGINEER));
 }
 
+TEST(device_id, items) {
+    constexpr auto ids = DeviceIds { DeviceId::HERO, DeviceId::ENGINEER, DeviceId::SENTRY };
+
+    auto result = std::array<DeviceId, 3> { };
+    auto index  = std::size_t { 0 };
+    for (auto id : ids.items()) {
+        result[index++] = id;
+    }
+
+    EXPECT_EQ(result[0], DeviceId::HERO);
+    EXPECT_EQ(result[1], DeviceId::ENGINEER);
+    EXPECT_EQ(result[2], DeviceId::SENTRY);
+}
+
 TEST(device_id, bitwise_operators) {
-    DeviceIds d1 { DeviceId::HERO };
-    DeviceIds d2 { DeviceId::ENGINEER };
+    constexpr DeviceIds d1 { DeviceId::HERO };
+    constexpr DeviceIds d2 { DeviceId::ENGINEER };
 
-    auto d_or = d1 | d2;
-    EXPECT_TRUE(d_or.contains(DeviceId::HERO));
-    EXPECT_TRUE(d_or.contains(DeviceId::ENGINEER));
+    constexpr auto d_or = d1 | d2;
+    static_assert(d_or.contains(DeviceId::HERO));
+    static_assert(d_or.contains(DeviceId::ENGINEER));
 
-    auto d_and = d1 & d2;
-    EXPECT_FALSE(d_and.contains(DeviceId::HERO));
-    EXPECT_FALSE(d_and.contains(DeviceId::ENGINEER));
-    EXPECT_TRUE(d_and.empty());
+    constexpr auto d_and = d1 & d2;
+    static_assert(!d_and.contains(DeviceId::HERO));
+    static_assert(!d_and.contains(DeviceId::ENGINEER));
+    static_assert(d_and.empty());
 }
 
 TEST(device_id, predefined_groups) {
-    auto large = DeviceIds::kLargeArmor();
-    EXPECT_TRUE(large.contains(DeviceId::HERO));
-    EXPECT_TRUE(large.contains(DeviceId::ENGINEER));
-    EXPECT_TRUE(large.contains(DeviceId::BASE));
-    EXPECT_FALSE(large.contains(DeviceId::INFANTRY_3));
+    constexpr auto large = DeviceIds::kLargeArmor();
+    static_assert(large.contains(DeviceId::HERO));
+    static_assert(large.contains(DeviceId::ENGINEER));
+    static_assert(!large.contains(DeviceId::BASE));
+    static_assert(!large.contains(DeviceId::INFANTRY_3));
+    static_assert(large.length() == 2);
 
-    auto small = DeviceIds::kSmallArmor();
-    EXPECT_TRUE(small.contains(DeviceId::INFANTRY_3));
-    EXPECT_TRUE(small.contains(DeviceId::OUTPOST));
-    EXPECT_FALSE(small.contains(DeviceId::BASE));
+    constexpr auto small = DeviceIds::kSmallArmor();
+    static_assert(small.contains(DeviceId::INFANTRY_3));
+    static_assert(small.contains(DeviceId::OUTPOST));
+    static_assert(small.contains(DeviceId::BASE));
+    static_assert(small.length() == 6);
+
+    static_assert((DeviceIds::kSmallArmor() & DeviceIds::kLargeArmor()) == DeviceIds::None());
+    static_assert(DeviceIds::None().length() == 0);
 }
 
 // -------------------- 参数化测试 --------------------
@@ -89,7 +110,8 @@ INSTANTIATE_TEST_SUITE_P(AllDeviceIds, DeviceIdTest,
         DeviceIdParam { DeviceId::INFANTRY_5, 5, "INFANTRY_5" },
         DeviceIdParam { DeviceId::AERIAL, 6, "AERIAL" },
         DeviceIdParam { DeviceId::SENTRY, 7, "SENTRY" },
-        DeviceIdParam { DeviceId::DART, 8, "DART" }, DeviceIdParam { DeviceId::RADAR, 9, "RADAR" },
+        DeviceIdParam { DeviceId::DART, 8, "DART" }, //
+        DeviceIdParam { DeviceId::RADAR, 9, "RADAR" },
         DeviceIdParam { DeviceId::OUTPOST, 10, "OUTPOST" },
         DeviceIdParam { DeviceId::BASE, 11, "BASE" }) //
 );

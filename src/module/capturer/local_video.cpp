@@ -1,7 +1,11 @@
 #include "local_video.hpp"
 
 #include <filesystem>
+#include <optional>
+#include <sys/select.h>
+#include <termios.h>
 #include <thread>
+#include <unistd.h>
 
 #include <opencv2/videoio.hpp>
 
@@ -10,12 +14,66 @@
 using namespace rmcs::cap;
 
 struct LocalVideo::Impl {
+    struct TerminalRawMode {
+        bool enabled { false };
+        ::termios old { };
+
+        auto enable() noexcept -> void {
+            if (!::isatty(STDIN_FILENO)) {
+                return;
+            }
+            if (::tcgetattr(STDIN_FILENO, &old) != 0) {
+                return;
+            }
+
+            auto raw = old;
+            raw.c_lflag &= static_cast<unsigned int>(~(ICANON | ECHO));
+            raw.c_cc[VMIN]  = 0;
+            raw.c_cc[VTIME] = 0;
+            enabled         = (::tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0);
+        }
+
+        auto disable() noexcept -> void {
+            if (enabled) {
+                ::tcsetattr(STDIN_FILENO, TCSANOW, &old);
+                enabled = false;
+            }
+        }
+
+        ~TerminalRawMode() noexcept { disable(); }
+
+        static auto poll_key(std::chrono::milliseconds timeout) noexcept -> std::optional<char> {
+            auto readfds = fd_set { };
+            FD_ZERO(&readfds);
+            FD_SET(STDIN_FILENO, &readfds);
+
+            auto tv = timeval {
+                .tv_sec  = static_cast<long>(timeout.count() / 1'000),
+                .tv_usec = static_cast<long>((timeout.count() % 1'000) * 1'000),
+            };
+
+            if (::select(STDIN_FILENO + 1, &readfds, nullptr, nullptr, &tv) <= 0) {
+                return std::nullopt;
+            }
+
+            char key = 0;
+            if (::read(STDIN_FILENO, &key, 1) != 1) {
+                return std::nullopt;
+            }
+
+            return key;
+        }
+    };
+
     Config config;
 
     using Clock     = std::chrono::steady_clock;
     using TimePoint = std::chrono::steady_clock::time_point;
 
     std::optional<cv::VideoCapture> capturer;
+    bool playing { true };
+    TerminalRawMode terminal_raw_mode;
+    std::unique_ptr<Image> latest_image;
 
     std::chrono::nanoseconds interval_duration { 0 };
     TimePoint last_read_time { Clock::now() };
@@ -53,6 +111,9 @@ struct LocalVideo::Impl {
 
         set_framerate_interval(target_fps);
 
+        playing      = true;
+        latest_image = nullptr;
+        terminal_raw_mode.enable();
         last_read_time = Clock::now();
 
         return { };
@@ -66,12 +127,23 @@ struct LocalVideo::Impl {
         if (capturer.has_value()) {
             capturer.reset();
         }
+        latest_image = nullptr;
+        terminal_raw_mode.disable();
         interval_duration = std::chrono::nanoseconds { 0 };
     }
 
     auto wait_image() noexcept -> std::expected<std::unique_ptr<Image>, std::string> {
         if (!capturer.has_value() || !capturer->isOpened()) {
             return std::unexpected { "Video stream is not opened." };
+        }
+
+        using namespace std::chrono_literals;
+
+        if (const auto key = TerminalRawMode::poll_key(0ms); key == ' ') {
+            playing = !playing;
+            if (playing) {
+                last_read_time = Clock::now();
+            }
         }
 
         const auto time_before_read        = Clock::now();
@@ -85,6 +157,10 @@ struct LocalVideo::Impl {
             last_read_time = config.allow_skipping ? Clock::now() : next_read_time_expected;
         }
 
+        if (!playing && latest_image) {
+            return latest_image->clone();
+        }
+
         auto frame = cv::Mat { };
         auto image = std::make_unique<Image>();
         if (!capturer->read(frame)) {
@@ -92,8 +168,9 @@ struct LocalVideo::Impl {
                 if (capturer->set(cv::CAP_PROP_POS_FRAMES, 0) && capturer->read(frame)) {
                     last_read_time = Clock::now();
                 } else {
-                    return std::unexpected { "End of file reached and failed to "
-                                             "loop/reset." };
+                    return std::unexpected {
+                        "End of file reached and failed to loop/reset.",
+                    };
                 }
             } else {
                 return std::unexpected { "End of file reached." };
@@ -105,6 +182,7 @@ struct LocalVideo::Impl {
         }
         image->details().set_mat(frame);
         image->set_timestamp(last_read_time);
+        latest_image = image->clone();
 
         return image;
     };

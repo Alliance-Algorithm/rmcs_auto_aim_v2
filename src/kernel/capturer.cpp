@@ -2,7 +2,7 @@
 #include "module/capturer/common.hpp"
 #include "module/capturer/hikcamera.hpp"
 #include "module/capturer/local_video.hpp"
-#include "module/debug/framerate.hpp"
+#include "utility/framerate.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/singleton/running.hpp"
 #include "utility/thread/spsc_queue.hpp"

@@ -7,6 +7,13 @@
 zsh -lc "build-rmcs --packages-up-to rmcs_auto_aim_v2"
 ```
 
+如果位于 `test` 或者 `tool/cxx` 下，则使用下面指令独立构建
+
+```zsh
+cmake -B build
+cmake --build build -j
+```
+
 ## 代码风格
 
 - 头文件遵循 “本地头文件” “标准库” “第三方库” 的顺序排列，并在这些头文件加上空行用以区分，头文件较少时可以合并为一大块
