@@ -210,9 +210,13 @@ struct OutpostRobotState::Impl {
 
     auto is_converged() const -> bool {
         if (!initialized) return false;
-        auto const omega   = std::abs(ekf.x[6]);
-        auto const p_omega = ekf.P()(6, 6);
-        return p_omega < 4.0 && (omega < 0.3 || std::abs(omega - rmcs::kOutpostAngularSpeed) < 1.3);
+
+        constexpr int kStateOmega    = 6; // x vx y vy z a w
+        auto const angular_speed     = std::abs(ekf.x[kStateOmega]);
+        auto const angular_speed_var = ekf.P()(kStateOmega, kStateOmega);
+        return angular_speed_var < 4.0
+            && (angular_speed < rmcs::util::deg2rad(30)
+                || std::abs(angular_speed - rmcs::kOutpostAngularSpeed) < rmcs::util::deg2rad(30));
     }
 
     auto get_snapshot() const -> Snapshot {
@@ -277,7 +281,7 @@ private:
     bool initialized { false };
     int update_count { 0 };
     std::chrono::duration<double> reset_interval { 1.5 };
-    double mahalanobis_gate { 25.0 };
+    double mahalanobis_gate { 10.0 };
 };
 
 OutpostRobotState::OutpostRobotState() noexcept
