@@ -208,15 +208,10 @@ struct OutpostRobotState::Impl {
         return true;
     }
 
+    // TODO:添加收敛条件
     auto is_converged() const -> bool {
         if (!initialized) return false;
-
-        constexpr int kStateOmega    = 6; // x vx y vy z a w
-        auto const angular_speed     = std::abs(ekf.x[kStateOmega]);
-        auto const angular_speed_var = ekf.P()(kStateOmega, kStateOmega);
-        return angular_speed_var < 4.0
-            && (angular_speed < rmcs::util::deg2rad(30)
-                || std::abs(angular_speed - rmcs::kOutpostAngularSpeed) < rmcs::util::deg2rad(30));
+        return true;
     }
 
     auto get_snapshot() const -> Snapshot {
@@ -281,7 +276,7 @@ private:
     bool initialized { false };
     int update_count { 0 };
     std::chrono::duration<double> reset_interval { 1.5 };
-    double mahalanobis_gate { 10.0 };
+    double mahalanobis_gate { 5.0 };
 };
 
 OutpostRobotState::OutpostRobotState() noexcept
