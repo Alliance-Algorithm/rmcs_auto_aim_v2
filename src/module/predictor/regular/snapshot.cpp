@@ -1,4 +1,6 @@
-#include "module/predictor/regular/snapshot.hpp"
+#include "module/predictor/snapshot.hpp"
+#include "utility/robot/color.hpp"
+#include "utility/robot/id.hpp"
 
 #include <utility>
 
@@ -64,10 +66,10 @@ namespace {
 
 } // namespace
 
-auto detail::make_regular_snapshot(Snapshot::NormalEKF::XVec ekf_x, DeviceId device,
+auto make_regular_snapshot(Snapshot::NormalEKF::XVec ekf_x, DeviceId device,
     CampColor color, int armor_num, TimePoint stamp) noexcept -> Snapshot {
-    return detail::make_snapshot(std::make_unique<RegularSnapshotBackend>(
-        std::move(ekf_x), device, color, armor_num, stamp));
+    return Snapshot { std::make_unique<RegularSnapshotBackend>(
+        std::move(ekf_x), device, color, armor_num, stamp) };
 }
 
 } // namespace rmcs::predictor

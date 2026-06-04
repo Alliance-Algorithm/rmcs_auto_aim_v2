@@ -6,10 +6,14 @@
 #include <optional>
 #include <vector>
 
-#include "module/predictor/regular/snapshot.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::predictor;
+
+namespace rmcs::predictor {
+auto make_regular_snapshot(Snapshot::NormalEKF::XVec ekf_x, DeviceId device, CampColor color,
+    int armor_num, TimePoint stamp) noexcept -> Snapshot;
+}
 
 struct RegularRobotState::Impl {
     struct MatchDecision {
@@ -109,7 +113,7 @@ struct RegularRobotState::Impl {
 
     auto get_snapshot() const -> Snapshot {
         if (!initialized) return Snapshot::empty(time_stamp);
-        return detail::make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
+        return make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
     }
 
     auto distance() const -> double {

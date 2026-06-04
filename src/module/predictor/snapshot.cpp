@@ -24,12 +24,8 @@ namespace {
 
 } // namespace
 
-auto detail::make_snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept -> Snapshot {
-    return Snapshot { std::move(backend) };
-}
-
 auto Snapshot::empty(TimePoint stamp) noexcept -> Snapshot {
-    return detail::make_snapshot(std::make_unique<EmptySnapshotBackend>(stamp));
+    return Snapshot { std::make_unique<EmptySnapshotBackend>(stamp) };
 }
 
 Snapshot::Snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept

@@ -7,11 +7,15 @@
 #include <optional>
 #include <span>
 
-#include "module/predictor/outpost/snapshot.hpp"
 #include "utility/math/mahalanobis.hpp"
 #include "utility/time.hpp"
 
 using namespace rmcs::predictor;
+
+namespace rmcs::predictor {
+auto make_outpost_snapshot(Snapshot::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
+    TimePoint stamp, OutpostArmorLayout outpost_layout) noexcept -> Snapshot;
+}
 
 namespace {
 
@@ -205,15 +209,14 @@ struct OutpostRobotState::Impl {
     }
 
     auto is_converged() const -> bool {
-        if (!initialized || update_count < 5) return false;
+        if (!initialized) return false;
         auto const omega   = std::abs(ekf.x[6]);
         auto const p_omega = ekf.P()(6, 6);
-        return p_omega < 4.0 && (omega < 0.3 || std::abs(omega - rmcs::kOutpostAngularSpeed) < 0.5);
+        return p_omega < 4.0 && (omega < 0.3 || std::abs(omega - rmcs::kOutpostAngularSpeed) < 1.3);
     }
 
     auto get_snapshot() const -> Snapshot {
-        return detail::make_outpost_snapshot(
-            ekf.x, color, assigned_count(layout), time_stamp, layout);
+        return make_outpost_snapshot(ekf.x, color, assigned_count(layout), time_stamp, layout);
     }
 
     auto distance() const -> double {
