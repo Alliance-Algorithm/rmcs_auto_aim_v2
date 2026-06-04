@@ -97,7 +97,7 @@ struct VideoRecorder::Impl {
     std::filesystem::path selected_directory { };
 
     auto stop(bool save = true) {
-        if (!save) {
+        if (session && !save) {
             session->set_remove_later();
         }
         session = nullptr;

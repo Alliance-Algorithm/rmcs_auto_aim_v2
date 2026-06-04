@@ -9,7 +9,7 @@ zsh -lc "build-rmcs --packages-up-to rmcs_auto_aim_v2"
 
 如果位于 `test` 或者 `tool/cxx` 下，则使用下面指令独立构建
 
-```
+```zsh
 cmake -B build
 cmake --build build -j
 ```

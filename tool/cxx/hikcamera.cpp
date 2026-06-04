@@ -36,8 +36,8 @@ struct Recording {
     std::uint64_t written = 0;
     std::uint64_t dropped = 0;
 
-    bool enabled        = false;
-    bool stop_requested = false;
+    std::atomic<bool> enabled        = false;
+    std::atomic<bool> stop_requested = false;
 
     auto start() -> void {
         recorder.update_config({
