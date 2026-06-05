@@ -11,6 +11,6 @@ public:
 
     auto set_invincible_armors(DeviceIds devices) -> void;
 
-    auto filter(std::span<Armor2D> const&) const -> std::vector<Armor2D>;
+    auto filter(std::span<Armor2d> const&) const -> std::vector<Armor2d>;
 };
 }

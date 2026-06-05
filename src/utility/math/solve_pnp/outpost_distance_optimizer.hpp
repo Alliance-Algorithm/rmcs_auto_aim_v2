@@ -7,9 +7,9 @@ namespace rmcs::util {
 
 struct OutpostDistanceOptimizer {
     struct Input {
-        Armor3D initial;
+        Armor3d initial;
 
-        Armor2D armor;
+        Armor2d armor;
         Point2d upper_point;
         Point2d lower_point;
 
@@ -22,7 +22,7 @@ struct OutpostDistanceOptimizer {
     } input;
 
     struct Result {
-        Armor3D armor;
+        Armor3d armor;
     } result;
 
     OutpostDistanceOptimizer() noexcept = default;

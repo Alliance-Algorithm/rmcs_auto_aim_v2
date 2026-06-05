@@ -113,10 +113,10 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
     image.details().mat = cv_mat;
 
     auto detect_result = detector.sync_detect(image);
-    if (!detect_result.has_value()) {
+    if (detect_result.empty()) {
         throw std::runtime_error("Armor detection failed");
     }
-    const auto& armors = detect_result.value();
+    const auto& armors = detect_result;
     if (armors.empty()) {
         throw std::runtime_error("No armor detected from image: " + full_path.string());
     }

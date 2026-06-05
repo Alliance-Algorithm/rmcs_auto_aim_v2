@@ -50,7 +50,7 @@ auto OutpostDistanceOptimizer::solve() -> bool {
     const auto& selected_lightbar =
         input.is_upper ? solution.result.upper_near : solution.result.lower_near;
 
-    for (const auto& point : { selected_lightbar.first, selected_lightbar.second }) {
+    for (const auto& point : { selected_lightbar.upper, selected_lightbar.lower }) {
         const auto point_in_camera_ros = point.make<Eigen::Vector3d>();
         auto point_in_local_ros =
             Eigen::Vector3d { (r_ac_ros.transpose() * (point_in_camera_ros - t_ac_ros)).eval() };

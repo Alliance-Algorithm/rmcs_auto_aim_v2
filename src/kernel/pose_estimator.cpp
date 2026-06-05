@@ -1,18 +1,17 @@
 #include "pose_estimator.hpp"
 #include "module/identifier/adjacency_lightbar.hpp"
 
-#include "utility/image/image.details.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
 #include "utility/math/solve_pnp/outpost_distance_optimizer.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
-#include "utility/math/solve_pnp/solve_pnp.hpp"
 #include "utility/math/solve_pnp/yaw_optimizer.hpp"
-#include "utility/rclcpp/node.hpp"
-#include "utility/rclcpp/visual/armor.hpp"
-#include "utility/rclcpp/visual/lightbar.hpp"
 #include "utility/serializable.hpp"
 
+#include <algorithm>
+#include <iterator>
+
+#include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 
 using namespace rmcs::util;
@@ -20,39 +19,25 @@ using namespace rmcs;
 
 namespace rmcs::kernel {
 
-namespace { } // namespace
-
 struct PoseEstimator::Impl {
-    static constexpr auto kCameraLink = "camera_link";
-
-    struct DebugState {
-        std::optional<Armor3D> pre_optimized_outpost;
-        std::optional<Armor3D> optimized_outpost;
-        bool has_detected_lightbar { false };
-        bool has_candidate_roi { false };
-        bool optimized_bar_is_right { false };
-        bool optimized_bar_is_upper { false };
-
-        auto clear() -> void { *this = { }; }
-    };
-
     struct Config : util::Serializable {
-        std::array<float, 9> camera_matrix;
-        std::array<float, 5> distort_coeff;
         bool yaw_optimizer;
         bool distance_optimizer;
+
         double outpost_armor_thickness;
 
-        constexpr static std::tuple metas { //
-            &Config::camera_matrix, "camera_matrix", &Config::distort_coeff, "distort_coeff",
-            &Config::yaw_optimizer, "yaw_optimizer", &Config::distance_optimizer,
-            "distance_optimizer", &Config::outpost_armor_thickness, "outpost_armor_thickness"
+        constexpr static std::tuple metas {
+            // clang-format off
+            &Config::yaw_optimizer, "yaw_optimizer",
+            &Config::distance_optimizer, "distance_optimizer",
+
+            &Config::outpost_armor_thickness, "outpost_armor_thickness"
+            // clang-format on
         };
     };
-
-    DebugState debug_state { };
-
     Config config;
+    Addition addition { };
+
     CameraFeature camera_feature;
 
     PnpSolution pnp_solution { };
@@ -60,58 +45,14 @@ struct PoseEstimator::Impl {
     YawOptimizer yaw_optimizer { };
     AdjacencyLightbarFinder adjacency_finder { };
 
-    RclcppNode visual_node { "PoseEstimatorVisual" };
-    std::unique_ptr<visual::Armor> pre_optimized_outpost;
-    std::unique_ptr<visual::LightBar> optimized_neighbor_bar_near;
-    std::unique_ptr<visual::LightBar> optimized_neighbor_bar_away;
-
     Eigen::Vector3d camera_translation { Eigen::Vector3d::Zero() };
     Eigen::Quaterniond camera_orientation { Eigen::Quaterniond::Identity() };
-
-    Impl() noexcept {
-        using namespace visual;
-
-        visual_node.set_pub_topic_prefix("/rmcs/auto_aim/");
-
-        optimized_neighbor_bar_near = std::make_unique<LightBar>(LightBar::Config {
-            .rclcpp = visual_node,
-            .id     = 0,
-            .name   = "optimized_neighbor_bar_near",
-            .tf     = kCameraLink,
-            .width  = 0.01,
-        });
-
-        optimized_neighbor_bar_away = std::make_unique<LightBar>(LightBar::Config {
-            .rclcpp = visual_node,
-            .id     = 1,
-            .name   = "optimized_neighbor_bar_away",
-            .tf     = kCameraLink,
-            .width  = 0.01,
-        });
-
-        pre_optimized_outpost = std::make_unique<Armor>(Armor::Config {
-            .rclcpp = visual_node,
-            .device = DeviceId::OUTPOST,
-            .camp   = CampColor::BLUE,
-            .id     = 0,
-            .name   = "pre_optimized_outpost",
-            .tf     = kCameraLink,
-        });
-    }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
-
-        camera_feature.camera_matrix = reshape_array<float, 9, double, 3, 3>(config.camera_matrix);
-        camera_feature.distort_coeff = reshape_array<float, 5, double>(config.distort_coeff);
-
-        pnp_solution.input.camera               = camera_feature;
-        yaw_optimizer.input.camera              = camera_feature;
-        outpost_distance_optimizer.input.camera = camera_feature;
-        adjacency_finder.set_camera_feature(camera_feature);
 
         outpost_distance_optimizer.input.armor_thickness = config.outpost_armor_thickness;
         adjacency_finder.set_armor_thickness(config.outpost_armor_thickness);
@@ -121,7 +62,18 @@ struct PoseEstimator::Impl {
         return std::unexpected { e.what() };
     }
 
-    auto solve_armor(const std::vector<Armor2D>& armors) {
+    auto configure_camera(std::array<double, 9> camera_matrix, std::array<double, 5> distort_coeff)
+        -> void {
+        camera_feature.from(camera_matrix);
+        camera_feature.from(distort_coeff);
+
+        pnp_solution.input.camera               = camera_feature;
+        yaw_optimizer.input.camera              = camera_feature;
+        outpost_distance_optimizer.input.camera = camera_feature;
+        adjacency_finder.set_camera_feature(camera_feature);
+    }
+
+    auto solve_armor(const std::vector<Armor2d>& armors) {
 
         const auto q_camera_to_odom = camera_orientation;
         const auto q_odom_to_camera = q_camera_to_odom.inverse();
@@ -129,17 +81,17 @@ struct PoseEstimator::Impl {
 
         auto& input = yaw_optimizer.input;
 
-        input.camera.camera_orientation = q_odom_to_camera;
-        input.camera.camera_translation =
+        input.camera.orientation = q_odom_to_camera;
+        input.camera.translation =
             Eigen::Vector3d { -(q_odom_to_camera * camera_translation).eval() };
 
-        auto result = std::vector<Armor3D> { };
+        auto result = std::vector<Armor3d> { };
         for (auto&& [index, armor] : armors | std::views::enumerate) {
 
             const auto small = armor.shape == ArmorShape::SMALL;
             const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
 
-            auto armor_3d = Armor3D { };
+            auto armor_3d = Armor3d { };
             armor_3d.id   = static_cast<int>(index);
 
             { // pnp
@@ -157,7 +109,7 @@ struct PoseEstimator::Impl {
                 armor_3d.translation = pnp_solution.result.translation;
                 armor_3d.orientation = pnp_solution.result.orientation;
             }
-            into_odom_link(armor_3d);
+            armor_3d = into_odom_link(armor_3d);
 
             if (config.yaw_optimizer) { // yaw
                 input.armor_shape  = shape;
@@ -173,44 +125,102 @@ struct PoseEstimator::Impl {
         };
         return result;
     }
-    auto solve_armor(const std::vector<Armor2D>& armor2ds, Image& image) {
+    auto solve_armor(const std::vector<Armor2d>& armor2ds, Image& image) {
         auto armor3ds = solve_armor(armor2ds);
-        debug_state.clear();
+
+        if (!config.distance_optimizer) return armor3ds;
+        {
+            addition.areas.clear();
+            addition.predicted_near.clear();
+            addition.predicted_away.clear();
+            addition.detected_2d.clear();
+            addition.detected_3d.clear();
+            addition.center = { };
+        }
 
         // 前哨站专属优化
         auto outpost2d = std::ranges::find_if(
-            armor2ds, [](const Armor2D& armor) { return armor.genre == DeviceId::OUTPOST; });
+            armor2ds, [](const Armor2d& armor) { return armor.genre == DeviceId::OUTPOST; });
         auto outpost3d = std::ranges::find_if(
-            armor3ds, [](const Armor3D& armor) { return armor.genre == DeviceId::OUTPOST; });
+            armor3ds, [](const Armor3d& armor) { return armor.genre == DeviceId::OUTPOST; });
 
-        if (outpost3d != armor3ds.end() && outpost2d != armor2ds.end()) {
-            debug_state.pre_optimized_outpost = *outpost3d;
+        if (outpost3d == armor3ds.end() || outpost2d == armor2ds.end()) {
+            return armor3ds;
+        }
 
-            if (auto lightbar = adjacency_finder.find(image, *outpost2d, *outpost3d)) {
-                if (config.distance_optimizer) {
-                    auto& input   = outpost_distance_optimizer.input;
-                    input.initial = *outpost3d;
+        if (auto result = adjacency_finder.find(image, *outpost2d, *outpost3d)) {
+            { // 更新附加信息，供外部绘制或者发布调试 Topic
+                std::ranges::copy(result->areas, std::back_inserter(addition.areas));
+                std::ranges::copy(
+                    result->predicted_near, std::back_inserter(addition.predicted_near));
+                std::ranges::copy(
+                    result->predicted_away, std::back_inserter(addition.predicted_away));
+                std::ranges::copy(result->found, std::back_inserter(addition.detected_2d));
+                addition.center = result->center;
+            }
 
-                    input.armor       = *outpost2d;
-                    input.upper_point = lightbar->upper;
-                    input.lower_point = lightbar->lower;
+            if (!result->found.empty()) {
+                const auto& lightbar = result->found[0];
+                auto& input          = outpost_distance_optimizer.input;
+                input.initial        = *outpost3d;
 
-                    input.is_right = lightbar->is_right;
-                    input.is_upper = lightbar->is_upper;
+                input.armor       = *outpost2d;
+                input.upper_point = lightbar.upper;
+                input.lower_point = lightbar.lower;
 
-                    if (outpost_distance_optimizer.solve()) {
-                        *outpost3d = outpost_distance_optimizer.result.armor;
+                input.is_right = lightbar.is_right;
+                input.is_upper = lightbar.is_upper;
 
-                        debug_state.optimized_outpost      = *outpost3d;
-                        debug_state.optimized_bar_is_right = lightbar->is_right;
-                        debug_state.optimized_bar_is_upper = lightbar->is_upper;
+                if (outpost_distance_optimizer.solve()) {
+                    *outpost3d = outpost_distance_optimizer.result.armor;
+
+                    // 投影到 2d 看效果
+                    auto solution                  = NeighborBarSolution { };
+                    solution.input.source          = *outpost3d;
+                    solution.input.in_right        = lightbar.is_right;
+                    solution.input.armor_thickness = config.outpost_armor_thickness;
+                    solution.solve();
+
+                    const auto& near_bar =
+                        lightbar.is_upper ? solution.result.upper_near : solution.result.lower_near;
+                    const auto& away_bar =
+                        lightbar.is_upper ? solution.result.upper_away : solution.result.lower_away;
+
+                    addition.detected_3d.push_back(near_bar);
+                    addition.detected_3d.push_back(away_bar);
+
+                    addition.origin.push_back(*outpost3d);
+
+                    const auto color      = ArmorVisualColor { lightbar.color };
+                    const auto draw_color = std::array {
+                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 },
+                        cv::Scalar { color.b() * 127.5, color.g() * 127.5, color.r() * 127.5 },
+                    };
+                    const auto bars = std::array { near_bar, away_bar };
+                    for (std::size_t index = 0; index < bars.size(); ++index) {
+                        const auto& bar     = bars[index];
+                        auto segment_points = std::array<cv::Point3f, 2> { };
+                        for (std::size_t i = 0; i < segment_points.size(); ++i) {
+                            const auto point  = i == 0 ? bar.upper : bar.lower;
+                            const auto p      = ros2opencv_position(point.make<Eigen::Vector3d>());
+                            segment_points[i] = cv::Point3f(static_cast<float>(p[0]),
+                                static_cast<float>(p[1]), static_cast<float>(p[2]));
+                        }
+
+                        auto projected = std::vector<cv::Point2f> { };
+                        cv::projectPoints(segment_points, cv::Vec3d { 0.0, 0.0, 0.0 },
+                            cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
+                            camera_feature.distortion(), projected);
+                        if (projected.size() != 2) continue;
+
+                        addition.detected_2d.push_back(Lightbar2d {
+                            .color      = bar.color,
+                            .upper      = Point2d { projected[0] },
+                            .lower      = Point2d { projected[1] },
+                            .draw_color = draw_color[index],
+                        });
                     }
                 }
-
-                debug_state.has_detected_lightbar = true;
-                debug_state.has_candidate_roi     = true;
-            } else {
-                debug_state.has_candidate_roi = true;
             }
         }
         return armor3ds;
@@ -220,15 +230,15 @@ struct PoseEstimator::Impl {
         transform.translation.copy_to(camera_translation);
         transform.orientation.copy_to(camera_orientation);
 
-        const auto q_odom_to_camera       = camera_orientation.inverse();
-        camera_feature.camera_orientation = Orientation { q_odom_to_camera };
-        camera_feature.camera_translation =
+        const auto q_odom_to_camera = camera_orientation.inverse();
+        camera_feature.orientation  = Orientation { q_odom_to_camera };
+        camera_feature.translation =
             Translation { -(q_odom_to_camera * camera_translation).eval() };
 
         adjacency_finder.set_camera_feature(camera_feature);
     }
 
-    auto into_odom_link(const Armor3D& armor) const -> Armor3D {
+    auto into_odom_link(const Armor3d& armor) const -> Armor3d {
         auto transformed = armor;
 
         auto position = Eigen::Vector3d { };
@@ -242,95 +252,12 @@ struct PoseEstimator::Impl {
         return transformed;
     }
 
-    auto into_odom_link(std::span<const Armor3D> armors) const {
-        auto result = std::vector<Armor3D> { };
+    auto into_odom_link(std::span<const Armor3d> armors) const {
+        auto result = std::vector<Armor3d> { };
         for (const auto& armor : armors) {
             result.emplace_back(into_odom_link(armor));
         }
         return result;
-    }
-
-    auto draw_debug(Image& image) -> void {
-        if (debug_state.optimized_outpost.has_value()) {
-            const auto& armor = *debug_state.optimized_outpost;
-
-            auto solution                  = NeighborBarSolution { };
-            solution.input.source          = armor;
-            solution.input.in_right        = debug_state.optimized_bar_is_right;
-            solution.input.armor_thickness = config.outpost_armor_thickness;
-            solution.solve();
-
-            const auto& near_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_near
-                                                                      : solution.result.lower_near;
-            const auto& away_bar = debug_state.optimized_bar_is_upper ? solution.result.upper_away
-                                                                      : solution.result.lower_away;
-
-            auto object_points = std::vector<cv::Point3f> { };
-            object_points.reserve(4);
-            for (const auto& point :
-                { near_bar.first, near_bar.second, away_bar.first, away_bar.second }) {
-                const auto p = ros2opencv_position(point.make<Eigen::Vector3d>());
-                object_points.emplace_back(static_cast<float>(p.x()), static_cast<float>(p.y()),
-                    static_cast<float>(p.z()));
-            }
-
-            auto projected = std::vector<cv::Point2f> { };
-            cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 },
-                cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
-                camera_feature.distortion(), projected);
-            if (projected.size() == 4) {
-                const auto color       = ArmorVisualColor { armor.color };
-                const auto near_scalar = cv::Scalar { color.z * 255, color.y * 255, color.x * 255 };
-                const auto away_scalar = near_scalar * 0.5;
-
-                auto& mat = image.details().mat;
-                cv::circle(mat, projected[0], 2, near_scalar, -1, cv::LINE_AA);
-                cv::circle(mat, projected[1], 2, near_scalar, -1, cv::LINE_AA);
-                cv::circle(mat, projected[2], 2, away_scalar, -1, cv::LINE_AA);
-                cv::circle(mat, projected[3], 2, away_scalar, -1, cv::LINE_AA);
-            }
-        }
-        if (debug_state.has_detected_lightbar) {
-            adjacency_finder.draw_lightbar(image);
-        }
-        if (debug_state.has_candidate_roi) {
-            adjacency_finder.draw_roi(image);
-        }
-    }
-
-    auto publish_debug() -> void {
-        if (debug_state.pre_optimized_outpost.has_value()) {
-            const auto& armor = *debug_state.pre_optimized_outpost;
-            pre_optimized_outpost->set_camp(armor_color2camp_color(armor.color));
-            pre_optimized_outpost->move(armor.translation, armor.orientation);
-            pre_optimized_outpost->update();
-        }
-        if (debug_state.optimized_outpost.has_value()) {
-            const auto& armor = *debug_state.optimized_outpost;
-
-            auto solution                  = NeighborBarSolution { };
-            solution.input.source          = armor;
-            solution.input.in_right        = debug_state.optimized_bar_is_right;
-            solution.input.armor_thickness = config.outpost_armor_thickness;
-            solution.solve();
-
-            const auto color    = ArmorVisualColor { armor.color };
-            const auto is_upper = debug_state.optimized_bar_is_upper;
-
-            const auto& near_bar =
-                is_upper ? solution.result.upper_near : solution.result.lower_near;
-
-            optimized_neighbor_bar_near->set_color(color);
-            optimized_neighbor_bar_near->set_point(near_bar.first, near_bar.second);
-            optimized_neighbor_bar_near->update();
-
-            const auto& away_bar =
-                is_upper ? solution.result.upper_away : solution.result.lower_away;
-
-            optimized_neighbor_bar_away->set_color(color * 0.5);
-            optimized_neighbor_bar_away->set_point(away_bar.first, away_bar.second);
-            optimized_neighbor_bar_away->update();
-        }
     }
 };
 
@@ -339,30 +266,32 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto PoseEstimator::estimate_armor(const std::vector<Armor2D>& armors) const
-    -> std::vector<Armor3D> {
+auto PoseEstimator::configure_camera(
+    std::array<double, 9> camera_matrix, std::array<double, 5> distort_coeff) -> void {
+    return pimpl->configure_camera(camera_matrix, distort_coeff);
+}
+
+auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors) const -> Armor3ds {
     return pimpl->solve_armor(armors);
 }
 
-auto PoseEstimator::estimate_armor(const std::vector<Armor2D>& armors, Image& image) const
-    -> std::vector<Armor3D> {
+auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors, Image& image) const
+    -> Armor3ds {
     return pimpl->solve_armor(armors, image);
 }
+
+auto PoseEstimator::addition() -> const Addition& { return pimpl->addition; }
 
 auto PoseEstimator::update_camera_transform(const Transform& transform) -> void {
     return pimpl->update_camera_transform(transform);
 }
 
-auto PoseEstimator::into_odom_link(std::span<const Armor3D> armors) const -> std::vector<Armor3D> {
+auto PoseEstimator::into_odom_link(std::span<const Armor3d> armors) const -> Armor3ds {
     return pimpl->into_odom_link(armors);
 }
-auto PoseEstimator::into_odom_link(const Armor3D& armor) const -> Armor3D {
+auto PoseEstimator::into_odom_link(const Armor3d& armor) const -> Armor3d {
     return pimpl->into_odom_link(armor);
 }
-
-auto PoseEstimator::draw_debug(Image& image) -> void { return pimpl->draw_debug(image); }
-
-auto PoseEstimator::publish_debug() -> void { return pimpl->publish_debug(); }
 
 PoseEstimator::PoseEstimator() noexcept
     : pimpl { std::make_unique<Impl>() } { }

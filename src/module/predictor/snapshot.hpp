@@ -6,8 +6,8 @@
 
 #include "utility/clock.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
-#include "utility/robot/id.hpp"
 #include "utility/robot/armor.hpp"
+#include "utility/robot/id.hpp"
 
 namespace rmcs::predictor {
 
@@ -43,7 +43,7 @@ public:
 
     auto predicted_armors() const { return predicted_armors(Clock::now()); }
 
-    auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d>;
 
 private:
     explicit Snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept;

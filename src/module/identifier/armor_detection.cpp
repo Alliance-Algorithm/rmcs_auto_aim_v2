@@ -25,7 +25,7 @@ struct ArmorDetection::Impl {
     struct ExplainInterface {
         virtual ~ExplainInterface() = default;
 
-        virtual auto explain(ov::InferRequest&) const noexcept -> Armor2Ds = 0;
+        virtual auto explain(ov::InferRequest&) const noexcept -> Armor2ds = 0;
     };
 
     struct Config : util::Serializable {
@@ -77,7 +77,7 @@ struct ArmorDetection::Impl {
             , adapt_scaling { scaling }
             , roi_offset { offset } { }
 
-        auto explain(ov::InferRequest& finished_request) const noexcept -> Armor2Ds override {
+        auto explain(ov::InferRequest& finished_request) const noexcept -> Armor2ds override {
             using result_type    = typename model_type::Result;
             using precision_type = typename result_type::precision_type;
 
@@ -110,7 +110,7 @@ struct ArmorDetection::Impl {
             auto kept_points = std::vector<int> { };
             cv::dnn::NMSBoxes(boxes, scores, score_threshold, nms_threshold, kept_points);
 
-            auto final_result = Armor2Ds { };
+            auto final_result = Armor2ds { };
             final_result.reserve(kept_points.size());
 
             for (auto idx : kept_points) {
@@ -255,8 +255,8 @@ struct ArmorDetection::Impl {
     }
 
     template <class raw_type>
-    static auto cast_to_armor_result(raw_type raw) noexcept -> Armor2D {
-        auto armor = Armor2D { };
+    static auto cast_to_armor_result(raw_type raw) noexcept -> Armor2d {
+        auto armor = Armor2d { };
 
         armor.genre = raw.armor_genre();
         armor.color = raw.armor_color();
@@ -275,23 +275,23 @@ struct ArmorDetection::Impl {
     }
 
     auto explain_infer_result(ov::InferRequest& finished_request) const noexcept
-        -> std::optional<Armor2Ds> {
+        -> std::optional<Armor2ds> {
         if (!explain_infer_functor) {
             return std::nullopt;
         }
         return explain_infer_functor->explain(finished_request);
     }
 
-    auto sync_detect(const Image& image) noexcept -> std::optional<Armor2Ds> {
+    auto sync_detect(const Image& image) noexcept -> Armor2ds {
         auto result = generate_openvino_request(image);
         if (!result.has_value()) {
-            return std::nullopt;
+            return { };
         }
 
         auto request = std::move(result.value());
         request.infer();
 
-        return explain_infer_result(request);
+        return explain_infer_result(request).value_or(Armor2ds { });
     }
 };
 
@@ -300,8 +300,7 @@ auto ArmorDetection::initialize(const YAML::Node& yaml) noexcept
     return pimpl->configure(yaml);
 }
 
-auto ArmorDetection::sync_detect(const Image& image) noexcept
-    -> std::optional<std::vector<Armor2D>> {
+auto ArmorDetection::sync_detect(const Image& image) noexcept -> std::vector<Armor2d> {
     return pimpl->sync_detect(image);
 }
 

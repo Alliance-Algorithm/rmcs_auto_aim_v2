@@ -44,12 +44,12 @@ struct Tracker::Impl {
 
     auto set_enemy_color(CampColor color) { filter.set_enemy_color(color); }
 
-    auto filter_armors(std::span<Armor2D> const& armors) const -> std::vector<Armor2D> {
+    auto filter_armors(std::span<Armor2d> const& armors) const -> std::vector<Armor2d> {
         auto result = filter.filter(armors);
         return result;
     }
 
-    auto decide(std::span<Armor3D const> armors, TimePoint t) -> Decider::Output {
+    auto decide(std::span<Armor3d const> armors, TimePoint t) -> Decider::Output {
         auto decider_output = decider.update(armors, t);
         return decider_output;
     }
@@ -71,10 +71,10 @@ auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
 
 auto Tracker::set_enemy_color(CampColor color) -> void { pimpl->set_enemy_color(color); }
 
-auto Tracker::filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D> {
+auto Tracker::filter_armors(std::span<Armor2d> armors) const -> std::vector<Armor2d> {
     return pimpl->filter_armors(armors);
 }
 
-auto Tracker::decide(std::span<Armor3D const> armors, TimePoint t) -> Decider::Output {
+auto Tracker::decide(std::span<Armor3d const> armors, TimePoint t) -> Decider::Output {
     return pimpl->decide(armors, t);
 }

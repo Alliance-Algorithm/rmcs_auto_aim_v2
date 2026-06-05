@@ -14,13 +14,13 @@ public:
     explicit RobotStateBackendAdapter(TimePoint stamp) noexcept
         : state { stamp } { }
 
-    auto initialize(Armor3D const& armor, TimePoint t) -> void override {
+    auto initialize(Armor3d const& armor, TimePoint t) -> void override {
         state.initialize(armor, t);
     }
 
     auto predict(TimePoint t) -> void override { state.predict(t); }
 
-    auto update(std::span<Armor3D const> armors) -> bool override { return state.update(armors); }
+    auto update(std::span<Armor3d const> armors) -> bool override { return state.update(armors); }
 
     [[nodiscard]] auto is_converged() const -> bool override { return state.is_converged(); }
 

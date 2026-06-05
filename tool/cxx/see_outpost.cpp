@@ -44,7 +44,7 @@ auto main() -> int {
                 Eigen::Vector3d::UnitZ() };
         const auto pitch_rotation =
             Eigen::AngleAxisd { kPredictedOutpostArmorPitch, Eigen::Vector3d::UnitY() };
-        const auto armor = Armor3D {
+        const auto armor = Armor3d {
             .genre       = DeviceId::OUTPOST,
             .color       = ArmorColor::BLUE,
             .id          = 0,
@@ -111,7 +111,7 @@ auto main() -> int {
             armor_markers.markers.emplace_back(std::move(marker));
         }
 
-        const auto publish_bar = [&](const NeighborBarSolution::Result::Bar& bar, bool is_near) {
+        const auto publish_bar = [&](const Lightbar3d& bar, bool is_near) {
             auto marker = make_marker(
                 std::format("{}_{}", find_right ? "right" : "left", is_near ? "near" : "away"),
                 marker_id++);
@@ -120,8 +120,8 @@ auto main() -> int {
             marker.color.r = is_near ? 1.0 : 0.0;
             marker.color.b = is_near ? 0.0 : 1.0;
             marker.color.a = 1.0;
-            marker.points.emplace_back(make_point(bar.first));
-            marker.points.emplace_back(make_point(bar.second));
+            marker.points.emplace_back(make_point(bar.upper));
+            marker.points.emplace_back(make_point(bar.lower));
             bar_markers.markers.emplace_back(std::move(marker));
         };
 

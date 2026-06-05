@@ -46,21 +46,23 @@ auto NeighborBarSolution::solve() -> void {
         const auto z_step = 0.5 * kLightBarHeight;
 
         // 面对 Armor，右边的灯条
-        const auto rside = std::pair {
-            Point3d { center + (y_axis * y_step) + (z_axis * z_step) },
-            Point3d { center + (y_axis * y_step) - (z_axis * z_step) },
+        const auto rside = Lightbar3d {
+            .color = armor.color,
+            .upper = Point3d { center + (y_axis * y_step) + (z_axis * z_step) },
+            .lower = Point3d { center + (y_axis * y_step) - (z_axis * z_step) },
         };
         // 面对 Armor，左边的灯条
-        const auto lside = std::pair {
-            Point3d { center - (y_axis * y_step) + (z_axis * z_step) },
-            Point3d { center - (y_axis * y_step) - (z_axis * z_step) },
+        const auto lside = Lightbar3d {
+            .color = armor.color,
+            .upper = Point3d { center - (y_axis * y_step) + (z_axis * z_step) },
+            .lower = Point3d { center - (y_axis * y_step) - (z_axis * z_step) },
         };
 
         // 根据实际距离选取靠近的灯条
         const auto o = armor.translation.make<Eigen::Vector3d>();
 
-        const auto lside_dist = (lside.first.make<Eigen::Vector3d>() - o).norm();
-        const auto rside_dist = (rside.first.make<Eigen::Vector3d>() - o).norm();
+        const auto lside_dist = (lside.upper.make<Eigen::Vector3d>() - o).norm();
+        const auto rside_dist = (rside.upper.make<Eigen::Vector3d>() - o).norm();
 
         const auto& near = lside_dist < rside_dist ? lside : rside;
         const auto& away = lside_dist < rside_dist ? rside : lside;

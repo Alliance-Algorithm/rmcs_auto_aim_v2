@@ -16,11 +16,15 @@ struct CameraFeature {
 
     // World-to-camera extrinsic transform (ROS convention)
     //   p_camera = quaternion * p_world + translation
-    Orientation camera_orientation { Orientation::kIdentity() };
-    Translation camera_translation { Translation::kZero() };
+    Orientation orientation { Orientation::kIdentity() };
+    Translation translation { Translation::kZero() };
 
-    auto orientation() const -> cv::Mat;
-    auto translation() const -> cv::Vec3d;
+    auto from(std::array<double, 9>) -> void;
+    auto from(std::array<double, 5>) -> void;
+
+    auto cv_orientation() const -> cv::Mat;
+    auto cv_translation() const -> cv::Vec3d;
+
     auto intrinsic() const -> cv::Mat;
     auto distortion() const -> cv::Mat;
 };

@@ -24,7 +24,7 @@ struct OutpostEKFParameters {
     // vx, vy：前哨站旋转中心在世界坐标系下的线速度
     // z：参考装甲板(id 0)在世界坐标系下的 z 坐标
     // a：参考装甲板(id 0)的 yaw 角
-    static auto x(Armor3D const& armor) -> EKF::XVec {
+    static auto x(Armor3d const& armor) -> EKF::XVec {
         const auto [trans_x, trans_y, trans_z]      = armor.translation;
         const auto [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
         const auto orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
@@ -34,13 +34,13 @@ struct OutpostEKFParameters {
         const auto center_x = trans_x + kOutpostRadius * std::cos(yaw);
         const auto center_y = trans_y + kOutpostRadius * std::sin(yaw);
 
-        auto x = EKF::XVec {};
+        auto x = EKF::XVec { };
         x << center_x, 0.0, center_y, 0.0, trans_z, yaw;
         return x;
     }
 
     static auto P_initial_dig() -> EKF::PDig {
-        auto P_dig = EKF::PDig {};
+        auto P_dig = EKF::PDig { };
         P_dig << 1.0, 64.0, 1.0, 64.0, 1.0, 0.4;
         return P_dig;
     }
@@ -84,7 +84,7 @@ struct OutpostEKFParameters {
         const auto ypd = util::xyz2ypd(xyz);
         const auto yaw = armor_yaw(x, phase_offset);
 
-        auto z = EKF::ZVec {};
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], yaw;
         return z;
     }
@@ -110,7 +110,7 @@ struct OutpostEKFParameters {
     }
 
     static auto F(double dt) -> EKF::AMat {
-        auto F = EKF::AMat {};
+        auto F = EKF::AMat { };
         // clang-format off
         F <<
             1, dt,  0,  0,  0,  0,
@@ -138,7 +138,7 @@ struct OutpostEKFParameters {
         const auto b = dt * dt * dt / 2.0;
         const auto c = dt * dt;
 
-        auto Q = EKF::QMat {};
+        auto Q = EKF::QMat { };
         // clang-format off
         Q << a * v1, b * v1,       0,      0,       0,       0,
              b * v1, c * v1,       0,      0,       0,       0,
@@ -173,7 +173,7 @@ struct OutpostEKFParameters {
         const auto delta_yaw  = util::normalize_angle(ypr[0] - center_yaw);
         const auto distance   = ypd[2];
 
-        auto R_dig = EKF::RDig {};
+        auto R_dig = EKF::RDig { };
         // clang-format off
         R_dig << 4e-3, 4e-3, std::log(std::abs(delta_yaw) + 1.0) + 1.0,
             std::log(std::abs(distance) + 1.0) / 200.0 + 9e-2;
@@ -189,7 +189,7 @@ struct OutpostEKFParameters {
         const auto dx_da     = kOutpostRadius * sin_phase;
         const auto dy_da     = -kOutpostRadius * cos_phase;
 
-        auto H_armor_xyza = Eigen::Matrix<double, 4, 6> {};
+        auto H_armor_xyza = Eigen::Matrix<double, 4, 6> { };
         // clang-format off
         H_armor_xyza <<
             1, 0, 0, 0, 0, dx_da,

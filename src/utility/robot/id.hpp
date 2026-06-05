@@ -2,7 +2,6 @@
 #include <array>
 #include <cstdint>
 #include <generator>
-#include <string_view>
 #include <utility>
 
 namespace rmcs {
@@ -56,7 +55,7 @@ constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
     }
     return { };
 }
-constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
+constexpr auto to_string(DeviceId id) noexcept {
     switch (id) {
         // clang-format off
         case DeviceId::UNKNOWN:    return "UNKNOWN";
@@ -73,7 +72,7 @@ constexpr auto to_string(DeviceId id) noexcept -> std::string_view {
         case DeviceId::BASE:       return "BASE";
         // clang-format on
     }
-    return { };
+    return "UNREACHABLE";
 }
 constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
     return (data < id::details::id_underlyings.size())

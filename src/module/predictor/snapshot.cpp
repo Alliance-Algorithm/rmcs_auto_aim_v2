@@ -17,7 +17,7 @@ namespace {
             return { Eigen::Vector3d::Zero(), 0.0 };
         }
 
-        [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3D> override {
+        [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3d> override {
             return { };
         }
     };
@@ -48,7 +48,7 @@ auto Snapshot::kinematics() const -> Kinematics { return backend->kinematics_at(
 
 auto Snapshot::kinematics_at(TimePoint t) const -> Kinematics { return backend->kinematics_at(t); }
 
-auto Snapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3D> {
+auto Snapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
     return backend->predicted_armors(t);
 }
 

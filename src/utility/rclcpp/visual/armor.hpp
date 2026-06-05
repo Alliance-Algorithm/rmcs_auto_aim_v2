@@ -1,8 +1,11 @@
 #pragma once
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/visual/movable.hpp"
+#include "utility/robot/armor.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
+
+#include <span>
 
 namespace rmcs::util::visual {
 
@@ -34,6 +37,31 @@ public:
 private:
     auto impl_move(const Translation&, const Orientation&) noexcept -> void;
 
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
+};
+
+struct Armors {
+public:
+    struct Config {
+        RclcppNode& rclcpp;
+
+        std::string name;
+        std::string tf;
+    };
+
+    explicit Armors(Config) noexcept;
+
+    ~Armors() noexcept;
+
+    Armors(const Armors&)            = delete;
+    Armors& operator=(const Armors&) = delete;
+    Armors(Armors&&) noexcept;
+    Armors& operator=(Armors&&) noexcept;
+
+    auto update(std::span<const Armor3d> armors) noexcept -> void;
+
+private:
     struct Impl;
     std::unique_ptr<Impl> pimpl;
 };
