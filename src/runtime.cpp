@@ -174,6 +174,7 @@ auto main() -> int {
             visualization.draw_later(addition.detected_2d);
             visualization.draw_later(addition.predicted_near);
             visualization.draw_later(addition.predicted_away);
+            visualization.publish(addition.origin, "origin_armors");
 
             armors_3d = result;
             if (armors_3d.empty()) continue;
