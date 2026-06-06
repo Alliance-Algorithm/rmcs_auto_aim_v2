@@ -1,9 +1,10 @@
 #define OPENCV_DISABLE_EIGEN_TENSOR_SUPPORT
-
 #include "pnp_solution.hpp"
+
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/reprojection.hpp"
+#include "utility/robot/constant.hpp"
 
 #include <eigen3/Eigen/Geometry>
 #include <opencv2/calib3d.hpp>
@@ -180,16 +181,22 @@ auto RobustPnpSolution::solve() -> bool {
 
         const auto q_initial = result.armor3d.orientation.make<Eigen::Quaterniond>();
         const auto ypr       = eulers(q_initial, 2, 1, 0);
-        const auto yaw_start = ypr[0];
-        const auto pitch     = pitch_sign * std::abs(ypr[1]);
+
+        auto origin_yaw   = ypr[0];
+        auto origin_pitch = pitch_sign * std::abs(ypr[1]);
+        if (input.fixed_outpost_pitch && armor2d.genre == ArmorGenre::OUTPOST) {
+            origin_pitch = kPredictedOutpostArmorPitch;
+        }
+        if (input.fixed_normal_pitch && armor2d.genre != ArmorGenre::OUTPOST) {
+            origin_pitch = kPredictedOtherArmorPitch;
+        }
 
         const auto t_odom_armor  = result.armor3d.translation.make<Eigen::Vector3d>();
         const auto q_camera_odom = q_odom_camera.inverse();
 
         auto solution = ReprojectionSolution<4> { };
         auto evaluate = [&](double yaw) -> std::optional<double> {
-            const auto q_odom_armor =
-                Eigen::Quaterniond { euler_to_quaternion(yaw, pitch, 0.0) }.normalized();
+            const auto q_odom_armor = euler_to_quaternion(yaw, origin_pitch, 0.0).normalized();
 
             const auto q_camera_armor =
                 Eigen::Quaterniond { q_camera_odom * q_odom_armor }.normalized();
@@ -223,14 +230,15 @@ auto RobustPnpSolution::solve() -> bool {
             return solution.result.error;
         };
 
-        const auto range = deg2rad(kYawOptimizeRange / 2.0);
+        const auto area  = deg2rad(kYawOptimizeRange * 0.5);
         const auto step  = deg2rad(kYawOptimizeStep);
-        const auto steps = std::round((range * 2.0) / step);
+        const auto steps = std::round((area * 2.0) / step);
 
-        auto optimized_yaw   = yaw_start;
+        // 搜索最小重投影误差
+        auto optimized_yaw   = origin_yaw;
         auto optimized_error = std::numeric_limits<double>::max();
         for (int i : std::views::iota(0, steps + 1)) {
-            const auto yaw = (yaw_start - range) + i * step;
+            const auto yaw = (origin_yaw - area) + i * step;
 
             const auto error = evaluate(yaw);
             if (error && *error < optimized_error) {
@@ -238,11 +246,28 @@ auto RobustPnpSolution::solve() -> bool {
                 optimized_error = *error;
             }
         }
-        if (optimized_error != std::numeric_limits<double>::max()) {
-            result.armor3d.orientation =
-                Eigen::Quaterniond { euler_to_quaternion(optimized_yaw, pitch, 0.0) }.normalized();
-        }
-    }
 
+        // 三点二次插值优化后同步给结果
+        if (optimized_error != std::numeric_limits<double>::max()) {
+            const auto error_lower = evaluate(optimized_yaw - step);
+            const auto error_upper = evaluate(optimized_yaw + step);
+
+            if (error_lower && error_upper) {
+                const auto interpolation_denominator =
+                    *error_lower - 2.0 * optimized_error + *error_upper + 1e-9;
+                const auto interpolated_yaw = optimized_yaw
+                    + step * 0.5 * (*error_lower - *error_upper) / interpolation_denominator;
+
+                const auto interpolated_error = evaluate(interpolated_yaw);
+                if (interpolated_error && *interpolated_error < optimized_error) {
+                    optimized_yaw   = interpolated_yaw;
+                    optimized_error = *interpolated_error;
+                }
+            }
+        }
+
+        result.armor3d.orientation =
+            euler_to_quaternion(optimized_yaw, origin_pitch, 0.0).normalized();
+    }
     return true;
 }

@@ -42,7 +42,9 @@ struct RobustPnpSolution {
         CameraFeature feature;
         Armor2d armor2d;
 
-        double max_yaw_pitch = 60;
+        bool fixed_outpost_pitch = false;
+        bool fixed_normal_pitch  = false;
+        double max_yaw_pitch     = 60;
     } input;
 
     struct Result {

@@ -3,15 +3,14 @@
 
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
+#include "utility/math/reprojection.hpp"
 #include "utility/math/solve_pnp/outpost_distance_optimizer.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
-#include "utility/math/solve_pnp/yaw_optimizer.hpp"
 #include "utility/serializable.hpp"
 
 #include <algorithm>
 #include <iterator>
 
-#include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 
 using namespace rmcs::util;
@@ -21,17 +20,21 @@ namespace rmcs::kernel {
 
 struct PoseEstimator::Impl {
     struct Config : util::Serializable {
-        bool yaw_optimizer;
         bool distance_optimizer;
 
         double outpost_armor_thickness;
 
+        bool fixed_outpost_pitch;
+        bool fixed_normal_pitch;
+
         constexpr static std::tuple metas {
             // clang-format off
-            &Config::yaw_optimizer, "yaw_optimizer",
             &Config::distance_optimizer, "distance_optimizer",
 
-            &Config::outpost_armor_thickness, "outpost_armor_thickness"
+            &Config::outpost_armor_thickness, "outpost_armor_thickness",
+
+            &Config::fixed_outpost_pitch, "fixed_outpost_pitch",
+            &Config::fixed_normal_pitch, "fixed_normal_pitch"
             // clang-format on
         };
     };
@@ -42,7 +45,6 @@ struct PoseEstimator::Impl {
 
     RobustPnpSolution pnp_solution { };
     OutpostDistanceOptimizer outpost_optimizer { };
-    YawOptimizer yaw_optimizer { };
     AdjacencyLightbarFinder adjacency_finder { };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
@@ -54,6 +56,9 @@ struct PoseEstimator::Impl {
         outpost_optimizer.input.armor_thickness = config.outpost_armor_thickness;
         adjacency_finder.set_armor_thickness(config.outpost_armor_thickness);
 
+        pnp_solution.input.fixed_outpost_pitch = config.fixed_outpost_pitch;
+        pnp_solution.input.fixed_normal_pitch  = config.fixed_normal_pitch;
+
         return { };
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
@@ -61,7 +66,6 @@ struct PoseEstimator::Impl {
 
     auto sync_camera_feature() {
         pnp_solution.input.feature     = camera_feature;
-        yaw_optimizer.input.camera     = camera_feature;
         outpost_optimizer.input.camera = camera_feature;
         adjacency_finder.set_camera_feature(camera_feature);
     }
@@ -131,30 +135,12 @@ struct PoseEstimator::Impl {
     }
 
     auto solve_armor(const std::vector<Armor2d>& armors) {
-        const auto camera_orientation = camera_feature.orientation.make<Eigen::Quaterniond>();
-        const auto camera_translation = camera_feature.translation.make<Eigen::Vector3d>();
-
-        const auto q_odom_to_camera = camera_orientation.inverse();
-        // const auto center_yaw       = eulers(camera_orientation, 2, 1, 0)[0];
-
-        auto& input = yaw_optimizer.input;
-
-        input.camera.orientation = q_odom_to_camera;
-        input.camera.translation =
-            Eigen::Vector3d { -(q_odom_to_camera * camera_translation).eval() };
-
         auto result = std::vector<Armor3d> { };
         for (auto&& [index, armor] : armors | std::views::enumerate) {
-
-            // TODO: 清理掉就的 Yaw 优化代码，和配置中的开关
-            // const auto small = armor.shape == ArmorShape::SMALL;
-            // const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
 
             auto armor_3d = Armor3d { };
             armor_3d.id   = static_cast<int>(index);
 
-            // Robust PNP，内部利用 Odom 系下的 Pitch 朝向约束消解 IPPE 二义性，直接输出
-            // Odom 系结果。
             {
                 auto& input   = pnp_solution.input;
                 input.armor2d = armor;
@@ -168,16 +154,6 @@ struct PoseEstimator::Impl {
                 armor_3d.translation = result.armor3d.translation;
                 armor_3d.orientation = result.armor3d.orientation;
             }
-
-            // if (config.yaw_optimizer) { // yaw
-            //     input.armor_shape  = shape;
-            //     input.xyz_in_world = armor_3d.translation;
-            //     input.center_yaw   = center_yaw;
-            //     input.genre        = armor.genre;
-            //     std::ranges::copy(armor.corners(), input.detected_corners.begin());
-            //
-            //     armor_3d.orientation = yaw_optimizer.solve().orientation;
-            // }
 
             result.emplace_back(armor_3d);
         };
@@ -261,27 +237,35 @@ struct PoseEstimator::Impl {
                         cv::Scalar { color.b() * 127.5, color.g() * 127.5, color.r() * 127.5 },
                     };
                     const auto bars = std::array { near_bar, away_bar };
-                    for (std::size_t index = 0; index < bars.size(); ++index) {
-                        const auto& bar     = bars[index];
-                        auto segment_points = std::array<cv::Point3f, 2> { };
-                        for (std::size_t i = 0; i < segment_points.size(); ++i) {
-                            const auto point  = i == 0 ? bar.upper : bar.lower;
-                            const auto p      = ros2opencv_position(point.make<Eigen::Vector3d>());
-                            segment_points[i] = cv::Point3f(static_cast<float>(p[0]),
-                                static_cast<float>(p[1]), static_cast<float>(p[2]));
-                        }
+                    for (const auto& [bar, color] : std::views::zip(bars, draw_color)) {
+                        const auto upper_opencv =
+                            ros2opencv_position(bar.upper.make<Eigen::Vector3d>());
+                        const auto lower_opencv =
+                            ros2opencv_position(bar.lower.make<Eigen::Vector3d>());
 
-                        auto projected = std::vector<cv::Point2f> { };
-                        cv::projectPoints(segment_points, cv::Vec3d { 0.0, 0.0, 0.0 },
-                            cv::Vec3d { 0.0, 0.0, 0.0 }, camera_feature.intrinsic(),
-                            camera_feature.distortion(), projected);
-                        if (projected.size() != 2) continue;
+                        auto projection                = ReprojectionSolution<2> { };
+                        projection.input.camera        = camera_feature;
+                        projection.input.object_points = {
+                            cv::Point3f {
+                                static_cast<float>(upper_opencv[0]),
+                                static_cast<float>(upper_opencv[1]),
+                                static_cast<float>(upper_opencv[2]),
+                            },
+                            cv::Point3f {
+                                static_cast<float>(lower_opencv[0]),
+                                static_cast<float>(lower_opencv[1]),
+                                static_cast<float>(lower_opencv[2]),
+                            },
+                        };
+                        projection.input.image_points = { cv::Point2f { }, cv::Point2f { } };
+
+                        if (!projection.solve()) continue;
 
                         addition.detected_2d.push_back(Lightbar2d {
                             .color      = bar.color,
-                            .upper      = Point2d { projected[0] },
-                            .lower      = Point2d { projected[1] },
-                            .draw_color = draw_color[index],
+                            .upper      = Point2d { projection.result.projected_points[0] },
+                            .lower      = Point2d { projection.result.projected_points[1] },
+                            .draw_color = color,
                         });
                     }
                 }

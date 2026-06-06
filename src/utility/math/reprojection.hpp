@@ -5,12 +5,28 @@
 #include <array>
 #include <limits>
 #include <ranges>
-#include <vector>
+#include <span>
 
-#include <opencv2/calib3d.hpp>
 #include <opencv2/core/types.hpp>
 
 namespace rmcs {
+
+namespace details {
+
+    struct project_points {
+        bool success = false;
+        explicit project_points(std::span<const cv::Point3f> object_points,
+            const cv::Mat& intrinsic, const cv::Mat& distortion,
+            std::span<cv::Point2f> projected_points)
+            : success { impl(object_points, intrinsic, distortion, projected_points) } { };
+        explicit operator bool() const { return success; }
+
+    private:
+        static auto impl(std::span<const cv::Point3f> object_points, const cv::Mat& intrinsic,
+            const cv::Mat& distortion, std::span<cv::Point2f> projected_points) -> bool;
+    };
+
+}
 
 template <std::size_t N>
 struct ReprojectionSolution {
@@ -32,16 +48,9 @@ struct ReprojectionSolution {
         result.error      = std::numeric_limits<double>::max();
         result.mean_error = std::numeric_limits<double>::max();
 
-        const auto object_points =
-            std::vector<cv::Point3f> { input.object_points.begin(), input.object_points.end() };
-
-        auto projected_points = std::vector<cv::Point2f> { };
-        cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 }, cv::Vec3d { 0.0, 0.0, 0.0 },
-            input.camera.intrinsic(), input.camera.distortion(), projected_points);
-
-        if (projected_points.size() != N) return false;
-
-        std::ranges::copy(projected_points, result.projected_points.begin());
+        if (!details::project_points { input.object_points, input.camera.intrinsic(),
+                input.camera.distortion(), result.projected_points })
+            return false;
 
         result.error = 0.0;
         for (const auto& [projected, detected] :

@@ -80,10 +80,12 @@ pose_estimator:
   debug_draw: false
   debug_topic: false
 
-  yaw_optimizer: true
   distance_optimizer: true
 
   outpost_armor_thickness: 0.02
+
+  fixed_outpost_pitch: false
+  fixed_normal_pitch: false
 
 fire_control:
   initial_bullet_speed: 21.4 # m/s
