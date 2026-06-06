@@ -77,15 +77,12 @@ tracker:
   enemy_color: blue
 
 pose_estimator:
-  debug_draw: false
-  debug_topic: false
+  distance_optimizer: false
 
-  distance_optimizer: true
+  fixed_outpost_pitch: true
+  fixed_normal_pitch: false
 
   outpost_armor_thickness: 0.02
-
-  fixed_outpost_pitch: false
-  fixed_normal_pitch: false
 
 fire_control:
   initial_bullet_speed: 21.4 # m/s

@@ -109,13 +109,6 @@ struct PoseEstimator::Impl {
         result.lower  = into_odom_link(Transform { result.lower, identity }).translation;
         return result;
     }
-    auto into_odom_link(std::span<const Armor3d> armors) const {
-        auto result = std::vector<Armor3d> { };
-        for (const auto& armor : armors) {
-            result.emplace_back(into_odom_link(armor));
-        }
-        return result;
-    }
 
     auto into_camera_link(const Armor3d& armor) const {
         const auto camera_orientation = camera_feature.orientation.make<Eigen::Quaterniond>();
@@ -183,6 +176,9 @@ struct PoseEstimator::Impl {
             return armor3ds;
         }
 
+        /// @FIXME(creeper5820):
+        ///  1. 坐标系变换存在问题，导致 Pitch 随着观测角度的变化而变化
+        ///  2. 前哨站装甲板的 Yaw 在角度较大时，会出现剧烈的二义性翻转
         auto outpost_in_camera = into_camera_link(*outpost3d);
         if (auto result = adjacency_finder.find(image, *outpost2d, outpost_in_camera)) {
             { // 更新附加信息，供外部绘制或者发布调试 Topic
@@ -198,20 +194,22 @@ struct PoseEstimator::Impl {
             if (!result->found.empty()) {
                 const auto& lightbar = result->found[0];
 
-                auto& input   = outpost_optimizer.input;
-                input.initial = outpost_in_camera;
+                auto& input = outpost_optimizer.input;
 
+                input.initial     = outpost_in_camera;
                 input.armor       = *outpost2d;
                 input.upper_point = lightbar.upper;
                 input.lower_point = lightbar.lower;
-
-                input.is_right = lightbar.is_right;
-                input.is_upper = lightbar.is_upper;
+                input.is_right    = lightbar.is_right;
+                input.is_upper    = lightbar.is_upper;
 
                 if (outpost_optimizer.solve()) {
                     addition.origin.push_back(*outpost3d);
 
                     auto& result = outpost_optimizer.result;
+
+                    // 只优化距离，旋转保持原来的
+                    // result.armor.orientation = outpost_in_camera.orientation;
 
                     outpost_in_camera = result.armor;
                     *outpost3d        = into_odom_link(result.armor);
@@ -233,8 +231,8 @@ struct PoseEstimator::Impl {
 
                     const auto color      = ArmorVisualColor { lightbar.color };
                     const auto draw_color = std::array {
-                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 },
-                        cv::Scalar { color.b() * 127.5, color.g() * 127.5, color.r() * 127.5 },
+                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 } * 1.0,
+                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 } * 0.5,
                     };
                     const auto bars = std::array { near_bar, away_bar };
                     for (const auto& [bar, color] : std::views::zip(bars, draw_color)) {
@@ -243,7 +241,8 @@ struct PoseEstimator::Impl {
                         const auto lower_opencv =
                             ros2opencv_position(bar.lower.make<Eigen::Vector3d>());
 
-                        auto projection                = ReprojectionSolution<2> { };
+                        auto projection = ReprojectionSolution<2> { };
+
                         projection.input.camera        = camera_feature;
                         projection.input.object_points = {
                             cv::Point3f {
