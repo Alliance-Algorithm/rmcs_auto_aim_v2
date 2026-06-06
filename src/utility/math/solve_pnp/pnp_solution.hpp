@@ -4,6 +4,7 @@
 
 #include "utility/math/camera.hpp"
 #include "utility/math/linear.hpp"
+#include "utility/robot/armor.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
 
@@ -35,4 +36,20 @@ struct PnpSolution {
 
     auto solve() -> bool;
 };
+
+struct RobustPnpSolution {
+    struct Input {
+        CameraFeature feature;
+        Armor2d armor2d;
+
+        double max_yaw_pitch = 60;
+    } input;
+
+    struct Result {
+        Armor3d armor3d;
+    } result;
+
+    auto solve() -> bool;
+};
+
 }

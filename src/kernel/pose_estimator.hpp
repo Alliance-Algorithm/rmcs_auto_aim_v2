@@ -33,9 +33,6 @@ public:
     auto estimate_armor(const std::vector<Armor2d>&, Image&) const -> Armor3ds;
 
     auto addition() -> const Addition&;
-
-    auto into_odom_link(std::span<const Armor3d> armors) const -> Armor3ds;
-    auto into_odom_link(const Armor3d& armor) const -> Armor3d;
 };
 
 }

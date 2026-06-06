@@ -40,13 +40,10 @@ struct PoseEstimator::Impl {
 
     CameraFeature camera_feature;
 
-    PnpSolution pnp_solution { };
-    OutpostDistanceOptimizer outpost_distance_optimizer { };
+    RobustPnpSolution pnp_solution { };
+    OutpostDistanceOptimizer outpost_optimizer { };
     YawOptimizer yaw_optimizer { };
     AdjacencyLightbarFinder adjacency_finder { };
-
-    Eigen::Vector3d camera_translation { Eigen::Vector3d::Zero() };
-    Eigen::Quaterniond camera_orientation { Eigen::Quaterniond::Identity() };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> try {
         auto result = config.serialize(yaml);
@@ -54,7 +51,7 @@ struct PoseEstimator::Impl {
             return std::unexpected { result.error() };
         }
 
-        outpost_distance_optimizer.input.armor_thickness = config.outpost_armor_thickness;
+        outpost_optimizer.input.armor_thickness = config.outpost_armor_thickness;
         adjacency_finder.set_armor_thickness(config.outpost_armor_thickness);
 
         return { };
@@ -62,52 +59,52 @@ struct PoseEstimator::Impl {
         return std::unexpected { e.what() };
     }
 
+    auto sync_camera_feature() {
+        pnp_solution.input.feature     = camera_feature;
+        yaw_optimizer.input.camera     = camera_feature;
+        outpost_optimizer.input.camera = camera_feature;
+        adjacency_finder.set_camera_feature(camera_feature);
+    }
     auto configure_camera(std::array<double, 9> camera_matrix, std::array<double, 5> distort_coeff)
         -> void {
         camera_feature.from(camera_matrix);
         camera_feature.from(distort_coeff);
-
-        pnp_solution.input.camera               = camera_feature;
-        yaw_optimizer.input.camera              = camera_feature;
-        outpost_distance_optimizer.input.camera = camera_feature;
-        adjacency_finder.set_camera_feature(camera_feature);
+        sync_camera_feature();
+    }
+    auto update_camera_transform(const Transform& transform) {
+        camera_feature.translation = transform.translation;
+        camera_feature.orientation = transform.orientation;
+        sync_camera_feature();
     }
 
-    auto into_odom_link(const Translation& translation) {
-        auto result = translation;
+    auto into_odom_link(const Transform& origin) const {
+        const auto camera_orientation = camera_feature.orientation.make<Eigen::Quaterniond>();
+        const auto camera_translation = camera_feature.translation.make<Eigen::Vector3d>();
 
-        result = Eigen::Vector3d { camera_orientation * result.make<Eigen::Vector3d>()
-            + camera_translation };
+        auto result = origin;
 
+        result.orientation = Eigen::Quaterniond {
+            camera_orientation * result.orientation.make<Eigen::Quaterniond>(),
+        };
+        result.translation = Eigen::Vector3d {
+            camera_orientation * result.translation.make<Eigen::Vector3d>() + camera_translation,
+        };
         return result;
     }
-
     auto into_odom_link(const Armor3d& armor) const {
-        auto transformed = armor;
-
-        auto position = Eigen::Vector3d { };
-        transformed.translation.copy_to(position);
-        transformed.translation = camera_orientation * position + camera_translation;
-
-        auto quat = Eigen::Quaterniond { };
-        transformed.orientation.copy_to(quat);
-        transformed.orientation = camera_orientation * quat;
-
-        return transformed;
+        auto result        = armor;
+        auto transform     = into_odom_link(Transform { result.translation, result.orientation });
+        result.translation = transform.translation;
+        result.orientation = transform.orientation;
+        return result;
     }
     auto into_odom_link(const Lightbar3d& lightbar) const {
-        auto result = lightbar;
-
-        result.upper = Eigen::Vector3d {
-            camera_orientation * result.upper.make<Eigen::Vector3d>() + camera_translation,
-        };
-        result.lower = Eigen::Vector3d {
-            camera_orientation * result.lower.make<Eigen::Vector3d>() + camera_translation,
-        };
-
+        auto result   = lightbar;
+        auto identity = Orientation::kIdentity();
+        result.upper  = into_odom_link(Transform { result.upper, identity }).translation;
+        result.lower  = into_odom_link(Transform { result.lower, identity }).translation;
         return result;
     }
-
     auto into_odom_link(std::span<const Armor3d> armors) const {
         auto result = std::vector<Armor3d> { };
         for (const auto& armor : armors) {
@@ -117,6 +114,9 @@ struct PoseEstimator::Impl {
     }
 
     auto into_camera_link(const Armor3d& armor) const {
+        const auto camera_orientation = camera_feature.orientation.make<Eigen::Quaterniond>();
+        const auto camera_translation = camera_feature.translation.make<Eigen::Vector3d>();
+
         auto transformed = armor;
 
         auto position = Eigen::Vector3d { };
@@ -131,10 +131,11 @@ struct PoseEstimator::Impl {
     }
 
     auto solve_armor(const std::vector<Armor2d>& armors) {
+        const auto camera_orientation = camera_feature.orientation.make<Eigen::Quaterniond>();
+        const auto camera_translation = camera_feature.translation.make<Eigen::Vector3d>();
 
-        const auto q_camera_to_odom = camera_orientation;
-        const auto q_odom_to_camera = q_camera_to_odom.inverse();
-        const auto center_yaw       = eulers(q_camera_to_odom, 2, 1, 0)[0];
+        const auto q_odom_to_camera = camera_orientation.inverse();
+        // const auto center_yaw       = eulers(camera_orientation, 2, 1, 0)[0];
 
         auto& input = yaw_optimizer.input;
 
@@ -145,39 +146,38 @@ struct PoseEstimator::Impl {
         auto result = std::vector<Armor3d> { };
         for (auto&& [index, armor] : armors | std::views::enumerate) {
 
-            const auto small = armor.shape == ArmorShape::SMALL;
-            const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
+            // TODO: 清理掉就的 Yaw 优化代码，和配置中的开关
+            // const auto small = armor.shape == ArmorShape::SMALL;
+            // const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
 
             auto armor_3d = Armor3d { };
             armor_3d.id   = static_cast<int>(index);
 
-            { // pnp
-                auto& input       = pnp_solution.input;
-                input.armor_shape = shape;
-                input.genre       = armor.genre;
-                input.color       = armor_color2camp_color(armor.color);
-                std::ranges::copy(armor.corners(), input.armor_detection.begin());
+            // Robust PNP，内部利用 Odom 系下的 Pitch 朝向约束消解 IPPE 二义性，直接输出
+            // Odom 系结果。
+            {
+                auto& input   = pnp_solution.input;
+                input.armor2d = armor;
 
-                auto solved = pnp_solution.solve();
-                if (!solved) continue;
+                if (!pnp_solution.solve()) continue;
 
-                armor_3d.genre       = pnp_solution.result.genre;
-                armor_3d.color       = camp_color2armor_color(pnp_solution.result.color);
-                armor_3d.translation = pnp_solution.result.translation;
-                armor_3d.orientation = pnp_solution.result.orientation;
+                auto& result = pnp_solution.result;
+
+                armor_3d.genre       = result.armor3d.genre;
+                armor_3d.color       = result.armor3d.color;
+                armor_3d.translation = result.armor3d.translation;
+                armor_3d.orientation = result.armor3d.orientation;
             }
-            if (config.yaw_optimizer) { // yaw
-                input.armor_shape  = shape;
-                input.xyz_in_world = armor_3d.translation;
-                input.center_yaw   = center_yaw;
-                input.genre        = armor.genre;
-                std::ranges::copy(armor.corners(), input.detected_corners.begin());
 
-                armor_3d.orientation = yaw_optimizer.solve().orientation;
-            }
-            /// @FIXME:
-            ///  确认一下yaw_optimizer 内部的坐标系变换
-            armor_3d = into_odom_link(armor_3d);
+            // if (config.yaw_optimizer) { // yaw
+            //     input.armor_shape  = shape;
+            //     input.xyz_in_world = armor_3d.translation;
+            //     input.center_yaw   = center_yaw;
+            //     input.genre        = armor.genre;
+            //     std::ranges::copy(armor.corners(), input.detected_corners.begin());
+            //
+            //     armor_3d.orientation = yaw_optimizer.solve().orientation;
+            // }
 
             result.emplace_back(armor_3d);
         };
@@ -222,7 +222,7 @@ struct PoseEstimator::Impl {
             if (!result->found.empty()) {
                 const auto& lightbar = result->found[0];
 
-                auto& input   = outpost_distance_optimizer.input;
+                auto& input   = outpost_optimizer.input;
                 input.initial = outpost_in_camera;
 
                 input.armor       = *outpost2d;
@@ -232,10 +232,10 @@ struct PoseEstimator::Impl {
                 input.is_right = lightbar.is_right;
                 input.is_upper = lightbar.is_upper;
 
-                if (outpost_distance_optimizer.solve()) {
+                if (outpost_optimizer.solve()) {
                     addition.origin.push_back(*outpost3d);
 
-                    auto& result = outpost_distance_optimizer.result;
+                    auto& result = outpost_optimizer.result;
 
                     outpost_in_camera = result.armor;
                     *outpost3d        = into_odom_link(result.armor);
@@ -289,18 +289,6 @@ struct PoseEstimator::Impl {
         }
         return armor3ds;
     }
-
-    auto update_camera_transform(const Transform& transform) {
-        transform.translation.copy_to(camera_translation);
-        transform.orientation.copy_to(camera_orientation);
-
-        const auto q_odom_to_camera = camera_orientation.inverse();
-        camera_feature.orientation  = Orientation { q_odom_to_camera };
-        camera_feature.translation =
-            Translation { -(q_odom_to_camera * camera_translation).eval() };
-
-        adjacency_finder.set_camera_feature(camera_feature);
-    }
 };
 
 auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
@@ -326,13 +314,6 @@ auto PoseEstimator::addition() -> const Addition& { return pimpl->addition; }
 
 auto PoseEstimator::update_camera_transform(const Transform& transform) -> void {
     return pimpl->update_camera_transform(transform);
-}
-
-auto PoseEstimator::into_odom_link(std::span<const Armor3d> armors) const -> Armor3ds {
-    return pimpl->into_odom_link(armors);
-}
-auto PoseEstimator::into_odom_link(const Armor3d& armor) const -> Armor3d {
-    return pimpl->into_odom_link(armor);
 }
 
 PoseEstimator::PoseEstimator() noexcept

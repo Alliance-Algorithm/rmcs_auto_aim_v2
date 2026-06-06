@@ -99,3 +99,8 @@ auto YawOptimizer::solve() -> Output {
 
     return { Orientation { Eigen::Quaterniond(r_ac_ros).normalized() } };
 }
+
+auto ReprojectionOptimizer::solve() -> bool {
+    std::ignore = this;
+    return false;
+}
