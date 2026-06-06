@@ -24,8 +24,6 @@ public:
     ///   - Thread-safe: safe to call from multiple threads, but only one thread
     ///     should fetch at a time.
     auto fetch_image() noexcept -> ImageUnique;
-
-    static constexpr auto get_prefix() noexcept { return "capturer"; }
 };
 
 }

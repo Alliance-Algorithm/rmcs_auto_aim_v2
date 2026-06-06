@@ -28,6 +28,6 @@ public:
 
     auto set_priority_mode(PriorityMode const& mode) -> void;
 
-    auto update(std::span<Armor3D const> armors, TimePoint t) -> Output;
+    auto update(std::span<Armor3d const> armors, TimePoint t) -> Output;
 };
 }

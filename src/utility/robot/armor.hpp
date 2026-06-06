@@ -34,7 +34,7 @@ constexpr auto get_enum_name(ArmorShape shape) noexcept {
 using ArmorGenre = DeviceId;
 constexpr auto get_enum_name(ArmorGenre genre) noexcept { return rmcs::to_string(genre); }
 
-struct Armor2D {
+struct Armor2d {
     ArmorGenre genre;
     ArmorColor color;
     ArmorShape shape;
@@ -48,16 +48,17 @@ struct Armor2D {
 
     cv::Point2f center;
 
-    auto corners() const noexcept -> std::generator<const cv::Point2f&> {
+    auto corners() const -> std::generator<const cv::Point2f&> {
         co_yield tl;
         co_yield tr;
         co_yield br;
         co_yield bl;
     }
+    auto points() const { return std::vector { tl, tr, br, bl }; }
 };
-using Armor2Ds = std::vector<Armor2D>;
+using Armor2ds = std::vector<Armor2d>;
 
-struct Armor3D {
+struct Armor3d {
     ArmorGenre genre;
     ArmorColor color;
     int id;
@@ -65,7 +66,28 @@ struct Armor3D {
     Translation translation;
     Orientation orientation;
 };
-using Armor3Ds = std::vector<Armor3D>;
+using Armor3ds = std::vector<Armor3d>;
+
+/// @brief:
+/// 用于前哨站的邻侧灯条识别，附加两个标志位用于标识
+/// 灯条相对于装甲板的方位
+struct Lightbar2d {
+    ArmorColor color;
+    Point2d upper;
+    Point2d lower;
+    bool is_upper = false;
+    bool is_right = false;
+
+    std::optional<cv::Scalar> draw_color = std::nullopt;
+};
+using Lightbar2ds = std::vector<Lightbar2d>;
+
+struct Lightbar3d {
+    ArmorColor color;
+    Point3d upper;
+    Point3d lower;
+};
+using Lightbar3ds = std::vector<Lightbar3d>;
 
 struct ArmorVisualScale : public Scalar3d {
     using Scalar3d::Scalar3d;

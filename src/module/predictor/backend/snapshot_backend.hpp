@@ -21,7 +21,7 @@ struct ISnapshotBackend {
     virtual ~ISnapshotBackend() noexcept = default;
 
     [[nodiscard]] virtual auto kinematics_at(TimePoint t) const -> Snapshot::Kinematics    = 0;
-    [[nodiscard]] virtual auto predicted_armors(TimePoint t) const -> std::vector<Armor3D> = 0;
+    [[nodiscard]] virtual auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> = 0;
 
     auto time_stamp() const -> TimePoint { return stamp; }
 };

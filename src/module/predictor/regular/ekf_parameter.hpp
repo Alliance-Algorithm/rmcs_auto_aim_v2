@@ -33,7 +33,7 @@ struct EKFParameters {
     // r: 装甲板中心到旋转中心的半径
     // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
     // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
-    static auto x(Armor3D const& armor) -> EKF::XVec {
+    static auto x(Armor3d const& armor) -> EKF::XVec {
         const auto r = radius(armor.genre);
 
         const auto [trans_x, trans_y, trans_z]      = armor.translation;
@@ -50,7 +50,7 @@ struct EKFParameters {
     }
 
     static auto P_initial_dig(DeviceId const& device) -> EKF::PDig {
-        auto P_dig = EKF::PDig {};
+        auto P_dig = EKF::PDig { };
         if (device == DeviceId::BASE) {
             P_dig << 1, 64, 1, 64, 1, 64, 0.4, 100, 1e-4, 0, 0;
         } else {
@@ -72,7 +72,7 @@ struct EKFParameters {
     }
 
     static auto armor_num(DeviceId const& device) -> int {
-        auto num = int {};
+        auto num = int { };
         if (device == DeviceId::OUTPOST || device == DeviceId::BASE) num = 3;
         else num = 4;
         return num;
@@ -93,7 +93,7 @@ struct EKFParameters {
     }
 
     static auto F(double dt) -> EKF::AMat {
-        auto F = EKF::AMat {};
+        auto F = EKF::AMat { };
         // clang-format off
         F <<
             1, dt,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -124,7 +124,7 @@ struct EKFParameters {
 
         auto& v1 = acc_var;
         auto& v2 = angular_acc_var;
-        auto Q   = EKF::QMat {};
+        auto Q   = EKF::QMat { };
         // clang-format off
         Q<<
             a * v1, b * v1,      0,      0,      0,      0,      0,      0, 0, 0, 0,
@@ -193,7 +193,7 @@ struct EKFParameters {
         R_dig << 4e-3, 4e-3,std::log(std::abs(delta_yaw) + 1) + 1, std::log(std::abs(distance) + 1) / 200 + 9e-2;
         // clang-format on
 
-        auto R = EKF::RMat {};
+        auto R = EKF::RMat { };
         R      = R_dig.asDiagonal();
 
         return R;
@@ -219,7 +219,7 @@ struct EKFParameters {
 
         const auto dz_dh = (use_l_h) ? 1. : 0;
 
-        auto H_armor_xyza = Eigen::Matrix<double, 4, 11> {};
+        auto H_armor_xyza = Eigen::Matrix<double, 4, 11> { };
 
         // clang-format off
         H_armor_xyza<<

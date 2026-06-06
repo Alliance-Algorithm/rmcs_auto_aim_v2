@@ -1,16 +1,15 @@
 #include "visualization.hpp"
 
-#include <fstream>
-
-#include "module/debug/visualization/armor_visualizer.hpp"
 #include "module/debug/visualization/mpc_plan_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/image/image.details.hpp"
-#include "utility/logging/printer.hpp"
 #include "utility/math/conversion.hpp"
+#include "utility/rclcpp/visual/armor.hpp"
 #include "utility/rclcpp/visual/arrow.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/serializable.hpp"
+
+#include <unordered_map>
 
 using namespace rmcs::kernel;
 using namespace rmcs::util;
@@ -33,12 +32,9 @@ struct Visualization::Impl {
         util::string_t monitor_port = "5000";
         util::string_t stream_type  = "RTP_JEPG";
 
-        bool image_enabled            = true;
-        bool visible_armors_enabled   = true;
-        bool visible_robot_enabled    = true;
-        bool camera_pose_enabled      = true;
-        bool aiming_direction_enabled = true;
-        bool mpc_plan_enabled         = true;
+        bool enable_stream = true;
+        bool drawable      = true;
+        bool publishable   = true;
 
         static constexpr auto metas = std::tuple {
             // clang-format off
@@ -46,45 +42,36 @@ struct Visualization::Impl {
             &Config::monitor_host,            "monitor_host",
             &Config::monitor_port,            "monitor_port",
             &Config::stream_type,             "stream_type",
-            &Config::image_enabled,           "image_enabled",
-            &Config::visible_armors_enabled,  "visible_armors_enabled",
-            &Config::visible_robot_enabled,   "visible_robot_enabled",
-            &Config::camera_pose_enabled,     "camera_pose_enabled",
-            &Config::aiming_direction_enabled,"aiming_direction_enabled",
-            &Config::mpc_plan_enabled,        "mpc_plan_enabled",
+            &Config::enable_stream,           "enable_stream",
+            &Config::drawable,                "drawable",
+            &Config::publishable,             "publishable",
             // clang-format on
         };
     };
 
-    Config config {};
+    Config config { };
+    RclcppNode rclcpp { "visual" };
 
-    Printer log { "visual" };
-
-    std::unique_ptr<debug::StreamSession> session;
+    debug::StreamSession session;
     SessionConfig session_config;
 
-    std::unique_ptr<debug::ArmorVisualizer> armors_detect;
-    std::unique_ptr<debug::ArmorVisualizer> armors_group;
-    std::unique_ptr<debug::MpcPlanVisualizer> mpc_plan;
+    debug::MpcPlanVisualizer mpc_plan;
+
     std::unique_ptr<visual::Arrow> aiming_direction;
     std::unique_ptr<visual::Transform> camera_transform;
+    std::unordered_map<std::string, visual::Armors> armor_publishers;
 
     bool is_initialized  = false;
     bool size_determined = false;
 
-    // TODO: 可放在声明处构造
-    Impl() noexcept {
-        session       = std::make_unique<debug::StreamSession>();
-        armors_detect = std::make_unique<debug::ArmorVisualizer>();
-        armors_group  = std::make_unique<debug::ArmorVisualizer>();
-        mpc_plan      = std::make_unique<debug::MpcPlanVisualizer>();
-    }
+    std::vector<std::unique_ptr<IDrawable>> drawables;
 
-    auto initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept -> NormalResult {
+    auto initialize(const YAML::Node& yaml) noexcept -> NormalResult {
         auto result = config.serialize(yaml);
         if (!result.has_value()) {
             return std::unexpected { result.error() };
         }
+        rclcpp.set_pub_topic_prefix("/autoaim/");
 
         // 用 {} 区分初始化的部分
         session_config.target.host = config.monitor_host;
@@ -99,30 +86,35 @@ struct Visualization::Impl {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
 
-        armors_detect->initialize(visual_node);
-        armors_group->initialize(visual_node);
-        mpc_plan->initialize(visual_node);
+        mpc_plan.initialize(rclcpp);
         aiming_direction = std::make_unique<visual::Arrow>(visual::Arrow::Config {
-            .rclcpp = visual_node,
+            .rclcpp = rclcpp,
             .name   = "aiming_direction",
             .tf     = kOdomLink,
         });
         camera_transform = std::make_unique<visual::Transform>(visual::Transform::Config {
-            .rclcpp       = visual_node,
+            .rclcpp       = rclcpp,
             .topic        = "odom_to_camera_transform",
             .parent_frame = kOdomLink,
             .child_frame  = kCameraLink,
         });
 
         is_initialized = true;
-        return {};
+        return { };
     }
 
     auto initialized() const noexcept { return is_initialized; }
 
-    auto send_image(const Image& image) noexcept -> bool {
+    auto send_image(Image& image) noexcept -> bool {
         if (!is_initialized) return false;
-        if (!config.image_enabled) return false;
+        if (!config.enable_stream) return false;
+
+        if (config.drawable) {
+            auto canvas = Canvas { image };
+            for (const auto& drawable : drawables)
+                drawable->use(canvas);
+            drawables.clear();
+        }
 
         const auto& mat = image.details().mat;
 
@@ -130,52 +122,46 @@ struct Visualization::Impl {
             session_config.format.w = mat.cols;
             session_config.format.h = mat.rows;
 
-            auto open_result = session->open(session_config);
+            auto open_result = session.open(session_config);
             if (!open_result) {
-                log.error("Failed to open visualization session");
-                log.error("  e: {}", open_result.error());
+                rclcpp.error("Failed to open visualization session");
+                rclcpp.error("  e: {}", open_result.error());
                 return false;
             }
-            log.info("Visualization session is opened");
-
-            auto sdp_result = session->session_description_protocol();
-            if (!sdp_result) {
-                log.error("Failed to get description protocol");
-                log.error("  e: {}", sdp_result.error());
-                return false;
-            }
-
-            const auto output_location = "/tmp/auto_aim.sdp";
-            if (auto ofstream = std::ofstream { output_location }) {
-                ofstream << sdp_result.value();
-                log.info("Sdp has been written to: {}", output_location);
-            } else {
-                log.error("Failed to write sdp: {}", output_location);
-                return false;
-            }
+            rclcpp.info("Visualization session is opened");
 
             size_determined = true;
         }
-        if (!session->opened()) return false;
+        if (!session.opened()) return false;
 
-        return session->push_frame(mat);
+        return session.push_frame(mat);
     }
 
-    auto update_visible_armors(std::span<Armor3D const> armors) const -> bool {
-        if (!is_initialized) return false;
-        if (!config.visible_armors_enabled) return false;
-        return armors_detect->visualize(armors, "visible_armors", kOdomLink);
+    auto draw_later(std::unique_ptr<IDrawable> drawable) -> void {
+        if (is_initialized) {
+            drawables.emplace_back(std::move(drawable));
+        }
     }
 
-    auto update_visible_robot(std::span<Armor3D const> armors) const -> bool {
-        if (!is_initialized) return false;
-        if (!config.visible_robot_enabled) return false;
-        return armors_group->visualize(armors, "visible_robot", kOdomLink);
+    auto publish(std::span<const Armor3d> armors, const std::string& name) -> void {
+        if (!is_initialized) return;
+        if (!config.publishable) return;
+
+        auto iter = armor_publishers.find(name);
+        if (iter == armor_publishers.end()) {
+            auto config = visual::Armors::Config {
+                .rclcpp = rclcpp,
+                .name   = name,
+                .tf     = kOdomLink,
+            };
+            iter = armor_publishers.emplace(name, std::move(config)).first;
+        }
+        iter->second.update(armors);
     }
 
     auto update_aiming_direction(double yaw, double pitch) const -> void {
         if (!is_initialized) return;
-        if (!config.aiming_direction_enabled) return;
+        if (!config.publishable) return;
         aiming_direction->move(Translation::kZero(), euler_to_quaternion(yaw, pitch, 0.0));
         aiming_direction->update();
     }
@@ -183,36 +169,34 @@ struct Visualization::Impl {
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
         double yaw_acc, double pitch_acc) const -> void {
         if (!is_initialized) return;
-        if (!config.mpc_plan_enabled) return;
-        mpc_plan->publish_planned_yaw(yaw, yaw_rate, yaw_acc);
-        mpc_plan->publish_planned_pitch(pitch, pitch_rate, pitch_acc);
+        if (!config.publishable) return;
+        mpc_plan.publish_planned_yaw(yaw, yaw_rate, yaw_acc);
+        mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
     }
 
     auto update_camera_pose(const Orientation& orientation) const -> void {
         if (!is_initialized) return;
-        if (!config.camera_pose_enabled) return;
+        if (!config.publishable) return;
         camera_transform->move(Translation::kZero(), orientation);
         camera_transform->update();
     }
 };
 
-auto Visualization::initialize(const YAML::Node& yaml, RclcppNode& visual_node) noexcept
+auto Visualization::initialize(const YAML::Node& yaml) noexcept
     -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml, visual_node);
+    return pimpl->initialize(yaml);
 }
 
 auto Visualization::initialized() const noexcept -> bool { return pimpl->initialized(); }
 
-auto Visualization::update_image(const Image& image) noexcept -> bool {
-    return pimpl->send_image(image);
+auto Visualization::update_image(Image& image) -> bool { return pimpl->send_image(image); }
+
+auto Visualization::draw_later(std::unique_ptr<IDrawable> drawable) -> void {
+    pimpl->draw_later(std::move(drawable));
 }
 
-auto Visualization::update_visible_armors(std::span<Armor3D const> armors) const -> bool {
-    return pimpl->update_visible_armors(armors);
-}
-
-auto Visualization::update_visible_robot(std::span<Armor3D const> armors) const -> bool {
-    return pimpl->update_visible_robot(armors);
+auto Visualization::publish(std::span<const Armor3d> armors, const std::string& name) -> void {
+    return pimpl->publish(armors, name);
 }
 
 auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {

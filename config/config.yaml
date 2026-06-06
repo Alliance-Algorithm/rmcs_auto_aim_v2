@@ -1,8 +1,19 @@
 localhost_develop: false
-
 use_visualization: true
-use_painted_image: true
-use_painted_roi: true
+
+camera_matrix:
+  [
+    1.722231837421459e+03,
+    0.,
+    7.013056440882832e+02,
+    0.,
+    1.724876404292754e+03,
+    5.645821718351237e+02,
+    0.,
+    0.,
+    1.,
+  ]
+distort_coeff: [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 capturer:
   show_loss_framerate: false
@@ -66,23 +77,12 @@ tracker:
   enemy_color: blue
 
 pose_estimator:
-  yaw_optimizer: true
-  distance_optimizer: true
+  distance_optimizer: false
+
+  fixed_outpost_pitch: true
+  fixed_normal_pitch: false
+
   outpost_armor_thickness: 0.02
-  camera_matrix:
-    [
-      1.722231837421459e+03,
-      0,
-      7.013056440882832e+02,
-      0,
-      1.724876404292754e+03,
-      5.645821718351237e+02,
-      0,
-      0,
-      1,
-    ]
-  distort_coeff:
-    [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
 fire_control:
   initial_bullet_speed: 21.4 # m/s
@@ -114,15 +114,11 @@ fire_control:
     split_distance: 2 # m
 
 visualization:
+  publishable: true
+  drawable: true
+
+  enable_stream: true
   framerate: 60
-  # e.g. monitor_host: "192.168.3.125"
   monitor_host: "127.0.0.1"
   monitor_port: "5000"
   stream_type: "RTP_H264"
-
-  image_enabled: true
-  visible_armors_enabled: true
-  visible_robot_enabled: true
-  camera_pose_enabled: true
-  aiming_direction_enabled: true
-  mpc_plan_enabled: true

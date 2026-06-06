@@ -21,8 +21,8 @@ public:
 
     auto set_enemy_color(CampColor color) -> void;
 
-    auto filter_armors(std::span<Armor2D> armors) const -> std::vector<Armor2D>;
+    auto filter_armors(std::span<Armor2d> armors) const -> std::vector<Armor2d>;
 
-    auto decide(std::span<Armor3D const> armors, TimePoint t) -> tracker::Decider::Output;
+    auto decide(std::span<Armor3d const> armors, TimePoint t) -> tracker::Decider::Output;
 };
 }

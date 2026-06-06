@@ -87,10 +87,10 @@ auto assert_sync_infer_with_expected(const Image& image,
     auto detect_result = detector->sync_detect(image);
     auto infer_elapsed =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - infer_begin);
-    ASSERT_TRUE(detect_result.has_value())
+    ASSERT_FALSE(detect_result.empty())
         << error_head << model_name << " | detect failed";
 
-    const auto& armors = detect_result.value();
+    const auto& armors = detect_result;
 
     std::println();
     std::println("[ LOG      ] >>>>>>>> model: {}", model_name);
@@ -177,7 +177,7 @@ TEST(model, sync_infer_rejects_empty_image) {
     auto empty_image   = Image {};
     auto detect_result = detector->sync_detect(empty_image);
 
-    ASSERT_FALSE(detect_result.has_value());
+    ASSERT_TRUE(detect_result.empty());
 }
 
 TEST(model, sync_infer_rejects_invalid_roi) {
@@ -195,7 +195,7 @@ TEST(model, sync_infer_rejects_invalid_roi) {
     auto detector      = make_detector<TongJiYoloV5>(yaml);
     auto detect_result = detector->sync_detect(image);
 
-    ASSERT_FALSE(detect_result.has_value());
+    ASSERT_TRUE(detect_result.empty());
 }
 
 TEST(model, initialize_reports_unknown_model) {

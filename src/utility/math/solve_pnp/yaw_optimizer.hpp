@@ -4,11 +4,14 @@
 
 #include "utility/math/camera.hpp"
 #include "utility/math/linear.hpp"
+#include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 
 namespace rmcs::util {
 
 struct YawOptimizer {
+    /// @TODO:
+    ///  换成标准 Armor 类型
     struct Input {
         CameraFeature camera;
         std::array<Point3d, 4> armor_shape;
@@ -25,6 +28,20 @@ struct YawOptimizer {
     YawOptimizer() noexcept = default;
 
     auto solve() -> Output;
+};
+
+struct ReprojectionOptimizer {
+    struct Input {
+        CameraFeature camera;
+        Armor2d armor2d;
+        Armor3d armor3d;
+    } input;
+
+    struct Result {
+        Armor3d armor3d;
+    } result;
+
+    auto solve() -> bool;
 };
 
 } // namespace rmcs::util

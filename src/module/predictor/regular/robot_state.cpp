@@ -27,7 +27,7 @@ struct RegularRobotState::Impl {
     CampColor color { CampColor::UNKNOWN };
     int armor_num { 0 };
 
-    EKF ekf { EKF {} };
+    EKF ekf { EKF { } };
     TimePoint time_stamp;
 
     bool initialized { false };
@@ -43,7 +43,7 @@ struct RegularRobotState::Impl {
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
-    auto initialize(Armor3D const& armor, TimePoint t) -> void {
+    auto initialize(Armor3d const& armor, TimePoint t) -> void {
         device                = armor.genre;
         color                 = armor_color2camp_color(armor.color);
         armor_num             = EKFParameters::armor_num(armor.genre);
@@ -76,7 +76,7 @@ struct RegularRobotState::Impl {
         time_stamp = t;
     }
 
-    auto update(std::span<Armor3D const> armors) -> bool {
+    auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
 
         if (!initialized) {
@@ -118,8 +118,8 @@ struct RegularRobotState::Impl {
     }
 
 private:
-    auto decide_match(Armor3D const& armor) const -> MatchDecision {
-        if (!initialized || armor.genre != device) return {};
+    auto decide_match(Armor3d const& armor) const -> MatchDecision {
+        if (!initialized || armor.genre != device) return { };
 
         auto armors_xyza = calculate_armors(ekf.x);
 
@@ -154,7 +154,7 @@ private:
             min_error             = error;
         }
 
-        if (best_matched_armor_id == kUnknownMatchedArmorId) return {};
+        if (best_matched_armor_id == kUnknownMatchedArmorId) return { };
 
         return {
             .matched_armor_id = best_matched_armor_id,
@@ -163,8 +163,8 @@ private:
         };
     }
 
-    auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
-        auto best_match = std::optional<BestMatch> {};
+    auto select_best_match(std::span<Armor3d const> armors) const -> std::optional<BestMatch> {
+        auto best_match = std::optional<BestMatch> { };
         for (std::size_t observation_index = 0; observation_index < armors.size();
             ++observation_index) {
             auto decision = decide_match(armors[observation_index]);
@@ -177,7 +177,7 @@ private:
         return best_match;
     }
 
-    auto apply_match(std::span<Armor3D const> armors, BestMatch const& best_match) -> void {
+    auto apply_match(std::span<Armor3d const> armors, BestMatch const& best_match) -> void {
         auto const& armor    = armors[best_match.observation_index];
         auto const& decision = best_match.decision;
 
@@ -191,7 +191,7 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto z = EKF::ZVec {};
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
@@ -206,7 +206,7 @@ private:
     }
 
     auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> {};
+        auto armors = std::vector<Eigen::Vector4d> { };
         armors.reserve(armor_num);
         for (int i = 0; i < armor_num; ++i) {
             auto angle = EKFParameters::armor_yaw(device, x, i);
@@ -227,13 +227,13 @@ RegularRobotState::~RegularRobotState() noexcept                                
 RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept                    = default;
 auto RegularRobotState::operator=(RegularRobotState&&) noexcept -> RegularRobotState& = default;
 
-auto RegularRobotState::initialize(Armor3D const& armor, TimePoint t) -> void {
+auto RegularRobotState::initialize(Armor3d const& armor, TimePoint t) -> void {
     return pimpl->initialize(armor, t);
 }
 
 auto RegularRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 
-auto RegularRobotState::update(std::span<Armor3D const> armors) -> bool {
+auto RegularRobotState::update(std::span<Armor3d const> armors) -> bool {
     return pimpl->update(armors);
 }
 

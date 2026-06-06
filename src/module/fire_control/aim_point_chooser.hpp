@@ -29,8 +29,8 @@ public:
     auto initialize(Config const& config) noexcept -> void;
     auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
-    auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
-        double angular_velocity) -> std::optional<Armor3D>;
+    auto choose_armor(std::span<Armor3d const> armors, Eigen::Vector3d const& center_position,
+        double angular_velocity) -> std::optional<Armor3d>;
 };
 
 } // namespace rmcs::fire_control
