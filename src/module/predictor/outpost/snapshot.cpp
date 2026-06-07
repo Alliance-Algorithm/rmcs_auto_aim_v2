@@ -1,5 +1,5 @@
-#include "module/predictor/outpost/armor_layout.hpp"
 #include "module/predictor/snapshot.hpp"
+#include "module/predictor/outpost/armor_layout.hpp"
 #include "utility/robot/color.hpp"
 
 #include <algorithm>

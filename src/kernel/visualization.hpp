@@ -1,11 +1,13 @@
 #pragma once
 
 #include <expected>
+#include <span>
+#include <string>
 
 #include <yaml-cpp/yaml.h>
 
+#include "utility/image/drawable.hpp"
 #include "utility/image/image.hpp"
-#include "utility/rclcpp/node.hpp"
 #include "utility/robot/armor.hpp"
 
 namespace rmcs::kernel {
@@ -16,20 +18,11 @@ class Visualization {
 public:
     static constexpr auto get_prefix() noexcept { return "visualization"; }
 
-    auto operator<<(const Image& image) noexcept -> Visualization& {
-        return update_image(image), *this;
-    }
-
-    auto initialize(const YAML::Node& yaml, util::RclcppNode& visual_node) noexcept
-        -> std::expected<void, std::string>;
+    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
     auto initialized() const noexcept -> bool;
 
-    auto update_image(const Image& image) noexcept -> bool;
-
-    auto update_visible_armors(std::span<Armor3d const> armors) const -> bool;
-
-    auto update_visible_robot(std::span<Armor3d const> armors) const -> bool;
+    auto update_image(Image& image) -> bool;
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 
@@ -37,7 +30,32 @@ public:
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
         double yaw_acc, double pitch_acc) const -> void;
 
-    auto update_camera_pose(const Translation&, const Orientation&) const -> void;
+    auto update_camera_pose(const Translation& translation, const Orientation& orientation) const
+        -> void;
+
+    auto publish(const Armor3d& armor, const std::string& name) -> void {
+        publish(std::span<const Armor3d> { &armor, 1 }, name);
+    }
+    auto publish(std::span<const Armor3d> armors, const std::string& name) -> void;
+
+    template <drawable_trait T>
+    auto draw_later(const T& drawable) {
+        draw_later(std::make_unique<Drawable<T>>(drawable));
+    }
+    template <drawable_trait T>
+    auto draw_later(const std::optional<T>& drawable) {
+        if (drawable) {
+            draw_later(*drawable);
+        }
+    }
+    template <drawable_trait T>
+    auto draw_later(const std::vector<T>& items) {
+        for (const auto& item : items)
+            draw_later(std::make_unique<Drawable<T>>(item));
+    }
+
+private:
+    auto draw_later(std::unique_ptr<IDrawable>) -> void;
 };
 
 } // namespace rmcs::kernel

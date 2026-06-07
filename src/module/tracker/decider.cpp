@@ -68,7 +68,7 @@ struct Decider::Impl {
         std::erase_if(trackers, [&](const auto& item) {
             auto last_seen_it     = last_seen_times.find(item.first);
             auto cleanup_interval = get_cleanup_interval(item.first);
-            bool expired = last_seen_it == last_seen_times.end()
+            bool expired          = last_seen_it == last_seen_times.end()
                 || util::delta_time(t, last_seen_it->second) > cleanup_interval;
             if (expired) {
                 last_seen_times.erase(item.first);

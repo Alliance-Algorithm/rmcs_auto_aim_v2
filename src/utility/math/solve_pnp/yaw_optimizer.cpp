@@ -55,9 +55,9 @@ auto YawOptimizer::solve() -> Output {
     auto camera_intrinsic  = input.camera.intrinsic();
     auto camera_distortion = input.camera.distortion();
 
-    auto q_wc_ros = input.camera.camera_orientation.make<Eigen::Quaterniond>();
+    auto q_wc_ros = input.camera.orientation.make<Eigen::Quaterniond>();
     auto r_wc_ros = q_wc_ros.toRotationMatrix();
-    auto t_wc_ros = input.camera.camera_translation.make<Eigen::Vector3d>();
+    auto t_wc_ros = input.camera.translation.make<Eigen::Vector3d>();
     auto xyz_w    = input.xyz_in_world.make<Eigen::Vector3d>();
 
     auto armor_shape_ocv = std::vector<cv::Point3f> { };
@@ -98,4 +98,9 @@ auto YawOptimizer::solve() -> Output {
     auto r_ac_ros      = r_wc_ros * r_aw_best_ros;
 
     return { Orientation { Eigen::Quaterniond(r_ac_ros).normalized() } };
+}
+
+auto ReprojectionOptimizer::solve() -> bool {
+    std::ignore = this;
+    return false;
 }

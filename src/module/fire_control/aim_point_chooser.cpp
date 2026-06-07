@@ -34,7 +34,7 @@ struct AimPointChooser::Impl {
     };
 
     const double min_switch_improvement_angle { util::deg2rad(8.0) };
-    std::optional<int> last_chosen_armor_id {};
+    std::optional<int> last_chosen_armor_id { };
 
     auto initialize(AimPointChooser::Config const& external_config) noexcept -> void {
         config.coming_angle          = external_config.coming_angle;
@@ -62,7 +62,7 @@ struct AimPointChooser::Impl {
             };
         }
 
-        return {};
+        return { };
     }
 
     auto choose_armor(std::span<Armor3d const> armors, Eigen::Vector3d const& center_position,
@@ -81,7 +81,7 @@ struct AimPointChooser::Impl {
         auto candidate_evals = std::vector<CandidateEval>(armors.size());
 
         const auto yaw = [&](size_t index) {
-            auto orientation = Eigen::Quaterniond {};
+            auto orientation = Eigen::Quaterniond { };
             armors[index].orientation.copy_to(orientation);
             return util::eulers(orientation)[0];
         };
@@ -117,8 +117,8 @@ struct AimPointChooser::Impl {
             return std::tuple { preferred_incoming, abs_delta, last_penalty, id, index };
         };
 
-        auto best_idx = std::optional<size_t> {};
-        auto last_idx = std::optional<size_t> {};
+        auto best_idx = std::optional<size_t> { };
+        auto last_idx = std::optional<size_t> { };
 
         for (size_t index = 0; index < armors.size(); ++index) {
             if (last_chosen_armor_id.has_value() && (armors[index].id == *last_chosen_armor_id)) {

@@ -44,7 +44,7 @@ auto make_center_position(double yaw_deg) -> Eigen::Vector3d {
 }
 
 auto make_armor(double yaw_deg, int id, DeviceId genre) -> Armor3d {
-    auto armor  = Armor3d {};
+    auto armor  = Armor3d { };
     armor.genre = genre;
     armor.color = ArmorColor::BLUE;
     armor.id    = id;
@@ -59,7 +59,7 @@ auto make_armor(double yaw_deg, int id, DeviceId genre) -> Armor3d {
 
 auto make_armors(std::initializer_list<double> yaws_deg, DeviceId genre = DeviceId::SENTRY)
     -> std::vector<Armor3d> {
-    auto armors = std::vector<Armor3d> {};
+    auto armors = std::vector<Armor3d> { };
     armors.reserve(yaws_deg.size());
 
     auto index = 0;

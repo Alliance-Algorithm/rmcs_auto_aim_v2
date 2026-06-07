@@ -85,7 +85,7 @@ struct OutpostEKFParameters {
         const auto ypd = util::xyz2ypd(xyz);
         const auto yaw = armor_yaw(x, phase_offset);
 
-        auto z = EKF::ZVec {};
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], yaw;
         return z;
     }
@@ -111,7 +111,7 @@ struct OutpostEKFParameters {
     }
 
     static auto F(double dt) -> EKF::AMat {
-        auto F = EKF::AMat {};
+        auto F = EKF::AMat { };
         // clang-format off
         F <<
             1, dt,  0,  0,  0,  0,  0,
@@ -140,7 +140,7 @@ struct OutpostEKFParameters {
         const auto b = dt * dt * dt / 2.0;
         const auto c = dt * dt;
 
-        auto Q = EKF::QMat {};
+        auto Q = EKF::QMat { };
         // clang-format off
         Q << a * v1, b * v1,       0,      0,       0,       0,       0,
              b * v1, c * v1,       0,      0,       0,       0,       0,
@@ -167,7 +167,7 @@ struct OutpostEKFParameters {
         const auto delta_yaw  = util::normalize_angle(ypr[0] - center_yaw);
         const auto distance   = ypd[2];
 
-        auto R_dig = EKF::RDig {};
+        auto R_dig = EKF::RDig { };
         // clang-format off
         R_dig << 4e-3, 4e-3, std::log(std::abs(delta_yaw) + 1.0) + 1.0,
             std::log(std::abs(distance) + 1.0) / 200.0 + 9e-2;

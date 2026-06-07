@@ -13,11 +13,12 @@ class AdjacencyLightbarFinder {
     RMCS_PIMPL_DEFINITION(AdjacencyLightbarFinder)
 
 public:
-    struct Lightbar {
-        Point2d upper;
-        Point2d lower;
-        bool is_right { false };
-        bool is_upper { false };
+    struct Result {
+        Lightbar2ds found;
+        Point2d center;
+        Lightbar2ds predicted_near;
+        Lightbar2ds predicted_away;
+        std::vector<cv::Rect2i> areas;
     };
 
     auto set_camera_feature(const util::CameraFeature& feature) -> void;
@@ -25,12 +26,7 @@ public:
     auto set_armor_thickness(double thickness) -> void;
 
     auto find(const Image& image, const Armor2d& armor2d, const Armor3d& armor3d)
-        -> std::optional<Lightbar>;
-
-    // 绘制上一次 find 使用的 roi
-    auto draw_roi(Image& image) -> void;
-
-    auto draw_lightbar(Image& image) -> void;
+        -> std::optional<Result>;
 };
 
 }

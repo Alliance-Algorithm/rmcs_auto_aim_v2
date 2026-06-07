@@ -1,9 +1,9 @@
 #include "identifier.hpp"
 
+#include "module/identifier/adjacency_lightbar.hpp"
 #include "module/identifier/armor_detection.hpp"
-#include "module/identifier/green_light_locator.hpp"
+#include "module/identifier/green_light.hpp"
 
-#include "utility/image/green_light.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <optional>
@@ -16,95 +16,70 @@ using namespace rmcs::identifier;
 
 struct Identifier::Impl {
     ArmorDetection armor_detection;
-
-    GreenLightLocator green_light_locator;
-    std::optional<cv::Rect2i> outpost_green_light;
-    std::optional<cv::Rect2i> base_green_light;
-    std::optional<cv::Rect2i> outpost_green_light_roi;
-    std::optional<cv::Rect2i> base_green_light_roi;
+    GreenLightFinder green_light_finder;
+    AdjacencyLightbarFinder adjacency_finder;
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto armor_result = armor_detection.initialize(yaml);
         if (!armor_result.has_value()) return std::unexpected { armor_result.error() };
 
-        auto locator_result = green_light_locator.initialize(yaml["green_light_filter"]);
+        auto locator_result = green_light_finder.initialize(yaml["green_light_filter"]);
         if (!locator_result.has_value()) return std::unexpected { locator_result.error() };
 
         return { };
     }
 
     auto identify(const Image& src) noexcept -> std::optional<Identifier::Result> {
-        auto detected_armors = armor_detection.sync_detect(src);
-        if (!detected_armors.has_value()) return std::nullopt;
+        auto detected = armor_detection.sync_detect(src);
+        if (detected.empty()) return std::nullopt;
 
-        auto outpost_armors = std::vector<Armor2d> { };
-        auto base_armors    = std::vector<Armor2d> { };
-        outpost_armors.reserve(detected_armors->size());
-        base_armors.reserve(detected_armors->size());
-        for (const auto& armor : *detected_armors) {
-            if (armor.genre == DeviceId::OUTPOST) outpost_armors.push_back(armor);
-            if (armor.genre == DeviceId::BASE) base_armors.push_back(armor);
-        }
+        std::erase_if(
+            detected, [](const Armor2d& armor) { return armor.genre == ArmorGenre::UNKNOWN; });
 
-        const auto outpost_locator_result = green_light_locator.locate(src, outpost_armors);
-        const auto base_locator_result    = green_light_locator.locate(src, base_armors);
-
-        outpost_green_light     = outpost_locator_result.green_light;
-        base_green_light        = base_locator_result.green_light;
-        outpost_green_light_roi = outpost_locator_result.detect_roi;
-        base_green_light_roi    = base_locator_result.detect_roi;
-
-        auto filtered = Armor2ds { };
-        filtered.reserve(detected_armors->size());
-
-        if (!outpost_locator_result.green_light.has_value()
-            && !base_locator_result.green_light.has_value()) {
-            filtered = *detected_armors;
-        } else {
-            const auto outpost_threshold_y = outpost_locator_result.green_light.has_value()
-                ? std::optional {
-                      outpost_locator_result.green_light->y
-                      + outpost_locator_result.green_light->height,
-                  }
-                : std::nullopt;
-            const auto base_threshold_y = base_locator_result.green_light.has_value()
-                ? std::optional {
-                      base_locator_result.green_light->y + base_locator_result.green_light->height,
-                  }
-                : std::nullopt;
-
-            for (const auto& armor : *detected_armors) {
-                const auto threshold_y = armor.genre == DeviceId::OUTPOST ? outpost_threshold_y
-                    : armor.genre == DeviceId::BASE                       ? base_threshold_y
-                                                                          : std::nullopt;
-                // 过滤掉绿灯之上的对应装甲板（图像坐标系 y 向下为正）
-                if (threshold_y.has_value() && (armor.center.y < 1.0 * *threshold_y)) continue;
-
-                filtered.push_back(armor);
+        auto outpost = Armor2ds { };
+        auto base    = Armor2ds { };
+        for (const auto& armor : detected) {
+            if (armor.genre == DeviceId::OUTPOST) {
+                outpost.push_back(armor);
+            } else if (armor.genre == DeviceId::BASE) {
+                base.push_back(armor);
             }
         }
+        auto result = Result { };
 
-        return Result {
-            .armors = std::move(filtered),
-        };
-    }
+        /// @NOTE:
+        ///  - 前哨站与基地的绿灯不会同时亮起，所以我们只需要维护一个绿灯即可，
+        ///  再把高于绿灯高度的建筑类型的装甲板滤除即可，即使将前哨站误识别
+        ///  成了基地（这相当容易），也不影响滤除的效果
+        ///  - 这里分开识别是考虑到：如果同时识别到了真正的基地和前哨站，其外
+        ///  包矩形将会过于大
+        auto& finder = green_light_finder;
+        if (!base.empty()) {
+            if (auto ret = finder.locate(src, base); ret.green_light) {
+                result.green_light = ret.green_light;
+                result.areas.push_back(*ret.detect_roi);
+            }
+        }
+        if (!outpost.empty()) {
+            if (auto ret = finder.locate(src, outpost); ret.green_light) {
+                result.green_light = ret.green_light;
+                result.areas.push_back(*ret.detect_roi);
+            }
+        }
+        if (result.green_light) {
+            // 取左上角的点的 Y 值即可
+            const auto y = result.green_light->y;
 
-    auto draw_green_light(Image& image) noexcept -> void {
-        if (outpost_green_light.has_value()) {
-            util::draw_green_light(image, *outpost_green_light);
+            const auto pred = [=](const Armor2d& armor) {
+                const auto is_building =
+                    (armor.genre == ArmorGenre::OUTPOST) || (armor.genre == ArmorGenre::BASE);
+                return is_building && armor.bl.y < 1. * y;
+            };
+            std::erase_if(detected, pred);
         }
-        if (base_green_light.has_value()) {
-            util::draw_green_light(image, *base_green_light);
-        }
-    }
+        result.armors = detected;
 
-    auto draw_green_light_roi(Image& image) noexcept -> void {
-        if (outpost_green_light_roi.has_value()) {
-            util::draw_green_light_roi(image, *outpost_green_light_roi);
-        }
-        if (base_green_light_roi.has_value()) {
-            util::draw_green_light_roi(image, *base_green_light_roi);
-        }
+        return result;
     }
 };
 
@@ -114,14 +89,6 @@ auto Identifier::initialize(const YAML::Node& yaml) noexcept -> std::expected<vo
 
 auto Identifier::sync_identify(const Image& src) noexcept -> std::optional<Result> {
     return pimpl->identify(src);
-}
-
-auto Identifier::draw_green_light(Image& image) noexcept -> void {
-    return pimpl->draw_green_light(image);
-}
-
-auto Identifier::draw_green_light_roi(Image& image) noexcept -> void {
-    return pimpl->draw_green_light_roi(image);
 }
 
 Identifier::Identifier() noexcept

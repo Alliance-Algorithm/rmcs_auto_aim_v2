@@ -7,7 +7,6 @@
 #include "kernel/visualization.hpp"
 
 #include "utility/framerate.hpp"
-#include "utility/image/armor.hpp"
 #include "utility/image/text.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -46,13 +45,14 @@ auto main() -> int {
     auto visualization  = kernel::Visualization {};
 
     /// Configure
-    auto configs           = util::configs();
-    auto localhost_develop = configs["localhost_develop"].as<bool>();
-    auto use_visualization = configs["use_visualization"].as<bool>();
-    auto use_painted_image = configs["use_painted_image"].as<bool>();
-    auto use_painted_roi   = configs["use_painted_roi"].as<bool>();
+    const auto configs           = util::configs();
+    const auto localhost_develop = configs["localhost_develop"].as<bool>();
+    const auto use_visualization = configs["use_visualization"].as<bool>();
 
-    auto handle_result = [&](auto runtime_name, const auto& result) {
+    const auto camera_matrix = configs["camera_matrix"].as<std::array<double, 9>>();
+    const auto distort_coeff = configs["distort_coeff"].as<std::array<double, 5>>();
+
+    const auto handle_result = [&](auto runtime_name, const auto& result) {
         if (!result.has_value()) {
             node.error("Failed to init '{}'", runtime_name);
             node.error("  {}", result.error());
@@ -88,6 +88,7 @@ auto main() -> int {
         auto config = configs["pose_estimator"];
         auto result = pose_estimator.initialize(config);
         handle_result("pose_estimator", result);
+        pose_estimator.configure_camera(camera_matrix, distort_coeff);
     }
     // FIRE CONTROL
     {
@@ -98,7 +99,7 @@ auto main() -> int {
     // VISUALIZATION
     if (use_visualization) {
         auto config = configs["visualization"];
-        auto result = visualization.initialize(config, node);
+        auto result = visualization.initialize(config);
         handle_result("visualization", result);
     }
 
@@ -116,7 +117,8 @@ auto main() -> int {
         auto context = SystemContext::kIdentity();
         if (!localhost_develop) {
             using namespace std::chrono_literals;
-            auto closest = feishu.search(image->get_timestamp(), 50ms);
+            const auto timestamp = image->get_timestamp() - 6'250'000ns;
+            const auto closest   = feishu.search(timestamp, 50ms);
             if (!closest) continue;
 
             context = *closest;
@@ -129,53 +131,56 @@ auto main() -> int {
         }
 
         // 结束流程后发送串流帧
-        [[maybe_unused]] auto _ =
+        [[maybe_unused]] auto streamer =
             std::experimental::scope_exit { [&] { visualization.update_image(*image); } };
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2ds {};
+        auto armors_2d = Armor2ds { };
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) continue; // 一般不会推理出错喵~
 
+            for (const auto& roi : result->areas) {
+                visualization.draw_later(roi);
+            }
+            visualization.draw_later(result->armors);
+            visualization.draw_later(result->green_light);
+
             using namespace rmcs_msgs;
-            if (context.id == RobotId::UNKNOWN) {
-                // Keep configured enemy color when self color is unknown.
-            } else if (context.id.color() == RobotColor::RED)
-                tracker.set_enemy_color(CampColor::BLUE);
-            else if (context.id.color() == RobotColor::BLUE)
-                tracker.set_enemy_color(CampColor::RED);
+            if (context.id != RobotId::UNKNOWN) {
+                if (context.id.color() == RobotColor::RED) {
+                    tracker.set_enemy_color(CampColor::BLUE);
+                } else {
+                    tracker.set_enemy_color(CampColor::RED);
+                }
+            }
 
             tracker.set_invincible_armors(context.invincible_devices);
             armors_2d = tracker.filter_armors(result->armors);
+
+            if (armors_2d.empty()) continue;
         }
-        [[maybe_unused]] auto paint_image = std::experimental::scope_exit { [&] {
-            if (use_painted_roi) {
-                identifier.draw_green_light_roi(*image);
-            }
-            if (use_painted_image) {
-                identifier.draw_green_light(*image);
-                for (const auto& armor : armors_2d)
-                    util::draw(*image, armor);
-            }
-        } };
-        if (armors_2d.empty()) continue;
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3ds {};
+        auto armors_3d = Armor3ds { };
         {
             pose_estimator.update_camera_transform(context.camera_transform);
 
             auto result = pose_estimator.estimate_armor(armors_2d, *image);
-            pose_estimator.draw_debug(*image);
-            pose_estimator.publish_debug();
+
+            const auto& addition = pose_estimator.addition();
+            visualization.draw_later(addition.areas);
+            visualization.draw_later(addition.detected_2d);
+            visualization.draw_later(addition.predicted_near);
+            visualization.draw_later(addition.predicted_away);
+            visualization.publish(addition.origin, "origin_armors");
 
             armors_3d = result;
             if (armors_3d.empty()) continue;
 
-            visualization.update_visible_armors(armors_3d);
+            visualization.publish(armors_3d, "visible_armors");
         }
 
         /// 3. Apply Tracker
@@ -185,7 +190,7 @@ auto main() -> int {
         if (target.snapshot) {
             auto& snapshot = target.snapshot;
             auto armors    = snapshot->predicted_armors(Clock::now());
-            visualization.update_visible_robot(armors);
+            visualization.publish(armors, "visible_robot");
 
             const auto yaw = context.yaw;
             if (auto result = fire_control.solve(*snapshot, yaw)) {

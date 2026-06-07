@@ -1,6 +1,5 @@
 #pragma once
 #include "utility/robot/armor.hpp"
-#include <utility>
 
 namespace rmcs::util {
 
@@ -8,18 +7,16 @@ class NeighborBarSolution {
 public:
     struct Input {
         Armor3d source;
-        bool in_right = false;
+        bool in_right          = false;
         double armor_thickness = 0;
     } input;
 
     struct Result {
-        using Bar = std::pair<Point3d, Point3d>;
+        Lightbar3d upper_near;
+        Lightbar3d upper_away;
 
-        Bar upper_near;
-        Bar upper_away;
-
-        Bar lower_near;
-        Bar lower_away;
+        Lightbar3d lower_near;
+        Lightbar3d lower_away;
 
         Point3d center;
     } result;

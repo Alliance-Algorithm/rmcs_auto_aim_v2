@@ -8,6 +8,7 @@
 #include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
+#include "utility/robot/id.hpp"
 
 namespace rmcs::predictor {
 

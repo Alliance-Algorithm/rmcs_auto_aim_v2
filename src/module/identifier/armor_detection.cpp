@@ -282,16 +282,16 @@ struct ArmorDetection::Impl {
         return explain_infer_functor->explain(finished_request);
     }
 
-    auto sync_detect(const Image& image) noexcept -> std::optional<Armor2ds> {
+    auto sync_detect(const Image& image) noexcept -> Armor2ds {
         auto result = generate_openvino_request(image);
         if (!result.has_value()) {
-            return std::nullopt;
+            return { };
         }
 
         auto request = std::move(result.value());
         request.infer();
 
-        return explain_infer_result(request);
+        return explain_infer_result(request).value_or(Armor2ds { });
     }
 };
 
@@ -300,8 +300,7 @@ auto ArmorDetection::initialize(const YAML::Node& yaml) noexcept
     return pimpl->configure(yaml);
 }
 
-auto ArmorDetection::sync_detect(const Image& image) noexcept
-    -> std::optional<std::vector<Armor2d>> {
+auto ArmorDetection::sync_detect(const Image& image) noexcept -> std::vector<Armor2d> {
     return pimpl->sync_detect(image);
 }
 

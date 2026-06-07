@@ -18,13 +18,13 @@ class Identifier {
 public:
     struct Result {
         Armor2ds armors;
+        std::optional<cv::Rect2i> green_light;
+        std::vector<cv::Rect2i> areas;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
     auto sync_identify(const Image&) noexcept -> std::optional<Result>;
-    auto draw_green_light(Image&) noexcept -> void;
-    auto draw_green_light_roi(Image&) noexcept -> void;
 };
 
 }
