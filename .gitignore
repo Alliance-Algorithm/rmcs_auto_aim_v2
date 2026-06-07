@@ -62,5 +62,7 @@ $(ALLUSERSPROFILE)/
 # Local config override
 config/custom.yaml
 config/custom.yml
+config/unreal.yaml
+config/unreal.yml
 config/config.override.yaml
 config/config.override.yml
