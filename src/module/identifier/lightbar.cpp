@@ -15,11 +15,22 @@ auto LightbarFinder::solve() -> bool {
     if (input.source.empty()) return false;
     if (input.color == CampColor::UNKNOWN) return false;
 
-    auto channel = cv::Mat { };
-    cv::extractChannel(input.source, channel, input.color == CampColor::BLUE ? 0 : 2);
-
     auto mask = cv::Mat { };
-    cv::threshold(channel, mask, 180.0, 255.0, cv::THRESH_BINARY);
+    {
+        auto b_channel = cv::Mat { };
+        auto r_channel = cv::Mat { };
+        cv::extractChannel(input.source, b_channel, 0);
+        cv::extractChannel(input.source, r_channel, 2);
+
+        auto channel = cv::Mat { };
+        if (input.color == CampColor::BLUE) {
+            cv::subtract(b_channel, r_channel, channel);
+        } else {
+            cv::subtract(r_channel, b_channel, channel);
+        }
+
+        cv::threshold(channel, mask, 50.0, 255.0, cv::THRESH_BINARY);
+    }
 
     auto contours = std::vector<std::vector<cv::Point>> { };
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);

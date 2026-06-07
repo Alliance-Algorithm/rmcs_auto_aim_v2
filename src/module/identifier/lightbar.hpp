@@ -9,7 +9,7 @@ namespace rmcs {
 struct LightbarFinder {
     struct Input {
         cv::Mat source;
-        CampColor color { CampColor::UNKNOWN };
+        CampColor color;
         cv::Point2i predicted_upper;
         cv::Point2i predicted_lower;
     } input;
