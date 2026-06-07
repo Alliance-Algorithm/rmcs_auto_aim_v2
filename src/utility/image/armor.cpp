@@ -4,7 +4,7 @@
 
 namespace rmcs::util {
 
-auto draw(Image& canvas, const Armor2D& armor) noexcept -> void {
+auto draw(Image& canvas, const Armor2d& armor) noexcept -> void {
     auto& opencv_mat = canvas.details().mat;
 
     auto color = cv::Scalar { 0, 0, 0 };

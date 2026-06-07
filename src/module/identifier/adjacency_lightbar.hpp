@@ -24,7 +24,7 @@ public:
 
     auto set_armor_thickness(double thickness) -> void;
 
-    auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
+    auto find(const Image& image, const Armor2d& armor2d, const Armor3d& armor3d)
         -> std::optional<Lightbar>;
 
     // 绘制上一次 find 使用的 roi

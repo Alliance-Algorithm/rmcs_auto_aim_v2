@@ -161,13 +161,13 @@ struct Visualization::Impl {
         return session->push_frame(mat);
     }
 
-    auto update_visible_armors(std::span<Armor3D const> armors) const -> bool {
+    auto update_visible_armors(std::span<Armor3d const> armors) const -> bool {
         if (!is_initialized) return false;
         if (!config.visible_armors_enabled) return false;
         return armors_detect->visualize(armors, "visible_armors", kOdomLink);
     }
 
-    auto update_visible_robot(std::span<Armor3D const> armors) const -> bool {
+    auto update_visible_robot(std::span<Armor3d const> armors) const -> bool {
         if (!is_initialized) return false;
         if (!config.visible_robot_enabled) return false;
         return armors_group->visualize(armors, "visible_robot", kOdomLink);
@@ -208,11 +208,11 @@ auto Visualization::update_image(const Image& image) noexcept -> bool {
     return pimpl->send_image(image);
 }
 
-auto Visualization::update_visible_armors(std::span<Armor3D const> armors) const -> bool {
+auto Visualization::update_visible_armors(std::span<Armor3d const> armors) const -> bool {
     return pimpl->update_visible_armors(armors);
 }
 
-auto Visualization::update_visible_robot(std::span<Armor3D const> armors) const -> bool {
+auto Visualization::update_visible_robot(std::span<Armor3d const> armors) const -> bool {
     return pimpl->update_visible_robot(armors);
 }
 

@@ -27,7 +27,7 @@ auto make_unique_marker_id(rmcs::DeviceId device, int armor_index) -> int {
 }
 
 auto make_marker(std::string_view frame_id, std::string_view ns, int id, int type, int action,
-    rmcs::DeviceId device, rmcs::CampColor camp, const rmcs::Armor3D* armor,
+    rmcs::DeviceId device, rmcs::CampColor camp, const rmcs::Armor3d* armor,
     const rclcpp::Time& stamp) -> Marker {
     auto marker            = Marker { };
     marker.header.frame_id = frame_id;
@@ -61,7 +61,7 @@ struct ArmorVisualizer::Impl final {
         node = std::ref(visual_node);
     }
 
-    auto visualize(std::span<Armor3D const> armors, std::string const& name,
+    auto visualize(std::span<Armor3d const> armors, std::string const& name,
         std::string const& link_name) -> bool {
         if (!node.has_value()) {
             return false;
@@ -126,7 +126,7 @@ auto ArmorVisualizer::initialize(util::RclcppNode& visual_node) noexcept -> void
     return pimpl->initialize(visual_node);
 }
 
-auto ArmorVisualizer::visualize(std::span<Armor3D const> armors, std::string const& name,
+auto ArmorVisualizer::visualize(std::span<Armor3d const> armors, std::string const& name,
     std::string const& link_name) -> bool {
     return pimpl->visualize(armors, name, link_name);
 }

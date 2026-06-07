@@ -39,7 +39,7 @@ public:
     auto kinematics_at(TimePoint t) const -> Kinematics;
 
     auto predicted_armors() const { return predicted_armors(Clock::now()); }
-    auto predicted_armors(TimePoint t) const -> std::vector<Armor3D>;
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d>;
 
 private:
     std::unique_ptr<ISnapshotBackend> backend;

@@ -24,7 +24,7 @@ public:
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto locate(const Image&, std::span<const Armor2D>) noexcept -> Result;
+    auto locate(const Image&, std::span<const Armor2d>) noexcept -> Result;
 };
 
 }

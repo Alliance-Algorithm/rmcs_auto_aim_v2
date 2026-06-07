@@ -16,7 +16,7 @@ struct GreenLightLocator::Impl {
         return green_light_detection.initialize(yaml);
     }
 
-    auto locate(const Image& image, std::span<const Armor2D> armors) noexcept
+    auto locate(const Image& image, std::span<const Armor2d> armors) noexcept
         -> GreenLightLocator::Result {
         auto result = GreenLightLocator::Result {
             .detect_roi  = std::nullopt,
@@ -33,7 +33,7 @@ struct GreenLightLocator::Impl {
     }
 
 private:
-    static auto compute_detect_roi(const Image& image, std::span<const Armor2D> armors)
+    static auto compute_detect_roi(const Image& image, std::span<const Armor2d> armors)
         -> std::optional<cv::Rect2i> {
         constexpr auto kExpandScale = 4.0;
 
@@ -97,7 +97,7 @@ auto GreenLightLocator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto GreenLightLocator::locate(const Image& image, std::span<const Armor2D> armors) noexcept
+auto GreenLightLocator::locate(const Image& image, std::span<const Armor2d> armors) noexcept
     -> Result {
     return pimpl->locate(image, armors);
 }

@@ -25,7 +25,7 @@ struct OutpostEKFParameters {
     // z：参考装甲板(id 0)在世界坐标系下的 z 坐标
     // a：参考装甲板(id 0)的 yaw 角
     // w：参考装甲板(id 0)的角速度
-    static auto x(Armor3D const& armor) -> EKF::XVec {
+    static auto x(Armor3d const& armor) -> EKF::XVec {
         const auto [trans_x, trans_y, trans_z]      = armor.translation;
         const auto [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
         const auto orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };

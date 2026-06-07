@@ -13,8 +13,8 @@
 namespace rmcs::predictor {
 
 namespace {
-    auto make_armor(DeviceId device, CampColor color, int id) -> Armor3D {
-        auto armor  = Armor3D {};
+    auto make_armor(DeviceId device, CampColor color, int id) -> Armor3d {
+        auto armor  = Armor3d {};
         armor.genre = device;
         armor.color = camp_color2armor_color(color);
         armor.id    = id;
@@ -32,10 +32,10 @@ namespace {
             return kinematics_of(predict_state_at(t));
         }
 
-        [[nodiscard]] auto predicted_armors(TimePoint t) const -> std::vector<Armor3D> override {
+        [[nodiscard]] auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> override {
             auto const predicted_x = predict_state_at(t);
 
-            auto armors = std::vector<Armor3D> {};
+            auto armors = std::vector<Armor3d> {};
             armors.reserve(std::clamp(armor_num, 0, OutpostEKFParameters::kOutpostArmorCount));
 
             for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {

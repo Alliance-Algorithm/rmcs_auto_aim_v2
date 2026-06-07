@@ -3,7 +3,6 @@
 #include <initializer_list>
 #include <memory>
 #include <optional>
-#include <random>
 #include <span>
 #include <string>
 #include <vector>
@@ -14,7 +13,7 @@
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "utility/math/angle.hpp"
 
-using rmcs::Armor3D;
+using rmcs::Armor3d;
 using rmcs::ArmorColor;
 using rmcs::DeviceId;
 using rmcs::Orientation;
@@ -44,8 +43,8 @@ auto make_center_position(double yaw_deg) -> Eigen::Vector3d {
     return { std::cos(yaw_rad), std::sin(yaw_rad), 0.0 };
 }
 
-auto make_armor(double yaw_deg, int id, DeviceId genre) -> Armor3D {
-    auto armor  = Armor3D {};
+auto make_armor(double yaw_deg, int id, DeviceId genre) -> Armor3d {
+    auto armor  = Armor3d {};
     armor.genre = genre;
     armor.color = ArmorColor::BLUE;
     armor.id    = id;
@@ -58,9 +57,9 @@ auto make_armor(double yaw_deg, int id, DeviceId genre) -> Armor3D {
     return armor;
 }
 
-auto make_armors(std::initializer_list<double> yaws_deg,
-    DeviceId genre = DeviceId::SENTRY) -> std::vector<Armor3D> {
-    auto armors = std::vector<Armor3D> {};
+auto make_armors(std::initializer_list<double> yaws_deg, DeviceId genre = DeviceId::SENTRY)
+    -> std::vector<Armor3d> {
+    auto armors = std::vector<Armor3d> {};
     armors.reserve(yaws_deg.size());
 
     auto index = 0;
@@ -71,7 +70,7 @@ auto make_armors(std::initializer_list<double> yaws_deg,
     return armors;
 }
 
-auto choose_id(AimPointChooser& chooser, std::span<Armor3D const> armors, double center_yaw_deg,
+auto choose_id(AimPointChooser& chooser, std::span<Armor3d const> armors, double center_yaw_deg,
     double angular_velocity) -> std::optional<int> {
     auto const center = make_center_position(center_yaw_deg);
     auto const chosen = chooser.choose_armor(armors, center, angular_velocity);
@@ -79,7 +78,7 @@ auto choose_id(AimPointChooser& chooser, std::span<Armor3D const> armors, double
     return chosen->id;
 }
 
-auto choose_once(std::span<Armor3D const> armors, double center_yaw_deg, double angular_velocity)
+auto choose_once(std::span<Armor3d const> armors, double center_yaw_deg, double angular_velocity)
     -> std::optional<int> {
     auto chooser = make_chooser();
     return choose_id(*chooser, armors, center_yaw_deg, angular_velocity);
@@ -94,9 +93,8 @@ TEST(AimPointChooser, SingleArmorHighSpeedScanBySpinDirection) {
         for (auto const speed : std::array { 2.0, kFastPositive, -2.0, kFastNegative }) {
             auto const in_coming_window  = std::abs(angle_deg) <= 60;
             auto const in_leaving_window = (speed > 0.0) ? (angle_deg <= 20) : (angle_deg >= -20);
-            auto const expected = (in_coming_window && in_leaving_window)
-                ? std::optional<int> { 0 }
-                : std::nullopt;
+            auto const expected =
+                (in_coming_window && in_leaving_window) ? std::optional<int> { 0 } : std::nullopt;
 
             auto const actual = choose_once(armors, 0.0, speed);
 

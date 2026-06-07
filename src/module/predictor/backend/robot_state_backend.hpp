@@ -17,10 +17,10 @@ class IRobotStateBackend {
 public:
     virtual ~IRobotStateBackend() noexcept = default;
 
-    virtual auto initialize(Armor3D const& armor, TimePoint t) -> void = 0;
+    virtual auto initialize(Armor3d const& armor, TimePoint t) -> void = 0;
     virtual auto predict(TimePoint t) -> void                          = 0;
 
-    virtual auto update(std::span<Armor3D const> armors) -> bool = 0;
+    virtual auto update(std::span<Armor3d const> armors) -> bool = 0;
 
     [[nodiscard]] virtual auto is_converged() const -> bool     = 0;
     [[nodiscard]] virtual auto get_snapshot() const -> Snapshot = 0;

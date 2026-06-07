@@ -27,9 +27,9 @@ public:
 
     auto update_image(const Image& image) noexcept -> bool;
 
-    auto update_visible_armors(std::span<Armor3D const> armors) const -> bool;
+    auto update_visible_armors(std::span<Armor3d const> armors) const -> bool;
 
-    auto update_visible_robot(std::span<Armor3D const> armors) const -> bool;
+    auto update_visible_robot(std::span<Armor3d const> armors) const -> bool;
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 

@@ -33,7 +33,7 @@ struct EKFParameters {
     // r: 装甲板中心到旋转中心的半径
     // l: 连续两次观测到的半径差 r2 - r1，用于描述装甲板切换时的半径变化
     // h: 连续两次观测到的高度差 z2 - z1，反映不同装甲板之间的竖直偏移
-    static auto x(Armor3D const& armor) -> EKF::XVec {
+    static auto x(Armor3d const& armor) -> EKF::XVec {
         const auto r = radius(armor.genre);
 
         const auto [trans_x, trans_y, trans_z]      = armor.translation;

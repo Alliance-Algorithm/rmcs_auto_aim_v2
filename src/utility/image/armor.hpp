@@ -4,6 +4,6 @@
 
 namespace rmcs::util {
 
-auto draw(Image&, const Armor2D&) noexcept -> void;
+auto draw(Image&, const Armor2d&) noexcept -> void;
 
 }

@@ -13,17 +13,17 @@ struct RobotState::Impl {
         return make_robot_state_backend(kind, stamp);
     }
 
-    auto reset_backend(Armor3D const& armor, TimePoint stamp) -> void {
+    auto reset_backend(Armor3d const& armor, TimePoint stamp) -> void {
         backend            = make_backend(armor.genre, stamp);
         pending_time_stamp = stamp;
     }
 
-    auto ensure_backend(Armor3D const& armor) -> void {
+    auto ensure_backend(Armor3d const& armor) -> void {
         if (backend) return;
         backend = make_backend(armor.genre, pending_time_stamp);
     }
 
-    auto initialize(Armor3D const& armor, TimePoint t) -> void {
+    auto initialize(Armor3d const& armor, TimePoint t) -> void {
         reset_backend(armor, t);
         backend->initialize(armor, t);
     }
@@ -33,7 +33,7 @@ struct RobotState::Impl {
         if (backend) backend->predict(t);
     }
 
-    auto update(std::span<Armor3D const> armors) -> bool {
+    auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
         ensure_backend(armors.front());
         return backend ? backend->update(armors) : false;
@@ -52,13 +52,13 @@ RobotState::RobotState() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 RobotState::~RobotState() noexcept = default;
 
-auto RobotState::initialize(rmcs::Armor3D const& armor, TimePoint t) -> void {
+auto RobotState::initialize(rmcs::Armor3d const& armor, TimePoint t) -> void {
     return pimpl->initialize(armor, t);
 }
 
 auto RobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 
-auto RobotState::update(std::span<Armor3D const> armors) -> bool { return pimpl->update(armors); }
+auto RobotState::update(std::span<Armor3d const> armors) -> bool { return pimpl->update(armors); }
 
 auto RobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 

@@ -26,8 +26,8 @@ struct PoseEstimator::Impl {
     static constexpr auto kCameraLink = "camera_link";
 
     struct DebugState {
-        std::optional<Armor3D> pre_optimized_outpost;
-        std::optional<Armor3D> optimized_outpost;
+        std::optional<Armor3d> pre_optimized_outpost;
+        std::optional<Armor3d> optimized_outpost;
         bool has_detected_lightbar { false };
         bool has_candidate_roi { false };
         bool optimized_bar_is_right { false };
@@ -121,7 +121,7 @@ struct PoseEstimator::Impl {
         return std::unexpected { e.what() };
     }
 
-    auto solve_armor(const std::vector<Armor2D>& armors) {
+    auto solve_armor(const std::vector<Armor2d>& armors) {
 
         const auto q_camera_to_odom = camera_orientation;
         const auto q_odom_to_camera = q_camera_to_odom.inverse();
@@ -133,13 +133,13 @@ struct PoseEstimator::Impl {
         input.camera.camera_translation =
             Eigen::Vector3d { -(q_odom_to_camera * camera_translation).eval() };
 
-        auto result = std::vector<Armor3D> {};
+        auto result = std::vector<Armor3d> {};
         for (auto&& [index, armor] : armors | std::views::enumerate) {
 
             const auto small = armor.shape == ArmorShape::SMALL;
             const auto shape = small ? kSmallArmorShapeOpenCV : kLargeArmorShapeOpenCV;
 
-            auto armor_3d = Armor3D {};
+            auto armor_3d = Armor3d {};
             armor_3d.id   = static_cast<int>(index);
 
             { // pnp
@@ -173,15 +173,15 @@ struct PoseEstimator::Impl {
         };
         return result;
     }
-    auto solve_armor(const std::vector<Armor2D>& armor2ds, Image& image) {
+    auto solve_armor(const std::vector<Armor2d>& armor2ds, Image& image) {
         auto armor3ds = solve_armor(armor2ds);
         debug_state.clear();
 
         // 前哨站专属优化
         auto outpost2d = std::ranges::find_if(
-            armor2ds, [](const Armor2D& armor) { return armor.genre == DeviceId::OUTPOST; });
+            armor2ds, [](const Armor2d& armor) { return armor.genre == DeviceId::OUTPOST; });
         auto outpost3d = std::ranges::find_if(
-            armor3ds, [](const Armor3D& armor) { return armor.genre == DeviceId::OUTPOST; });
+            armor3ds, [](const Armor3d& armor) { return armor.genre == DeviceId::OUTPOST; });
 
         if (outpost3d != armor3ds.end() && outpost2d != armor2ds.end()) {
             auto camera_frame_outpost = into_camera_link(*outpost3d);
@@ -230,7 +230,7 @@ struct PoseEstimator::Impl {
         adjacency_finder.set_camera_feature(camera_feature);
     }
 
-    auto into_odom_link(const Armor3D& armor) const -> Armor3D {
+    auto into_odom_link(const Armor3d& armor) const -> Armor3d {
         auto transformed = armor;
 
         auto position = Eigen::Vector3d {};
@@ -244,15 +244,15 @@ struct PoseEstimator::Impl {
         return transformed;
     }
 
-    auto into_odom_link(std::span<const Armor3D> armors) const {
-        auto result = std::vector<Armor3D> {};
+    auto into_odom_link(std::span<const Armor3d> armors) const {
+        auto result = std::vector<Armor3d> {};
         for (const auto& armor : armors) {
             result.emplace_back(into_odom_link(armor));
         }
         return result;
     }
 
-    auto into_camera_link(const Armor3D& armor) const -> Armor3D {
+    auto into_camera_link(const Armor3d& armor) const -> Armor3d {
         auto transformed = armor;
 
         auto position = Eigen::Vector3d {};
@@ -355,13 +355,13 @@ auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto PoseEstimator::estimate_armor(const std::vector<Armor2D>& armors) const
-    -> std::vector<Armor3D> {
+auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors) const
+    -> std::vector<Armor3d> {
     return pimpl->solve_armor(armors);
 }
 
-auto PoseEstimator::estimate_armor(const std::vector<Armor2D>& armors, Image& image) const
-    -> std::vector<Armor3D> {
+auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors, Image& image) const
+    -> std::vector<Armor3d> {
     return pimpl->solve_armor(armors, image);
 }
 
@@ -369,10 +369,10 @@ auto PoseEstimator::update_camera_transform(const Transform& transform) -> void 
     return pimpl->update_camera_transform(transform);
 }
 
-auto PoseEstimator::into_odom_link(std::span<const Armor3D> armors) const -> std::vector<Armor3D> {
+auto PoseEstimator::into_odom_link(std::span<const Armor3d> armors) const -> std::vector<Armor3d> {
     return pimpl->into_odom_link(armors);
 }
-auto PoseEstimator::into_odom_link(const Armor3D& armor) const -> Armor3D {
+auto PoseEstimator::into_odom_link(const Armor3d& armor) const -> Armor3d {
     return pimpl->into_odom_link(armor);
 }
 

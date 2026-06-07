@@ -15,11 +15,11 @@ public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
     auto update_camera_transform(const Transform& transform) -> void;
 
-    auto estimate_armor(const std::vector<Armor2D>&) const -> std::vector<Armor3D>;
-    auto estimate_armor(const std::vector<Armor2D>&, Image&) const -> std::vector<Armor3D>;
+    auto estimate_armor(const std::vector<Armor2d>&) const -> std::vector<Armor3d>;
+    auto estimate_armor(const std::vector<Armor2d>&, Image&) const -> std::vector<Armor3d>;
 
-    auto into_odom_link(std::span<const Armor3D> armors) const -> std::vector<Armor3D>;
-    auto into_odom_link(const Armor3D& armor) const -> Armor3D;
+    auto into_odom_link(std::span<const Armor3d> armors) const -> std::vector<Armor3d>;
+    auto into_odom_link(const Armor3d& armor) const -> Armor3d;
 
     auto draw_debug(Image&) -> void;
     auto publish_debug() -> void;

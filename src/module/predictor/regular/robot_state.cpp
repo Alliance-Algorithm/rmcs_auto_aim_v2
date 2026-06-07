@@ -47,7 +47,7 @@ struct RegularRobotState::Impl {
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
-    auto initialize(Armor3D const& armor, TimePoint t) -> void {
+    auto initialize(Armor3d const& armor, TimePoint t) -> void {
         device                = armor.genre;
         color                 = armor_color2camp_color(armor.color);
         armor_num             = EKFParameters::armor_num(armor.genre);
@@ -80,7 +80,7 @@ struct RegularRobotState::Impl {
         time_stamp = t;
     }
 
-    auto update(std::span<Armor3D const> armors) -> bool {
+    auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
 
         if (!initialized) {
@@ -122,7 +122,7 @@ struct RegularRobotState::Impl {
     }
 
 private:
-    auto decide_match(Armor3D const& armor) const -> MatchDecision {
+    auto decide_match(Armor3d const& armor) const -> MatchDecision {
         if (!initialized || armor.genre != device) return {};
 
         auto armors_xyza = calculate_armors(ekf.x);
@@ -167,7 +167,7 @@ private:
         };
     }
 
-    auto select_best_match(std::span<Armor3D const> armors) const -> std::optional<BestMatch> {
+    auto select_best_match(std::span<Armor3d const> armors) const -> std::optional<BestMatch> {
         auto best_match = std::optional<BestMatch> {};
         for (std::size_t observation_index = 0; observation_index < armors.size();
             ++observation_index) {
@@ -181,7 +181,7 @@ private:
         return best_match;
     }
 
-    auto apply_match(std::span<Armor3D const> armors, BestMatch const& best_match) -> void {
+    auto apply_match(std::span<Armor3d const> armors, BestMatch const& best_match) -> void {
         auto const& armor    = armors[best_match.observation_index];
         auto const& decision = best_match.decision;
 
@@ -231,13 +231,13 @@ RegularRobotState::~RegularRobotState() noexcept                                
 RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept                    = default;
 auto RegularRobotState::operator=(RegularRobotState&&) noexcept -> RegularRobotState& = default;
 
-auto RegularRobotState::initialize(Armor3D const& armor, TimePoint t) -> void {
+auto RegularRobotState::initialize(Armor3d const& armor, TimePoint t) -> void {
     return pimpl->initialize(armor, t);
 }
 
 auto RegularRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 
-auto RegularRobotState::update(std::span<Armor3D const> armors) -> bool {
+auto RegularRobotState::update(std::span<Armor3d const> armors) -> bool {
     return pimpl->update(armors);
 }
 

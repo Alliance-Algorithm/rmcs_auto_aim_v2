@@ -34,7 +34,7 @@ constexpr auto get_enum_name(ArmorShape shape) noexcept {
 using ArmorGenre = DeviceId;
 constexpr auto get_enum_name(ArmorGenre genre) noexcept { return rmcs::to_string(genre); }
 
-struct Armor2D {
+struct Armor2d {
     ArmorGenre genre;
     ArmorColor color;
     ArmorShape shape;
@@ -55,9 +55,9 @@ struct Armor2D {
         co_yield bl;
     }
 };
-using Armor2Ds = std::vector<Armor2D>;
+using Armor2ds = std::vector<Armor2d>;
 
-struct Armor3D {
+struct Armor3d {
     ArmorGenre genre;
     ArmorColor color;
     int id;
@@ -65,7 +65,7 @@ struct Armor3D {
     Translation translation;
     Orientation orientation;
 };
-using Armor3Ds = std::vector<Armor3D>;
+using Armor3ds = std::vector<Armor3d>;
 
 struct ArmorVisualScale : public Scalar3d {
     using Scalar3d::Scalar3d;

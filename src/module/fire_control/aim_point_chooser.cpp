@@ -65,8 +65,8 @@ struct AimPointChooser::Impl {
         return {};
     }
 
-    auto choose_armor(std::span<Armor3D const> armors, Eigen::Vector3d const& center_position,
-        double angular_velocity) -> std::optional<Armor3D> {
+    auto choose_armor(std::span<Armor3d const> armors, Eigen::Vector3d const& center_position,
+        double angular_velocity) -> std::optional<Armor3d> {
         if (armors.empty()) {
             last_chosen_armor_id.reset();
             return std::nullopt;
@@ -165,7 +165,7 @@ auto AimPointChooser::configure_yaml(const YAML::Node& yaml) noexcept
     return pimpl->configure_yaml(yaml);
 }
 
-auto AimPointChooser::choose_armor(std::span<Armor3D const> armors,
-    Eigen::Vector3d const& center_position, double angular_velocity) -> std::optional<Armor3D> {
+auto AimPointChooser::choose_armor(std::span<Armor3d const> armors,
+    Eigen::Vector3d const& center_position, double angular_velocity) -> std::optional<Armor3d> {
     return pimpl->choose_armor(armors, center_position, angular_velocity);
 }

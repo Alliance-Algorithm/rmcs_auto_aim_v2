@@ -36,7 +36,7 @@ struct AdjacencyLightbarFinder::Impl {
 
     auto set_armor_thickness(double thickness) { armor_thickness = thickness; }
 
-    auto find(const Image& image, const Armor2D& armor2d, const Armor3D& armor3d)
+    auto find(const Image& image, const Armor2d& armor2d, const Armor3d& armor3d)
         -> std::optional<Lightbar> {
 
         detected.reset();
@@ -254,7 +254,7 @@ auto AdjacencyLightbarFinder::set_armor_thickness(double thickness) -> void {
 }
 
 auto AdjacencyLightbarFinder::find(
-    const Image& image, const Armor2D& armor2d, const Armor3D& armor3d) -> std::optional<Lightbar> {
+    const Image& image, const Armor2d& armor2d, const Armor3d& armor3d) -> std::optional<Lightbar> {
     return pimpl->find(image, armor2d, armor3d);
 }
 

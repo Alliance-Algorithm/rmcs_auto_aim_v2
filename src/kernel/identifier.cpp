@@ -37,8 +37,8 @@ struct Identifier::Impl {
         auto detected_armors = armor_detection.sync_detect(src);
         if (!detected_armors.has_value()) return std::nullopt;
 
-        auto outpost_armors = std::vector<Armor2D> { };
-        auto base_armors    = std::vector<Armor2D> { };
+        auto outpost_armors = std::vector<Armor2d> { };
+        auto base_armors    = std::vector<Armor2d> { };
         outpost_armors.reserve(detected_armors->size());
         base_armors.reserve(detected_armors->size());
         for (const auto& armor : *detected_armors) {
@@ -54,7 +54,7 @@ struct Identifier::Impl {
         outpost_green_light_roi = outpost_locator_result.detect_roi;
         base_green_light_roi    = base_locator_result.detect_roi;
 
-        auto filtered = Armor2Ds { };
+        auto filtered = Armor2ds { };
         filtered.reserve(detected_armors->size());
 
         if (!outpost_locator_result.green_light.has_value()

@@ -36,14 +36,14 @@ struct Decider::Impl {
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
-    auto update(std::span<Armor3D const> armors, TimePoint t) -> Output {
+    auto update(std::span<Armor3d const> armors, TimePoint t) -> Output {
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
             tracker->predict(t);
         }
 
         auto observed_ids   = std::unordered_set<DeviceId> { };
-        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3D>> { };
+        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3d>> { };
 
         for (const auto& armor : armors) {
             grouped_armors[armor.genre].emplace_back(armor);
@@ -56,7 +56,7 @@ struct Decider::Impl {
                 last_seen_times[id] = t;
             }
 
-            auto grouped_span = std::span<Armor3D const> { grouped.data(), grouped.size() };
+            auto grouped_span = std::span<Armor3d const> { grouped.data(), grouped.size() };
             bool fused        = trackers[id]->update(grouped_span);
 
             if (fused) {
@@ -180,6 +180,6 @@ auto Decider::set_priority_mode(PriorityMode const& mode) -> void {
     return pimpl->set_priority_mode(mode);
 }
 
-auto Decider::update(std::span<Armor3D const> armors, TimePoint t) -> Output {
+auto Decider::update(std::span<Armor3d const> armors, TimePoint t) -> Output {
     return pimpl->update(armors, t);
 }

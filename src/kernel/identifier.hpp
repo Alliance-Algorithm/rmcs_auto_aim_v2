@@ -17,7 +17,7 @@ class Identifier {
 
 public:
     struct Result {
-        Armor2Ds armors;
+        Armor2ds armors;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;

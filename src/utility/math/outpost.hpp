@@ -7,7 +7,7 @@ namespace rmcs::util {
 class NeighborBarSolution {
 public:
     struct Input {
-        Armor3D source;
+        Armor3d source;
         bool in_right = false;
         double armor_thickness = 0;
     } input;

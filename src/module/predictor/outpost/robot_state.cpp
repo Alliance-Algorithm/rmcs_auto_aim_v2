@@ -53,7 +53,7 @@ auto resolve_template(OutpostArmorLayout const& layout) -> HeightTemplate {
     return HeightTemplate::Unknown;
 }
 
-auto make_observation(rmcs::Armor3D const& armor) -> OutpostObservation {
+auto make_observation(rmcs::Armor3d const& armor) -> OutpostObservation {
     auto const [pos_x, pos_y, pos_z] = armor.translation;
     auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
 
@@ -159,7 +159,7 @@ struct OutpostRobotState::Impl {
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
-    auto initialize(Armor3D const& armor, TimePoint t) -> void {
+    auto initialize(Armor3d const& armor, TimePoint t) -> void {
         color      = armor_color2camp_color(armor.color);
         ekf        = EKF { OutpostEKFParameters::x(armor),
             OutpostEKFParameters::P_initial_dig().asDiagonal() };
@@ -193,7 +193,7 @@ struct OutpostRobotState::Impl {
         time_stamp = t;
     }
 
-    auto update(std::span<Armor3D const> armors) -> bool {
+    auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
 
         if (!initialized) {
@@ -233,7 +233,7 @@ private:
         update_count = 0;
     }
 
-    auto select_best_match(std::span<Armor3D const> armors) const
+    auto select_best_match(std::span<Armor3d const> armors) const
         -> std::optional<std::pair<OutpostObservation, MatchCandidate>> {
         auto best_match       = std::optional<std::pair<OutpostObservation, MatchCandidate>> {};
         auto const candidates = generate_slot_candidates(layout);
@@ -287,13 +287,13 @@ OutpostRobotState::OutpostRobotState(TimePoint stamp) noexcept
 
 OutpostRobotState::~OutpostRobotState() noexcept = default;
 
-auto OutpostRobotState::initialize(Armor3D const& armor, TimePoint t) -> void {
+auto OutpostRobotState::initialize(Armor3d const& armor, TimePoint t) -> void {
     return pimpl->initialize(armor, t);
 }
 
 auto OutpostRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 
-auto OutpostRobotState::update(std::span<Armor3D const> armors) -> bool {
+auto OutpostRobotState::update(std::span<Armor3d const> armors) -> bool {
     return pimpl->update(armors);
 }
 

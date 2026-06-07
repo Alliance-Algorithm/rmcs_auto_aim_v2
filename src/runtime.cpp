@@ -134,7 +134,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2Ds {};
+        auto armors_2d = Armor2ds {};
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) continue; // 一般不会推理出错喵~
@@ -164,7 +164,7 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3Ds {};
+        auto armors_3d = Armor3ds {};
         {
             pose_estimator.update_camera_transform(context.camera_transform);
 
