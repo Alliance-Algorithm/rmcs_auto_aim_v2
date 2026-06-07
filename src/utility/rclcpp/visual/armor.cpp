@@ -37,7 +37,7 @@ auto make_armor_marker(const std::string& frame_id, const std::string& ns, int i
     marker.id              = id;
     marker.type            = Marker::CUBE;
     marker.action          = Marker::ADD;
-    marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
+    marker.lifetime        = rclcpp::Duration::from_seconds(0.5);
 
     ArmorVisualScale { armor.genre }.to(marker.scale);
     ArmorVisualColor { armor_color2camp_color(armor.color) }.to(marker.color);
@@ -56,7 +56,7 @@ auto make_arrow_marker(const std::string& frame_id, const std::string& ns, int i
     marker.id              = id;
     marker.type            = Marker::ARROW;
     marker.action          = Marker::ADD;
-    marker.lifetime        = rclcpp::Duration::from_seconds(1);
+    marker.lifetime        = rclcpp::Duration::from_seconds(0.5);
 
     marker.scale.x = 0.2;
     marker.scale.y = 0.01;
@@ -104,7 +104,7 @@ struct Armor::Impl {
         marker.id              = config.id;
         marker.type            = Marker::CUBE;
         marker.action          = Marker::ADD;
-        marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
+        marker.lifetime        = rclcpp::Duration::from_seconds(0.5);
 
         ArmorVisualScale { config.device }.to(marker.scale);
         ArmorVisualColor { config.camp }.to(marker.color);
@@ -114,7 +114,7 @@ struct Armor::Impl {
         arrow_marker.id              = config.id;
         arrow_marker.type            = Marker::ARROW;
         arrow_marker.action          = Marker::ADD;
-        arrow_marker.lifetime        = rclcpp::Duration::from_seconds(0.1);
+        arrow_marker.lifetime        = rclcpp::Duration::from_seconds(0.5);
 
         arrow_marker.scale.x = 0.2;
         arrow_marker.scale.y = 0.01;

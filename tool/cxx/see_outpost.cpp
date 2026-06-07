@@ -31,11 +31,11 @@ auto main() -> int {
 
     while (rclcpp::ok()) {
         const auto stamp = node.details->rclcpp->now();
-        const auto speed = kOutpostAngularSpeed * 0.1;
-        double elapsed =
+        const auto speed = kOutpostAngularSpeed;
+        const auto elapsed =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start_time).count();
-        double angle = speed * elapsed;
-        Eigen::Vector3d position { center.x() + kOutpostRadius * std::cos(angle),
+        const auto angle    = speed * elapsed;
+        const auto position = Eigen::Vector3d { center.x() + kOutpostRadius * std::cos(angle),
             center.y() + kOutpostRadius * std::sin(angle), center.z() };
 
         const auto direction = position - center;
