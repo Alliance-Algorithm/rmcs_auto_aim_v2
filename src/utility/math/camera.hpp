@@ -14,8 +14,6 @@ struct CameraFeature {
     // Distortion coefficients (k1, k2, p1, p2, k3)
     std::array<double, 5> distort_coeff;
 
-    // World-to-camera extrinsic transform (ROS convention)
-    //   p_camera = quaternion * p_world + translation
     Orientation orientation { Orientation::kIdentity() };
     Translation translation { Translation::kZero() };
 
