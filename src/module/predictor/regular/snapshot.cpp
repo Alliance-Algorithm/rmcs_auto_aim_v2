@@ -1,27 +1,39 @@
-#include "module/predictor/snapshot.hpp"
-#include "utility/robot/color.hpp"
-#include "utility/robot/id.hpp"
+#include "module/predictor/regular/snapshot.hpp"
 
-#include <utility>
-
-#include "module/predictor/backend/snapshot_backend.hpp"
-#include "module/predictor/regular/ekf_parameter.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/time.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace rmcs::predictor {
 
-struct RegularSnapshotBackend final : ISnapshotBackend {
-    explicit RegularSnapshotBackend(Snapshot::NormalEKF::XVec x, DeviceId device, CampColor color,
-        int armor_num, TimePoint stamp) noexcept
-        : ISnapshotBackend { device, color, armor_num, stamp }
-        , x { std::move(x) } { }
+struct RegularSnapshot::Impl {
+    explicit Impl(EKF::XVec x, DeviceId device, CampColor color, int armor_num, TimePoint stamp)
+        : x { std::move(x) }
+        , device { device }
+        , color { color }
+        , armor_num { armor_num }
+        , stamp { stamp } { }
 
-    [[nodiscard]] auto kinematics_at(TimePoint t) const -> Snapshot::Kinematics override {
-        return kinematics_of(predict_state_at(t));
+    static auto make_armor(DeviceId device, CampColor color, int id) -> Armor3d {
+        auto armor  = Armor3d {};
+        armor.genre = device;
+        armor.color = camp_color2armor_color(color);
+        armor.id    = id;
+        return armor;
     }
 
-    [[nodiscard]] auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> override {
+    static auto motion_of(EKF::XVec const& x) -> TargetMotion {
+        return { Eigen::Vector3d { x[0], x[2], x[4] }, x[7] };
+    }
+
+    auto predict_state_at(TimePoint t) const -> EKF::XVec {
+        auto const dt = util::delta_time(t, stamp).count();
+        return EKFParameters::f(dt)(x);
+    }
+
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
         auto const predicted_x = predict_state_at(t);
 
         auto armors = std::vector<Armor3d> {};
@@ -40,31 +52,32 @@ struct RegularSnapshotBackend final : ISnapshotBackend {
         return armors;
     }
 
-private:
-    static auto make_armor(DeviceId device, CampColor color, int id) -> Armor3d {
-        auto armor  = Armor3d {};
-        armor.genre = device;
-        armor.color = camp_color2armor_color(color);
-        armor.id    = id;
-        return armor;
-    }
-
-    static auto kinematics_of(Snapshot::NormalEKF::XVec const& x) -> Snapshot::Kinematics {
-        return { Eigen::Vector3d { x[0], x[2], x[4] }, x[7] };
-    }
-
-    auto predict_state_at(TimePoint t) const -> Snapshot::NormalEKF::XVec {
-        auto const dt = util::delta_time(t, stamp).count();
-        return EKFParameters::f(dt)(x);
-    }
-
-    Snapshot::NormalEKF::XVec x;
+    EKF::XVec x;
+    DeviceId device;
+    CampColor color;
+    int armor_num;
+    TimePoint stamp;
 };
 
-auto Snapshot::make_regular(NormalEKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
-    TimePoint stamp) noexcept -> Snapshot {
-    return Snapshot { std::make_unique<RegularSnapshotBackend>(
-        std::move(ekf_x), device, color, armor_num, stamp) };
+RegularSnapshot::RegularSnapshot(
+    EKF::XVec x, DeviceId device, CampColor color, int armor_num, TimePoint stamp)
+    : pimpl { std::make_unique<Impl>(std::move(x), device, color, armor_num, stamp) } { }
+
+RegularSnapshot::RegularSnapshot(RegularSnapshot&&) noexcept                    = default;
+auto RegularSnapshot::operator=(RegularSnapshot&&) noexcept -> RegularSnapshot& = default;
+
+RegularSnapshot::~RegularSnapshot() noexcept = default;
+
+auto RegularSnapshot::time_stamp() const -> TimePoint { return pimpl->stamp; }
+
+auto RegularSnapshot::device_id() const -> DeviceId { return pimpl->device; }
+
+auto RegularSnapshot::motion_at(TimePoint t) const -> TargetMotion {
+    return Impl::motion_of(pimpl->predict_state_at(t));
+}
+
+auto RegularSnapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
+    return pimpl->predicted_armors(t);
 }
 
 } // namespace rmcs::predictor

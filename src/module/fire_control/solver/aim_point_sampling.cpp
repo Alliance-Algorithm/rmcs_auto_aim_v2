@@ -28,10 +28,10 @@ auto rmcs::fire_control::AimPointSampler::sample_at(
 
 auto rmcs::fire_control::AimPointSampler::sample_aim_point_at(predictor::Snapshot const& snapshot,
     AimPointChooser& chooser, TimePoint t) -> std::expected<Eigen::Vector3d, std::string> {
-    auto predicted_armors     = snapshot.predicted_armors(t);
-    auto predicted_kinematics = snapshot.kinematics_at(t);
-    auto chosen_armor = chooser.choose_armor(predicted_armors, predicted_kinematics.center_position,
-        predicted_kinematics.angular_velocity);
+    auto predicted_armors = snapshot.predicted_armors(t);
+    auto predicted_motion = snapshot.motion_at(t);
+    auto chosen_armor     = chooser.choose_armor(
+        predicted_armors, predicted_motion.center_position, predicted_motion.angular_velocity);
     if (!chosen_armor.has_value()) return std::unexpected { "choose_armor returned nullopt" };
 
     auto aim_point = Eigen::Vector3d {};

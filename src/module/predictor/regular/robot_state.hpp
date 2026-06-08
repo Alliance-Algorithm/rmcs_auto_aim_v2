@@ -3,6 +3,7 @@
 #include "module/predictor/snapshot.hpp"
 #include "utility/pimpl.hpp"
 
+#include <optional>
 #include <span>
 
 namespace rmcs::predictor {
@@ -24,7 +25,7 @@ public:
     auto update(std::span<Armor3d const> armors) -> bool;
 
     auto is_converged() const -> bool;
-    auto get_snapshot() const -> Snapshot;
+    auto get_snapshot() const -> std::optional<Snapshot>;
     auto distance() const -> double;
 };
 

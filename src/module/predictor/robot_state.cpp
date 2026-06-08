@@ -1,51 +1,62 @@
 #include "robot_state.hpp"
-#include "module/predictor/backend/robot_state_backend.hpp"
+
+#include "module/predictor/outpost/robot_state.hpp"
+#include "module/predictor/regular/robot_state.hpp"
+
+#include <limits>
+#include <optional>
+#include <variant>
 
 using namespace rmcs::predictor;
 
 struct RobotState::Impl {
-    std::unique_ptr<IRobotStateBackend> backend { };
+    using State = std::variant<RegularRobotState, OutpostRobotState>;
+
+    std::optional<State> state;
     TimePoint pending_time_stamp { Clock::now() };
 
-    [[nodiscard]] static auto make_backend(DeviceId device, TimePoint stamp)
-        -> std::unique_ptr<IRobotStateBackend> {
-        auto const kind = classify_robot_state_backend(device);
-        return make_robot_state_backend(kind, stamp);
-    }
-
-    auto reset_backend(Armor3d const& armor, TimePoint stamp) -> void {
-        backend            = make_backend(armor.genre, stamp);
-        pending_time_stamp = stamp;
-    }
-
-    auto ensure_backend(Armor3d const& armor) -> void {
-        if (backend) return;
-        backend = make_backend(armor.genre, pending_time_stamp);
+    auto emplace_state(DeviceId device, TimePoint stamp) -> State& {
+        switch (device) {
+        case DeviceId::OUTPOST:
+            return state.emplace(std::in_place_type<OutpostRobotState>, stamp);
+        default:
+            return state.emplace(std::in_place_type<RegularRobotState>, stamp);
+        }
     }
 
     auto initialize(Armor3d const& armor, TimePoint t) -> void {
-        reset_backend(armor, t);
-        backend->initialize(armor, t);
+        pending_time_stamp = t;
+        auto& target_state = emplace_state(armor.genre, t);
+        std::visit([&](auto& model) { model.initialize(armor, t); }, target_state);
     }
 
     auto predict(TimePoint t) -> void {
         pending_time_stamp = t;
-        if (backend) backend->predict(t);
+        if (!state) return;
+        std::visit([t](auto& model) { model.predict(t); }, *state);
     }
 
     auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
-        ensure_backend(armors.front());
-        return backend ? backend->update(armors) : false;
+        auto& target_state =
+            state ? *state : emplace_state(armors.front().genre, pending_time_stamp);
+        return std::visit([armors](auto& model) { return model.update(armors); }, target_state);
     }
 
-    auto is_converged() const -> bool { return backend ? backend->is_converged() : false; }
-
-    auto get_snapshot() const -> Snapshot {
-        return backend ? backend->get_snapshot() : Snapshot::empty(pending_time_stamp);
+    auto is_converged() const -> bool {
+        if (!state) return false;
+        return std::visit([](auto const& model) { return model.is_converged(); }, *state);
     }
 
-    auto distance() const -> double { return backend ? backend->distance() : 0.0; }
+    auto get_snapshot() const -> std::optional<Snapshot> {
+        if (!state) return std::nullopt;
+        return std::visit([](auto const& model) { return model.get_snapshot(); }, *state);
+    }
+
+    auto distance() const -> double {
+        if (!state) return std::numeric_limits<double>::infinity();
+        return std::visit([](auto const& model) { return model.distance(); }, *state);
+    }
 };
 
 RobotState::RobotState() noexcept
@@ -62,6 +73,6 @@ auto RobotState::update(std::span<Armor3d const> armors) -> bool { return pimpl-
 
 auto RobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
-auto RobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
+auto RobotState::get_snapshot() const -> std::optional<Snapshot> { return pimpl->get_snapshot(); }
 
 auto RobotState::distance() const -> double { return pimpl->distance(); }

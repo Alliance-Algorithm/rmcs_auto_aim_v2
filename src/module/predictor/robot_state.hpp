@@ -3,6 +3,7 @@
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 
+#include <optional>
 #include <span>
 
 namespace rmcs::predictor {
@@ -19,7 +20,7 @@ public:
 
     auto is_converged() const -> bool;
 
-    auto get_snapshot() const -> Snapshot;
+    auto get_snapshot() const -> std::optional<Snapshot>;
 
     auto distance() const -> double;
 };

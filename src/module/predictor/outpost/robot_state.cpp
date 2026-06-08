@@ -1,5 +1,6 @@
 #include "robot_state.hpp"
 
+#include "module/predictor/outpost/snapshot.hpp"
 #include "utility/math/mahalanobis.hpp"
 #include "utility/time.hpp"
 
@@ -66,9 +67,9 @@ struct OutpostRobotState::Impl {
         return true;
     }
 
-    auto get_snapshot() const -> Snapshot {
-        if (!initialized) return Snapshot::empty(time_stamp);
-        return Snapshot::make_outpost(ekf.x, color, time_stamp, layout);
+    auto get_snapshot() const -> std::optional<Snapshot> {
+        if (!initialized) return std::nullopt;
+        return Snapshot { OutpostSnapshot { ekf.x, color, time_stamp, layout } };
     }
 
     auto distance() const -> double {
@@ -211,7 +212,9 @@ auto OutpostRobotState::update(std::span<Armor3d const> armors) -> bool {
 
 auto OutpostRobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
-auto OutpostRobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
+auto OutpostRobotState::get_snapshot() const -> std::optional<Snapshot> {
+    return pimpl->get_snapshot();
+}
 
 auto OutpostRobotState::distance() const -> double { return pimpl->distance(); }
 
