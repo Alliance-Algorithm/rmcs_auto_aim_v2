@@ -6,6 +6,7 @@
 #include "utility/math/conversion.hpp"
 #include "utility/rclcpp/visual/armor.hpp"
 #include "utility/rclcpp/visual/arrow.hpp"
+#include "utility/rclcpp/visual/lightbar.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/serializable.hpp"
 
@@ -60,6 +61,7 @@ struct Visualization::Impl {
     std::unique_ptr<visual::Arrow> aiming_direction;
     std::unique_ptr<visual::Transform> camera_transform;
     std::unordered_map<std::string, visual::Armors> armor_publishers;
+    std::unordered_map<std::string, visual::Lightbars> lightbar_publishers;
 
     bool is_initialized  = false;
     bool size_determined = false;
@@ -159,6 +161,22 @@ struct Visualization::Impl {
         iter->second.update(armors);
     }
 
+    auto publish(std::span<const Lightbar3d> lightbars, const std::string& name) -> void {
+        if (!is_initialized) return;
+        if (!config.publishable) return;
+
+        auto iter = lightbar_publishers.find(name);
+        if (iter == lightbar_publishers.end()) {
+            auto config = visual::Lightbars::Config {
+                .rclcpp = rclcpp,
+                .name   = name,
+                .tf     = kOdomLink,
+            };
+            iter = lightbar_publishers.emplace(name, std::move(config)).first;
+        }
+        iter->second.update(lightbars);
+    }
+
     auto update_aiming_direction(double yaw, double pitch) const -> void {
         if (!is_initialized) return;
         if (!config.publishable) return;
@@ -174,11 +192,10 @@ struct Visualization::Impl {
         mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
     }
 
-    auto update_camera_pose(const Translation& translation, const Orientation& orientation) const
-        -> void {
+    auto update_camera_pose(const Transform& t) const -> void {
         if (!is_initialized) return;
         if (!config.publishable) return;
-        camera_transform->move(translation, orientation);
+        camera_transform->move(t.translation, t.orientation);
         camera_transform->update();
     }
 };
@@ -200,6 +217,11 @@ auto Visualization::publish(std::span<const Armor3d> armors, const std::string& 
     return pimpl->publish(armors, name);
 }
 
+auto Visualization::publish(std::span<const Lightbar3d> lightbars, const std::string& name)
+    -> void {
+    return pimpl->publish(lightbars, name);
+}
+
 auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {
     pimpl->update_aiming_direction(yaw, pitch);
 }
@@ -209,9 +231,8 @@ auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, d
     pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
-auto Visualization::update_camera_pose(
-    const Translation& translation, const Orientation& orientation) const -> void {
-    pimpl->update_camera_pose(translation, orientation);
+auto Visualization::update_camera_pose(const Transform& t) const -> void {
+    pimpl->update_camera_pose(t);
 }
 
 Visualization::Visualization() noexcept

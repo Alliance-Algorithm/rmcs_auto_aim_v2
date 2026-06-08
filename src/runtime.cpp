@@ -117,14 +117,13 @@ auto main() -> int {
         auto context = SystemContext::kIdentity();
         if (!localhost_develop) {
             using namespace std::chrono_literals;
-            const auto timestamp = image->get_timestamp() - 6'250'000ns;
+            const auto timestamp = image->get_timestamp() - 8'200'000ns;
             const auto closest   = feishu.search(timestamp, 50ms);
             if (!closest) continue;
 
             context = *closest;
         }
-        visualization.update_camera_pose(
-            context.camera_transform.translation, context.camera_transform.orientation);
+        visualization.update_camera_pose(context.camera_transform);
 
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
@@ -136,7 +135,7 @@ auto main() -> int {
 
         /// 1. Identify Armor
         ///
-        auto armors_2d = Armor2ds { };
+        auto armors_2d = Armor2ds {};
         {
             auto result = identifier.sync_identify(*image);
             if (!result.has_value()) continue; // 一般不会推理出错喵~
@@ -164,15 +163,15 @@ auto main() -> int {
 
         /// 2. Transform 2d to 3d
         ///
-        auto armors_3d = Armor3ds { };
+        auto armors_3d = Armor3ds {};
         {
             pose_estimator.update_camera_transform(context.camera_transform);
 
             auto result = pose_estimator.estimate_armor(armors_2d, *image);
 
             const auto& addition = pose_estimator.addition();
-            visualization.draw_later(addition.areas);
             visualization.draw_later(addition.detected_2d);
+            visualization.draw_later(addition.areas);
             visualization.draw_later(addition.predicted_near);
             visualization.draw_later(addition.predicted_away);
             visualization.publish(addition.origin, "origin_armors");

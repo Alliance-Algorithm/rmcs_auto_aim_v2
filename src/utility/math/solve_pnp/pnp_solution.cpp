@@ -144,13 +144,6 @@ auto RobustPnpSolution::solve() -> bool {
         const auto camera_to_armor = t_camera_armor.normalized();
         if (back_direction.dot(camera_to_armor) <= 0.0) continue;
 
-        // [剪枝] 去除相机系下朝向偏转过大的装甲板
-        const auto limit = deg2rad(input.max_yaw_pitch);
-        const auto ypr   = eulers(q_camera_armor, 2, 1, 0);
-        if (std::abs(ypr[0]) > limit || std::abs(ypr[1]) > limit) {
-            continue;
-        }
-
         // [剪枝] 去除 Odom 系下，Pitch 不合理的装甲板，前哨站朝下，其余朝上
         const auto pitch = eulers(q_odom_armor, 2, 1, 0)[1];
         if (pitch * pitch_sign <= 0.0) continue;
@@ -183,7 +176,7 @@ auto RobustPnpSolution::solve() -> bool {
         const auto ypr       = eulers(q_initial, 2, 1, 0);
 
         auto origin_yaw   = ypr[0];
-        auto origin_pitch = pitch_sign * std::abs(ypr[1]);
+        auto origin_pitch = ypr[1];
         if (input.fixed_outpost_pitch && armor2d.genre == ArmorGenre::OUTPOST) {
             origin_pitch = kPredictedOutpostArmorPitch;
         }
@@ -232,7 +225,7 @@ auto RobustPnpSolution::solve() -> bool {
 
         const auto area  = deg2rad(kYawOptimizeRange * 0.5);
         const auto step  = deg2rad(kYawOptimizeStep);
-        const auto steps = std::round((area * 2.0) / step);
+        const auto steps = static_cast<int>(std::round((area * 2.0) / step));
 
         // 搜索最小重投影误差
         auto optimized_yaw   = origin_yaw;

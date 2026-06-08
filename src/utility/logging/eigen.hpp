@@ -23,8 +23,8 @@ template <>
 struct std::formatter<Eigen::Vector3d> : EigenFormatterBase {
     auto format(const Eigen::Vector3d& v, std::format_context& ctx) const {
         if (precision >= 0) {
-            return std::format_to(ctx.out(), "({:.{}f}, {:.{}f}, {:.{}f})", v.x(), precision, v.y(),
-                precision, v.z(), precision);
+            return std::format_to(ctx.out(), "({:+.{}f}, {:+.{}f}, {:+.{}f})", v.x(), precision,
+                v.y(), precision, v.z(), precision);
         }
         return std::format_to(ctx.out(), "({}, {}, {})", v.x(), v.y(), v.z());
     }
@@ -34,7 +34,7 @@ template <>
 struct std::formatter<Eigen::Quaterniond> : EigenFormatterBase {
     auto format(const Eigen::Quaterniond& q, std::format_context& ctx) const {
         if (precision >= 0) {
-            return std::format_to(ctx.out(), "(w={:.{}f}, {:.{}f}, {:.{}f}, {:.{}f})", q.w(),
+            return std::format_to(ctx.out(), "(w={:+.{}f}, {:+.{}f}, {:+.{}f}, {:+.{}f})", q.w(),
                 precision, q.x(), precision, q.y(), precision, q.z(), precision);
         }
         return std::format_to(ctx.out(), "(w={}, {}, {}, {})", q.w(), q.x(), q.y(), q.z());

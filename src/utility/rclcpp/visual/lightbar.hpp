@@ -5,6 +5,7 @@
 #include "utility/robot/armor.hpp"
 
 #include <memory>
+#include <span>
 #include <string>
 
 namespace rmcs::util::visual {
@@ -46,6 +47,31 @@ public:
     auto set_color(float r, float g, float b, float a = 1.0) noexcept -> void;
 
     auto update() noexcept -> void;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
+};
+
+struct Lightbars {
+public:
+    struct Config {
+        RclcppNode& rclcpp;
+
+        std::string name;
+        std::string tf;
+    };
+
+    explicit Lightbars(Config) noexcept;
+
+    ~Lightbars() noexcept;
+
+    Lightbars(const Lightbars&)            = delete;
+    Lightbars& operator=(const Lightbars&) = delete;
+    Lightbars(Lightbars&&) noexcept;
+    Lightbars& operator=(Lightbars&&) noexcept;
+
+    auto update(std::span<const Lightbar3d> lightbars) noexcept -> void;
 
 private:
     struct Impl;

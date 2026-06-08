@@ -16,7 +16,7 @@
 
 ```sh
 # 进入工作空间的 src/ 目录下
-git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --branch 2.0 --depth 1
+git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --depth 1
 git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
 
 # 构建依赖
@@ -41,7 +41,16 @@ colcon test-result --all --verbose
 - rmcs::AutoAimComponent -> auto_aim_component
 ```
 
-与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的 [`config/config.yaml`](./config/config.yaml) 统一配置，因此实例名可以随意取，不影响参数读取。
+与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的配置文件统一配置，因此实例名可以随意取，不影响参数读取。
+
+### 配置文件
+
+配置文件按以下优先级加载（位于运行时 share 目录下）：
+
+1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
+2. `custom.yaml` / `custom.yml`
+3. `config.override.yaml` / `config.override.yml`
+4. `config.yaml` / `config.yml`
 
 启用后，RMCS 控制系统启动时会自动加载 Component，但 Runtime 需要单独启动：
 
@@ -130,10 +139,10 @@ ros2 topic echo /topic-name
 
 **测试**
 
-可以运行自瞄测试下的 `example_visualization` 来测试可视化：
+可以运行自瞄工具下的 `see_outpost` 来测试可视化：
 
 ```sh
-./build/example_visualization
+./build/see_outpost
 ```
 
 ### OPENCV 可视化窗口
@@ -147,76 +156,30 @@ export LIBGL_ALWAYS_SOFTWARE=1
 
 ### 视频流播放
 
-诚然，依靠 ROS2 的 Topic 来发布 `cv::Mat`，然后使用 `rviz` 或者 `foxglove` 来查看图像不失为一个方便的方法，但经验告诉我们，网络带宽和 ROS2 的性能无法支撑起高帧率高画质的视频显示，所以我们采用 RTP 推流的方式来串流自瞄画面，这会带来一些的延迟（大概1s吧），但推流完全支撑得起 100hz 以上的流畅显示，且在较差的网络环境也能相对流畅地串流，这是 ROS2 不能带给我们的良好体验，至于延迟，我想也没有人同时看着枪口和视频画面调参吧，网络较好的情况下，延迟不足 1s
-
-首先打开`config/config.yaml`文件，将 `use_visualization`设置为`true`，然后配置推流参数：
-
-```yaml
-visualization:
-    # ......
-    framerate: 60
-    monitor_host: "127.0.0.1"
-    monitor_port: "5000"
-    # ......
-```
-
-需要配置的只有帧率和主机网络地址，帧率需要同`capturer`模块的帧率一致（也许应该自动读取相机的帧率，以后再论吧），`monitor_host`填自己电脑的 IPv4 地址（注意是和运行自瞄的主机同一局域网下的地址），`monitor_port`随意，别和本机服务冲突就行了
-
-然后启动项目：
+诚然，依靠 ROS2 的 Topic 来发布 `cv::Mat`，然后使用 `rviz` 或者 `foxglove` 来查看图像不失为一个方便的方法，但经验告诉我们，网络带宽和 ROS2 的性能无法支撑起高帧率高画质的视频显示，所以我们采用 RTP 推流的方式来串流自瞄画面，完全支撑得起 100hz 以上的流畅显示，且在较差的网络环境也能相对流畅地串流，这是 ROS2 不能带给我们的良好体验
 
 ```sh
-ros2 launch rmcs_auto_aim_v2 launch.py
+./tool/install-server.sh local        # 本地安装
+./tool/install-server.sh remote       # 远程安装到机器人，需要先设置 remote
+start-streamer                        # 启动串流服务
 ```
 
-如果相机正常连接的话，且推流模块正确加载，则会看到以下日志：
+串流服务包含两个部分：
 
-```
-[...] [INFO] [...] [Capturer]: Connect to capturer successfully
-[...] [INFO] [...] [visualization]: Visualization session is opened
-[...] [INFO] [...] [visualization]: Sdp has been written to: /tmp/auto_aim.sdp
-```
+- 推流地址 `rtp://127.0.0.1:5000`（自瞄 RTP 推流目标，需与 config 中 `monitor_port` 一致）
+- 网页播放 `http://<ip>:18080/autoaim`（内置一些常用功能）
 
-随后在本机下载 `VLC`，此外，还需要下载插件：`vlc-plugin-live555` 和 `vlc-plugin-ffmpeg` 以支持播放推流
+> 端口可通过环境变量 `AUTOAIM_PLAYER_PORT`（默认 18080）和 `AUTOAIM_MEDIAMTX_PORT`（默认 8889）自定义
 
-接下来只需要将 `/tmp/auto_aim.sdp` 文件拷贝到自己电脑上，使用能够打开`SDP`文件的视频播放器打开即可，也可以使用指令：
-
-```sh
-# - 如果自瞄运行在机器人上，就加上 --remote 参数
-# - 'username' 是本机的用户名，即打开 VLC 的环境，通过 ssh 远程打开
-# - 如果你需要在第三台设备打开第二台设备的视频播放器，就使用 --ip 指定该设备的 ip（一般不用）
-# - 如果已经拷贝完配置文件，就可以使用 --no-copy 直接打开播放器，跳过拷贝
-play-autoaim --user username [--remote][--no-copy][--ip]
-```
-
-随后你会看到这样的输出：
-
-```
-/workspaces/RMCS/main/RMCS (main*) » play-autoaim --user creeper                                       ubuntu@creeper
-creeper@localhost's password: 
-auto_aim.sdp                                                                       100%   70   330.8KB/s   00:00    
-✅ 文件已拷贝到宿主机：/tmp/auto_aim.sdp
-creeper@localhost's password: 
----------------------------------------------------------------------------------------------------------------------
-/workspaces/RMCS/main/RMCS (main*) » [0000565203226630] main libvlc: 正在以默认界面运行 vlc。使用“cvlc”可以无界面-
-```
-
-电脑便自动打开 VLC 播放视频流了，SDP 文件会经过`机器人 -> 容器 -> 本地`到 `/tmp/auto_aim.sdp/` 目录
-
-脚本默认使用 VLC 作为视频流播放器，默认延迟较高，可以将播放器的播放缓存设置为 0 来获得**低延迟的串流体验**：`Tools -> Preferences -> search 'caching'`
-
-愉快调试吧！
+详细说明见 [串流文档](./doc/streaming.md)
 
 ### 视频流录制
 
-可以通过 FFmpeg 来录制 RTP 流：
+也可通过 FFmpeg 录制串流：
 
 ```sh
-ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy video.mp4
+ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
 ```
-
-将 `169.254.233.233` 修改为机器人或者测试主机的 IP，将 `video.mp4` 修改为自定义名字
-
-> 目前 RTP 流只能被一个消费者读取，所以使用 VLC 打开流和使用 FFmpeg 录制流不能同时进行，如果要同时进行，可以使用 FFmpeg 将流复制一份，像这样：`ffmpeg -i "rtp://169.254.233.233:5000" -c:v copy -f mpegts udp://127.0.0.1:1234`
 
 ## 核心概念
 

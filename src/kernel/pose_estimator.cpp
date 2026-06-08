@@ -181,16 +181,6 @@ struct PoseEstimator::Impl {
         ///  2. 前哨站装甲板的 Yaw 在角度较大时，会出现剧烈的二义性翻转
         auto outpost_in_camera = into_camera_link(*outpost3d);
         if (auto result = adjacency_finder.find(image, *outpost2d, outpost_in_camera)) {
-            { // 更新附加信息，供外部绘制或者发布调试 Topic
-                std::ranges::copy(result->areas, std::back_inserter(addition.areas));
-                std::ranges::copy(
-                    result->predicted_near, std::back_inserter(addition.predicted_near));
-                std::ranges::copy(
-                    result->predicted_away, std::back_inserter(addition.predicted_away));
-                std::ranges::copy(result->found, std::back_inserter(addition.detected_2d));
-                addition.center = result->center;
-            }
-
             if (!result->found.empty()) {
                 const auto& lightbar = result->found[0];
 
@@ -209,7 +199,7 @@ struct PoseEstimator::Impl {
                     auto& result = outpost_optimizer.result;
 
                     // 只优化距离，旋转保持原来的
-                    // result.armor.orientation = outpost_in_camera.orientation;
+                    result.armor.orientation = outpost_in_camera.orientation;
 
                     outpost_in_camera = result.armor;
                     *outpost3d        = into_odom_link(result.armor);
@@ -229,10 +219,9 @@ struct PoseEstimator::Impl {
                     addition.detected_3d.push_back(into_odom_link(near_bar));
                     addition.detected_3d.push_back(into_odom_link(away_bar));
 
-                    const auto color      = ArmorVisualColor { lightbar.color };
                     const auto draw_color = std::array {
-                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 } * 1.0,
-                        cv::Scalar { color.b() * 255, color.g() * 255, color.r() * 255 } * 0.5,
+                        cv::Scalar { 0, 255, 0 } * 1.0,
+                        cv::Scalar { 0, 255, 0 } * 0.5,
                     };
                     const auto bars = std::array { near_bar, away_bar };
                     for (const auto& [bar, color] : std::views::zip(bars, draw_color)) {
@@ -260,14 +249,24 @@ struct PoseEstimator::Impl {
 
                         if (!projection.solve()) continue;
 
+                        auto& result = projection.result;
                         addition.detected_2d.push_back(Lightbar2d {
                             .color      = bar.color,
-                            .upper      = Point2d { projection.result.projected_points[0] },
-                            .lower      = Point2d { projection.result.projected_points[1] },
+                            .upper      = Point2d { result.projected_points[0] },
+                            .lower      = Point2d { result.projected_points[1] },
                             .draw_color = color,
                         });
                     }
                 }
+            }
+            { // 更新附加信息，供外部绘制或者发布调试 Topic
+                std::ranges::copy(result->areas, std::back_inserter(addition.areas));
+                std::ranges::copy(
+                    result->predicted_near, std::back_inserter(addition.predicted_near));
+                std::ranges::copy(
+                    result->predicted_away, std::back_inserter(addition.predicted_away));
+                std::ranges::copy(result->found, std::back_inserter(addition.detected_2d));
+                addition.center = result->center;
             }
         }
         return armor3ds;
