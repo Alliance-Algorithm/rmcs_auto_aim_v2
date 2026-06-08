@@ -2,6 +2,7 @@
 #include "module/identifier/adjacency_lightbar.hpp"
 
 #include "utility/math/conversion.hpp"
+#include "utility/math/corners_optimizor.hpp"
 #include "utility/math/outpost.hpp"
 #include "utility/math/reprojection.hpp"
 #include "utility/math/solve_pnp/outpost_distance_optimizer.hpp"
@@ -176,13 +177,11 @@ struct PoseEstimator::Impl {
             return armor3ds;
         }
 
-        /// @FIXME(creeper5820):
-        ///  1. 坐标系变换存在问题，导致 Pitch 随着观测角度的变化而变化
-        ///  2. 前哨站装甲板的 Yaw 在角度较大时，会出现剧烈的二义性翻转
         auto outpost_in_camera = into_camera_link(*outpost3d);
         if (auto result = adjacency_finder.find(image, *outpost2d, outpost_in_camera)) {
             if (!result->found.empty()) {
-                const auto& lightbar = result->found[0];
+                auto& lightbar = result->found[0];
+                util::optimize_corners(image, lightbar);
 
                 auto& input = outpost_optimizer.input;
 
@@ -251,9 +250,10 @@ struct PoseEstimator::Impl {
 
                         auto& result = projection.result;
                         addition.detected_2d.push_back(Lightbar2d {
-                            .color      = bar.color,
-                            .upper      = Point2d { result.projected_points[0] },
-                            .lower      = Point2d { result.projected_points[1] },
+                            .color = bar.color,
+                            .upper = Point2d { result.projected_points[0] },
+                            .lower = Point2d { result.projected_points[1] },
+
                             .draw_color = color,
                         });
                     }

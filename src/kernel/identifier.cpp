@@ -4,6 +4,7 @@
 #include "module/identifier/armor_detection.hpp"
 #include "module/identifier/green_light.hpp"
 
+#include "utility/math/corners_optimizor.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <optional>
@@ -35,6 +36,8 @@ struct Identifier::Impl {
 
         std::erase_if(
             detected, [](const Armor2d& armor) { return armor.genre == ArmorGenre::UNKNOWN; });
+
+        util::optimize_corners(src, detected);
 
         auto outpost = Armor2ds { };
         auto base    = Armor2ds { };

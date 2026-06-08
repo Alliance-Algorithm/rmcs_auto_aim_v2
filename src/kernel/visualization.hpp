@@ -26,11 +26,12 @@ public:
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 
-    // TODO: 整理接口
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
         double yaw_acc, double pitch_acc) const -> void;
 
     auto update_camera_pose(const Transform&) const -> void;
+
+    /// Publishable
 
     auto publish(const Armor3d& armor, const std::string& name) -> void {
         publish(std::span<const Armor3d> { &armor, 1 }, name);
@@ -41,6 +42,8 @@ public:
         publish(std::span<const Lightbar3d> { &lightbar, 1 }, name);
     }
     auto publish(std::span<const Lightbar3d> lightbars, const std::string& name) -> void;
+
+    /// Drawable
 
     template <drawable_trait T>
     auto draw_later(const T& drawable) {
