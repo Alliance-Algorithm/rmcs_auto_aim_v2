@@ -8,11 +8,11 @@
 #include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
-#include "utility/robot/id.hpp"
 
 namespace rmcs::predictor {
 
 struct ISnapshotBackend;
+struct OutpostArmorLayout;
 class Snapshot;
 
 class Snapshot {
@@ -32,6 +32,11 @@ public:
     Snapshot& operator=(Snapshot&&) noexcept;
     ~Snapshot() noexcept;
     static auto empty(TimePoint stamp) noexcept -> Snapshot;
+
+    static auto make_outpost(OutpostEKF::XVec ekf_x, CampColor color, TimePoint stamp,
+        OutpostArmorLayout const& outpost_layout) noexcept -> Snapshot;
+    static auto make_regular(NormalEKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
+        TimePoint stamp) noexcept -> Snapshot;
 
     auto time_stamp() const -> TimePoint;
     auto device_id() const -> DeviceId;

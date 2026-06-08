@@ -1,20 +1,26 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <numbers>
-
 #include "module/predictor/outpost/armor_layout.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/kalman_filter/ekf.hpp"
+#include "utility/panic.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/constant.hpp"
+
+#include <array>
+#include <cmath>
+#include <numbers>
 
 namespace rmcs::predictor {
 
 struct OutpostEKFParameters {
     using EKF = util::EKF<7, 4>;
+
+    struct Measurement {
+        EKF::ZVec z;
+        EKF::RMat R;
+    };
 
     static constexpr int kOutpostArmorCount = 3;
     static constexpr double kPhaseStep      = 2.0 * std::numbers::pi / kOutpostArmorCount;
@@ -50,18 +56,38 @@ struct OutpostEKFParameters {
         return util::normalize_angle(x[5] + phase_offset);
     }
 
-    static auto armor_yaw(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> double {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return armor_yaw(x, layout.slots[normalized_id].phase_offset);
+    static auto phase_offset(int armor_id) -> double {
+        constexpr auto kPhaseOffsets =
+            std::array<double, kOutpostArmorCount> { 0.0, kPhaseStep, -kPhaseStep };
+        if (armor_id < 0 || armor_id >= kOutpostArmorCount) {
+            util::panic("outpost armor id out of range");
+        }
+        return kPhaseOffsets[static_cast<std::size_t>(armor_id)];
     }
 
-    static auto h_armor_z(EKF::XVec const& x, double height_offset) -> double {
-        return x[4] + height_offset;
+    static auto armor_yaw(EKF::XVec const& x, int armor_id) -> double {
+        return armor_yaw(x, phase_offset(armor_id));
     }
 
-    static auto h_armor_z(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> double {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return h_armor_z(x, layout.slots[normalized_id].height_offset);
+    static auto height_offset(OutpostArmorLayout::HeightTemplate height_template, int armor_id)
+        -> double {
+        using rmcs::kOutpostArmorHeightStep;
+        constexpr auto kHeightOffsets = std::array<double, kOutpostArmorCount> { 0.0,
+            +kOutpostArmorHeightStep, -kOutpostArmorHeightStep };
+        if (armor_id < 0 || armor_id >= kOutpostArmorCount) {
+            util::panic("outpost armor id out of range");
+        }
+        auto const sign =
+            (height_template == OutpostArmorLayout::HeightTemplate::PositiveOnSlot1) ? +1.0 : -1.0;
+        return sign * kHeightOffsets[static_cast<std::size_t>(armor_id)];
+    }
+
+    static auto height_offset(OutpostArmorLayout const& layout, int armor_id) -> double {
+        if (armor_id == 0) return 0.0;
+        if (!layout.height_template.has_value()) {
+            util::panic("outpost side armor height template is unknown");
+        }
+        return height_offset(*layout.height_template, armor_id);
     }
 
     static auto h_armor_xyz(EKF::XVec const& x, double phase_offset, double height_offset)
@@ -69,15 +95,8 @@ struct OutpostEKFParameters {
         const auto phase = armor_yaw(x, phase_offset);
         const auto pos_x = x[0] - kOutpostRadius * std::cos(phase);
         const auto pos_y = x[2] - kOutpostRadius * std::sin(phase);
-        const auto pos_z = h_armor_z(x, height_offset);
+        const auto pos_z = x[4] + height_offset;
         return { pos_x, pos_y, pos_z };
-    }
-
-    static auto h_armor_xyz(EKF::XVec const& x, OutpostArmorLayout const& layout, int id)
-        -> Eigen::Vector3d {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return h_armor_xyz(
-            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
     }
 
     static auto h(EKF::XVec const& x, double phase_offset, double height_offset) -> EKF::ZVec {
@@ -85,15 +104,13 @@ struct OutpostEKFParameters {
         const auto ypd = util::xyz2ypd(xyz);
         const auto yaw = armor_yaw(x, phase_offset);
 
-        auto z = EKF::ZVec { };
+        auto z = EKF::ZVec {};
         z << ypd[0], ypd[1], ypd[2], yaw;
         return z;
     }
 
-    static auto h(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> EKF::ZVec {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return h(
-            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
+    static auto h(EKF::XVec const& x, Armor3d const& armor, double height_offset) -> EKF::ZVec {
+        return h(x, phase_offset(armor.id), height_offset);
     }
 
     static auto x_add(EKF::XVec const& a, EKF::XVec const& b) -> EKF::XVec {
@@ -111,7 +128,7 @@ struct OutpostEKFParameters {
     }
 
     static auto F(double dt) -> EKF::AMat {
-        auto F = EKF::AMat { };
+        auto F = EKF::AMat {};
         // clang-format off
         F <<
             1, dt,  0,  0,  0,  0,  0,
@@ -132,15 +149,15 @@ struct OutpostEKFParameters {
         constexpr double z_ref_rw_var = 1e-3;
         // 参考装甲板 yaw / 角速度的角加速度噪声
         constexpr double angular_acc_var = 4.0;
-        const auto v1                 = linear_acc_var;
-        const auto v2                 = z_ref_rw_var;
-        const auto v3                 = angular_acc_var;
+        const auto v1                    = linear_acc_var;
+        const auto v2                    = z_ref_rw_var;
+        const auto v3                    = angular_acc_var;
 
         const auto a = dt * dt * dt * dt / 4.0;
         const auto b = dt * dt * dt / 2.0;
         const auto c = dt * dt;
 
-        auto Q = EKF::QMat { };
+        auto Q = EKF::QMat {};
         // clang-format off
         Q << a * v1, b * v1,       0,      0,       0,       0,       0,
              b * v1, c * v1,       0,      0,       0,       0,       0,
@@ -167,13 +184,29 @@ struct OutpostEKFParameters {
         const auto delta_yaw  = util::normalize_angle(ypr[0] - center_yaw);
         const auto distance   = ypd[2];
 
-        auto R_dig = EKF::RDig { };
+        auto R_dig = EKF::RDig {};
         // clang-format off
         R_dig << 4e-3, 4e-3, std::log(std::abs(delta_yaw) + 1.0) + 1.0,
             std::log(std::abs(distance) + 1.0) / 200.0 + 9e-2;
         // clang-format on
 
         return R_dig.asDiagonal();
+    }
+
+    static auto measurement(Armor3d const& armor) -> Measurement {
+        auto const [pos_x, pos_y, pos_z] = armor.translation;
+        auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
+
+        auto const [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
+        auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
+
+        auto const ypr = util::eulers(orientation);
+        auto const ypd = util::xyz2ypd(xyz);
+
+        auto z = EKF::ZVec {};
+        z << ypd[0], ypd[1], ypd[2], ypr[0];
+
+        return { z, R(xyz, ypr, ypd) };
     }
 
     static auto H(EKF::XVec const& x, double phase_offset, double height_offset) -> EKF::HMat {
@@ -207,10 +240,8 @@ struct OutpostEKFParameters {
         return H_armor_ypda * H_armor_xyza;
     }
 
-    static auto H(EKF::XVec const& x, OutpostArmorLayout const& layout, int id) -> EKF::HMat {
-        auto normalized_id = std::clamp(id, 0, kOutpostArmorCount - 1);
-        return H(
-            x, layout.slots[normalized_id].phase_offset, layout.slots[normalized_id].height_offset);
+    static auto H(EKF::XVec const& x, Armor3d const& armor, double height_offset) -> EKF::HMat {
+        return H(x, phase_offset(armor.id), height_offset);
     }
 };
 

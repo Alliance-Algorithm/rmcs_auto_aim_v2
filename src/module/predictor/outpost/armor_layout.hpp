@@ -1,17 +1,12 @@
 #pragma once
 
-#include <array>
+#include <optional>
 
 namespace rmcs::predictor {
 
-struct OutpostArmorSlot {
-    double phase_offset { 0.0 };
-    double height_offset { 0.0 };
-    bool assigned { false };
-};
-
 struct OutpostArmorLayout {
-    std::array<OutpostArmorSlot, 3> slots {};
+    enum class HeightTemplate { PositiveOnSlot1, NegativeOnSlot1 };
+    std::optional<HeightTemplate> height_template;
 };
 
 } // namespace rmcs::predictor

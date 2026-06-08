@@ -1,159 +1,14 @@
 #include "robot_state.hpp"
 
-#include <algorithm>
-#include <array>
+#include "utility/math/mahalanobis.hpp"
+#include "utility/time.hpp"
+
 #include <cmath>
 #include <limits>
 #include <optional>
 #include <span>
 
-#include "utility/math/mahalanobis.hpp"
-#include "utility/time.hpp"
-
-using namespace rmcs::predictor;
-
 namespace rmcs::predictor {
-auto make_outpost_snapshot(Snapshot::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
-    TimePoint stamp, OutpostArmorLayout outpost_layout) noexcept -> Snapshot;
-}
-
-namespace {
-
-constexpr int kUnknownArmorId = -1;
-using OutpostEKF              = OutpostRobotState::EKF;
-
-struct OutpostObservation {
-    OutpostEKF::ZVec z;
-    OutpostEKF::RMat R;
-    Eigen::Vector3d xyz;
-};
-
-struct MatchCandidate {
-    int armor_id { kUnknownArmorId };
-    double phase_offset { 0.0 };
-    double height_offset { 0.0 };
-    double error { std::numeric_limits<double>::infinity() };
-    bool extends_layout { false };
-    bool is_valid { false };
-};
-
-// 模板 A: slot1 = +H, slot2 = -H
-// 模板 B: slot1 = -H, slot2 = +H
-enum class HeightTemplate { Unknown, PositiveOnSlot1, NegativeOnSlot1 };
-
-auto resolve_template(OutpostArmorLayout const& layout) -> HeightTemplate {
-    if (layout.slots[1].assigned) {
-        return layout.slots[1].height_offset > 0.0 ? HeightTemplate::PositiveOnSlot1
-                                                   : HeightTemplate::NegativeOnSlot1;
-    }
-    if (layout.slots[2].assigned) {
-        return layout.slots[2].height_offset > 0.0 ? HeightTemplate::NegativeOnSlot1
-                                                   : HeightTemplate::PositiveOnSlot1;
-    }
-    return HeightTemplate::Unknown;
-}
-
-auto make_observation(rmcs::Armor3d const& armor) -> OutpostObservation {
-    auto const [pos_x, pos_y, pos_z] = armor.translation;
-    auto const xyz                   = Eigen::Vector3d { pos_x, pos_y, pos_z };
-
-    auto const [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
-    auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
-
-    auto const ypr = rmcs::util::eulers(orientation);
-    auto const ypd = rmcs::util::xyz2ypd(xyz);
-
-    auto z = OutpostEKF::ZVec {};
-    z << ypd[0], ypd[1], ypd[2], ypr[0];
-
-    return { z, OutpostEKFParameters::R(xyz, ypr, ypd), xyz };
-}
-
-auto assigned_count(OutpostArmorLayout const& layout) -> int {
-    return static_cast<int>(std::ranges::count(layout.slots, true, &OutpostArmorSlot::assigned));
-}
-
-auto layout_after_match(OutpostArmorLayout const& layout, MatchCandidate const& candidate)
-    -> OutpostArmorLayout {
-    auto next_layout = layout;
-    if (!candidate.extends_layout) return next_layout;
-
-    next_layout.slots[candidate.armor_id].phase_offset  = candidate.phase_offset;
-    next_layout.slots[candidate.armor_id].height_offset = candidate.height_offset;
-    next_layout.slots[candidate.armor_id].assigned      = true;
-    return next_layout;
-}
-
-auto slot_phase_offset(int armor_id) -> double {
-    switch (armor_id) {
-    case 0:
-        return 0.0;
-    case 1:
-        return OutpostEKFParameters::kPhaseStep;
-    case 2:
-        return -OutpostEKFParameters::kPhaseStep;
-    default:
-        return 0.0;
-    }
-}
-
-auto generate_slot_candidates(OutpostArmorLayout const& layout) -> std::array<MatchCandidate, 5> {
-    using rmcs::kOutpostArmorHeightStep;
-    constexpr auto kPhaseStep = OutpostEKFParameters::kPhaseStep;
-
-    auto candidates = std::array<MatchCandidate, 5> {};
-    auto n          = int { 0 };
-
-    for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {
-        if (!layout.slots[id].assigned) continue;
-        candidates[n++] = MatchCandidate { id, slot_phase_offset(id),
-            layout.slots[id].height_offset, 0.0, false, false };
-    }
-
-    if (n == OutpostEKFParameters::kOutpostArmorCount) return candidates;
-
-    auto const tmpl = resolve_template(layout);
-
-    for (int id : { 1, 2 }) {
-        if (layout.slots[id].assigned) continue;
-
-        auto const phase = (id == 1) ? +kPhaseStep : -kPhaseStep;
-
-        if (tmpl == HeightTemplate::Unknown) {
-            candidates[n++] =
-                MatchCandidate { id, phase, +kOutpostArmorHeightStep, 0.0, true, false };
-            candidates[n++] =
-                MatchCandidate { id, phase, -kOutpostArmorHeightStep, 0.0, true, false };
-            continue;
-        }
-
-        auto const h1   = (tmpl == HeightTemplate::PositiveOnSlot1) ? +kOutpostArmorHeightStep
-                                                                    : -kOutpostArmorHeightStep;
-        candidates[n++] = MatchCandidate { id, phase, (id == 1) ? h1 : -h1, 0.0, true, false };
-    }
-
-    return candidates;
-}
-
-auto evaluate_candidate(OutpostObservation const& observation, OutpostEKF::XVec const& x,
-    OutpostEKF::PMat const& P, double mahalanobis_gate, MatchCandidate const& candidate)
-    -> MatchCandidate {
-    auto result = candidate;
-    if (result.armor_id == kUnknownArmorId) return result;
-
-    auto const H           = OutpostEKFParameters::H(x, result.phase_offset, result.height_offset);
-    auto const z_hat       = OutpostEKFParameters::h(x, result.phase_offset, result.height_offset);
-    auto const innovation  = OutpostEKFParameters::z_subtract(observation.z, z_hat);
-    auto const S           = H * P * H.transpose() + observation.R;
-    auto const mahalanobis = rmcs::util::mahalanobis_distance(innovation, S);
-    if (!mahalanobis.has_value() || *mahalanobis > mahalanobis_gate) return result;
-
-    result.error    = *mahalanobis;
-    result.is_valid = true;
-    return result;
-}
-
-} // namespace
 
 struct OutpostRobotState::Impl {
     explicit Impl(TimePoint stamp) noexcept
@@ -165,12 +20,9 @@ struct OutpostRobotState::Impl {
             OutpostEKFParameters::P_initial_dig().asDiagonal() };
         time_stamp = t;
 
-        layout                        = OutpostArmorLayout {};
-        layout.slots[0].phase_offset  = 0.0;
-        layout.slots[0].height_offset = 0.0;
-        layout.slots[0].assigned      = true;
-        update_count                  = 0;
-        initialized                   = true;
+        layout       = OutpostArmorLayout {};
+        update_count = 0;
+        initialized  = true;
     }
 
     auto predict(TimePoint t) -> void {
@@ -204,7 +56,7 @@ struct OutpostRobotState::Impl {
         auto best_match = select_best_match(armors);
         if (!best_match.has_value()) return false;
 
-        apply_match(best_match->first, best_match->second);
+        apply_match(*best_match);
         return true;
     }
 
@@ -215,7 +67,8 @@ struct OutpostRobotState::Impl {
     }
 
     auto get_snapshot() const -> Snapshot {
-        return make_outpost_snapshot(ekf.x, color, assigned_count(layout), time_stamp, layout);
+        if (!initialized) return Snapshot::empty(time_stamp);
+        return Snapshot::make_outpost(ekf.x, color, time_stamp, layout);
     }
 
     auto distance() const -> double {
@@ -224,6 +77,61 @@ struct OutpostRobotState::Impl {
     }
 
 private:
+    struct MatchedArmor {
+        Armor3d armor;
+        double height_offset;
+        OutpostArmorLayout layout;
+    };
+
+    auto resolve_layout(int armor_id, double height_offset) const -> OutpostArmorLayout {
+        auto next_layout = layout;
+        if (next_layout.height_template.has_value() || armor_id == 0) return next_layout;
+
+        auto const positive_on_slot1 = (armor_id == 1) == (height_offset > 0.0);
+        next_layout.height_template  = positive_on_slot1
+             ? OutpostArmorLayout::HeightTemplate::PositiveOnSlot1
+             : OutpostArmorLayout::HeightTemplate::NegativeOnSlot1;
+        return next_layout;
+    }
+
+    auto visit_match_hypotheses(auto&& visit) const -> void {
+        using rmcs::kOutpostArmorHeightStep;
+
+        auto const visit_hypothesis = [&](int armor_id, double height_offset = 0.0) {
+            visit(armor_id, height_offset, resolve_layout(armor_id, height_offset));
+        };
+
+        visit_hypothesis(0);
+
+        if (!layout.height_template.has_value()) {
+            auto const visit_side_hypotheses = [&](int armor_id) {
+                visit_hypothesis(armor_id, +kOutpostArmorHeightStep);
+                visit_hypothesis(armor_id, -kOutpostArmorHeightStep);
+            };
+
+            visit_side_hypotheses(1);
+            visit_side_hypotheses(2);
+            return;
+        }
+
+        for (int armor_id : { 1, 2 }) {
+            visit_hypothesis(
+                armor_id, OutpostEKFParameters::height_offset(*layout.height_template, armor_id));
+        }
+    }
+
+    auto evaluate_match(OutpostEKFParameters::Measurement const& measurement, Armor3d const& armor,
+        double height_offset) const -> std::optional<double> {
+        auto const H           = OutpostEKFParameters::H(ekf.x, armor, height_offset);
+        auto const z_hat       = OutpostEKFParameters::h(ekf.x, armor, height_offset);
+        auto const innovation  = OutpostEKFParameters::z_subtract(measurement.z, z_hat);
+        auto const S           = H * ekf.P() * H.transpose() + measurement.R;
+        auto const mahalanobis = rmcs::util::mahalanobis_distance(innovation, S);
+        if (!mahalanobis.has_value() || *mahalanobis > mahalanobis_gate) return std::nullopt;
+
+        return *mahalanobis;
+    }
+
     auto reset_runtime_state(TimePoint t) -> void {
         color        = CampColor::UNKNOWN;
         ekf          = EKF {};
@@ -233,38 +141,42 @@ private:
         update_count = 0;
     }
 
-    auto select_best_match(std::span<Armor3d const> armors) const
-        -> std::optional<std::pair<OutpostObservation, MatchCandidate>> {
-        auto best_match       = std::optional<std::pair<OutpostObservation, MatchCandidate>> {};
-        auto const candidates = generate_slot_candidates(layout);
+    auto select_best_match(std::span<Armor3d const> armors) const -> std::optional<MatchedArmor> {
+        auto best_match       = std::optional<MatchedArmor> {};
+        auto best_mahalanobis = std::numeric_limits<double>::infinity();
 
         for (auto const& armor : armors) {
-            auto const observation = make_observation(armor);
-            for (auto const& candidate : candidates) {
-                auto match =
-                    evaluate_candidate(observation, ekf.x, ekf.P(), mahalanobis_gate, candidate);
-                if (!match.is_valid) continue;
-                if (best_match.has_value() && match.error >= best_match->second.error) continue;
+            auto const measurement = OutpostEKFParameters::measurement(armor);
 
-                best_match = std::pair { observation, match };
-            }
+            visit_match_hypotheses([&](int armor_id, double height_offset,
+                                       OutpostArmorLayout const& next_layout) {
+                auto matched_armor = armor;
+                matched_armor.id   = armor_id;
+
+                auto const mahalanobis = evaluate_match(measurement, matched_armor, height_offset);
+                if (!mahalanobis.has_value()) return;
+                if (*mahalanobis >= best_mahalanobis) return;
+
+                best_mahalanobis = *mahalanobis;
+                best_match       = MatchedArmor { matched_armor, height_offset, next_layout };
+            });
         }
 
         return best_match;
     }
 
-    auto apply_match(OutpostObservation const& observation, MatchCandidate const& match) -> void {
-        auto const next_layout = layout_after_match(layout, match);
+    auto apply_match(MatchedArmor const& match) -> void {
+        auto const measurement = OutpostEKFParameters::measurement(match.armor);
 
         ekf.update(
-            observation.z,
-            [layout = next_layout, armor_id = match.armor_id](
-                EKF::XVec const& x) { return OutpostEKFParameters::h(x, layout, armor_id); },
-            [layout = next_layout, armor_id = match.armor_id](
-                EKF::XVec const& x) { return OutpostEKFParameters::H(x, layout, armor_id); },
-            observation.R, OutpostEKFParameters::x_add, OutpostEKFParameters::z_subtract);
+            measurement.z,
+            [armor = match.armor, height_offset = match.height_offset](
+                EKF::XVec const& x) { return OutpostEKFParameters::h(x, armor, height_offset); },
+            [armor = match.armor, height_offset = match.height_offset](
+                EKF::XVec const& x) { return OutpostEKFParameters::H(x, armor, height_offset); },
+            measurement.R, OutpostEKFParameters::x_add, OutpostEKFParameters::z_subtract);
 
-        layout = next_layout;
+        layout = match.layout;
         update_count++;
     }
 
@@ -302,3 +214,5 @@ auto OutpostRobotState::is_converged() const -> bool { return pimpl->is_converge
 auto OutpostRobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
 
 auto OutpostRobotState::distance() const -> double { return pimpl->distance(); }
+
+} // namespace rmcs::predictor

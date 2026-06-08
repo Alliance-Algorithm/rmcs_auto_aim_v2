@@ -7,22 +7,18 @@
 
 namespace rmcs::predictor {
 
-namespace {
+struct EmptySnapshotBackend final : ISnapshotBackend {
+    explicit EmptySnapshotBackend(TimePoint stamp) noexcept
+        : ISnapshotBackend { DeviceId::UNKNOWN, CampColor::UNKNOWN, 0, stamp } { }
 
-    struct EmptySnapshotBackend final : ISnapshotBackend {
-        explicit EmptySnapshotBackend(TimePoint stamp) noexcept
-            : ISnapshotBackend { DeviceId::UNKNOWN, CampColor::UNKNOWN, 0, stamp } { }
+    [[nodiscard]] auto kinematics_at(TimePoint) const -> Snapshot::Kinematics override {
+        return { Eigen::Vector3d::Zero(), 0.0 };
+    }
 
-        [[nodiscard]] auto kinematics_at(TimePoint) const -> Snapshot::Kinematics override {
-            return { Eigen::Vector3d::Zero(), 0.0 };
-        }
-
-        [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3d> override {
-            return { };
-        }
-    };
-
-} // namespace
+    [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3d> override {
+        return {};
+    }
+};
 
 auto Snapshot::empty(TimePoint stamp) noexcept -> Snapshot {
     return Snapshot { std::make_unique<EmptySnapshotBackend>(stamp) };

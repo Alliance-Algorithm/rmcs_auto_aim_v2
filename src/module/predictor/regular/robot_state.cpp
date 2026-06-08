@@ -8,12 +8,7 @@
 
 #include "utility/time.hpp"
 
-using namespace rmcs::predictor;
-
 namespace rmcs::predictor {
-auto make_regular_snapshot(Snapshot::NormalEKF::XVec ekf_x, DeviceId device, CampColor color,
-    int armor_num, TimePoint stamp) noexcept -> Snapshot;
-}
 
 struct RegularRobotState::Impl {
     struct MatchDecision {
@@ -113,7 +108,7 @@ struct RegularRobotState::Impl {
 
     auto get_snapshot() const -> Snapshot {
         if (!initialized) return Snapshot::empty(time_stamp);
-        return make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
+        return Snapshot::make_regular(ekf.x, device, color, armor_num, time_stamp);
     }
 
     auto distance() const -> double {
@@ -246,3 +241,5 @@ auto RegularRobotState::is_converged() const -> bool { return pimpl->is_converge
 auto RegularRobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
 
 auto RegularRobotState::distance() const -> double { return pimpl->distance(); }
+
+} // namespace rmcs::predictor
