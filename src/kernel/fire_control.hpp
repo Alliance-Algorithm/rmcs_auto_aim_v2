@@ -1,7 +1,5 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
-
 #include <expected>
 #include <yaml-cpp/yaml.h>
 
@@ -23,7 +21,7 @@ public:
         double yaw_acc;
         bool feedforward_valid;
         bool shoot_permitted;
-        Eigen::Vector3d center_position;
+        Point3d center_position;
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;

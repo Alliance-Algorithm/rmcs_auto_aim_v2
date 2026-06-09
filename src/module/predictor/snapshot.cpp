@@ -14,7 +14,7 @@ namespace {
             : ISnapshotBackend { DeviceId::UNKNOWN, CampColor::UNKNOWN, 0, stamp } { }
 
         [[nodiscard]] auto kinematics_at(TimePoint) const -> Snapshot::Kinematics override {
-            return { Eigen::Vector3d::Zero(), 0.0 };
+            return { Point3d::kZero(), 0.0 };
         }
 
         [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3d> override {

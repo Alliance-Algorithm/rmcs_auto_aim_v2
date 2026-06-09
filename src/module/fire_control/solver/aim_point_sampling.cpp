@@ -30,11 +30,12 @@ auto rmcs::fire_control::AimPointSampler::sample_aim_point_at(predictor::Snapsho
     AimPointChooser& chooser, TimePoint t) -> std::expected<Eigen::Vector3d, std::string> {
     auto predicted_armors     = snapshot.predicted_armors(t);
     auto predicted_kinematics = snapshot.kinematics_at(t);
-    auto chosen_armor = chooser.choose_armor(predicted_armors, predicted_kinematics.center_position,
+    auto chosen_armor         = chooser.choose_armor(predicted_armors,
+        predicted_kinematics.center_position.make<Eigen::Vector3d>(),
         predicted_kinematics.angular_velocity);
     if (!chosen_armor.has_value()) return std::unexpected { "choose_armor returned nullopt" };
 
-    auto aim_point = Eigen::Vector3d {};
+    auto aim_point = Eigen::Vector3d { };
     chosen_armor->translation.copy_to(aim_point);
     return aim_point;
 }
@@ -46,7 +47,7 @@ auto rmcs::fire_control::AimPointSampler::solve_aim_attitude(Eigen::Vector3d con
         return std::unexpected { "invalid target distance" };
     }
 
-    auto solution                  = TrajectorySolution {};
+    auto solution                  = TrajectorySolution { };
     solution.input.v0              = bullet_speed;
     solution.input.target_position = aim_point;
 
