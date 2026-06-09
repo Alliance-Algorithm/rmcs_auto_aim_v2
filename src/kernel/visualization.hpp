@@ -24,7 +24,7 @@ public:
 
     auto update_image(Image& image) -> bool;
 
-    /// Publishable
+    /// Publishable [OdomLink As Default]
 
     auto publish(const Armor3d& armor, const std::string& name) -> void {
         publish(std::span<const Armor3d> { &armor, 1 }, name);
@@ -36,7 +36,7 @@ public:
     }
     auto publish(std::span<const Lightbar3d> lightbars, const std::string& name) -> void;
 
-    auto publish_odom(const Transform& t, const std::string& name) -> void;
+    auto publish(const Transform& t, const std::string& name) -> void;
 
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 

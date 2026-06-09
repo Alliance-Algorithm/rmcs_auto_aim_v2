@@ -123,15 +123,18 @@ auto main() -> int {
 
             context = *closest;
         }
-        visualization.publish_odom(context.camera_transform, "camera_link");
+        visualization.publish(context.camera_transform, "camera_link");
 
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
         }
 
         // 结束流程后发送串流帧
-        [[maybe_unused]] auto streamer =
-            std::experimental::scope_exit { [&] { visualization.update_image(*image); } };
+        [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
+            visualization.draw_later(
+                Text { capturer.recording() ? "RECORD ON" : "RECORD OFF", { 640, 20 } });
+            visualization.update_image(*image);
+        } };
 
         /// 1. Identify Armor
         ///
@@ -174,11 +177,11 @@ auto main() -> int {
             visualization.draw_later(addition.areas);
             visualization.draw_later(addition.predicted_near);
             visualization.draw_later(addition.predicted_away);
+
             visualization.publish(addition.origin, "origin_armors");
             visualization.publish(addition.detected_3d, "outpost_lightbars");
-
-            auto center_transform = Transform { addition.center_3d, Orientation::kIdentity() };
-            visualization.publish_odom(center_transform, "center_3d");
+            visualization.publish(
+                { addition.center_3d, Orientation::kIdentity() }, "outpost_center");
 
             armors_3d = result;
             if (armors_3d.empty()) continue;

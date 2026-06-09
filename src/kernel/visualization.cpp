@@ -167,6 +167,11 @@ struct Visualization::Impl {
         }
         iter->second.update(lightbars);
     }
+    auto publish(const Transform& t, const std::string& name) -> void {
+        if (!is_initialized || !config.publishable) return;
+        odom_transform.set_link(kOdomLink, name);
+        odom_transform.publish(t);
+    }
 
     auto update_aiming_direction(double yaw, double pitch) const -> void {
         if (!is_initialized) return;
@@ -181,12 +186,6 @@ struct Visualization::Impl {
         if (!config.publishable) return;
         mpc_plan.publish_planned_yaw(yaw, yaw_rate, yaw_acc);
         mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
-    }
-
-    auto publish_odom(const Transform& t, const std::string& name) -> void {
-        if (!is_initialized || !config.publishable) return;
-        odom_transform.set_link(kOdomLink, name);
-        odom_transform.publish(t);
     }
 };
 
@@ -221,8 +220,8 @@ auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, d
     pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
-auto Visualization::publish_odom(const Transform& t, const std::string& name) -> void {
-    pimpl->publish_odom(t, name);
+auto Visualization::publish(const Transform& t, const std::string& name) -> void {
+    pimpl->publish(t, name);
 }
 
 Visualization::Visualization() noexcept

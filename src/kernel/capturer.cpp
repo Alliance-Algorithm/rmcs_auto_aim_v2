@@ -92,6 +92,15 @@ struct Capturer::Impl {
         }
     } };
 
+    ~Impl() noexcept {
+        runtime_thread.request_stop();
+        if (runtime_thread.joinable()) {
+            runtime_thread.join();
+        }
+    }
+
+    auto recording() const { return recorder.recording(); }
+
     auto initialize(const YAML::Node& yaml) noexcept -> Result try {
         if (auto result = config.serialize(yaml); !result.has_value()) {
             return std::unexpected { result.error() };
@@ -149,13 +158,6 @@ struct Capturer::Impl {
 
     } catch (const std::exception& e) {
         return std::unexpected { e.what() };
-    }
-
-    ~Impl() noexcept {
-        runtime_thread.request_stop();
-        if (runtime_thread.joinable()) {
-            runtime_thread.join();
-        }
     }
 
     // 为了实时性，一般取最新的帧
@@ -277,6 +279,8 @@ auto Capturer::initialize(const Yaml& config) noexcept -> std::expected<void, st
 }
 
 auto Capturer::fetch_image() noexcept -> ImageUnique { return pimpl->fetch_image(); }
+
+auto Capturer::recording() const -> bool { return pimpl->recording(); }
 
 Capturer::Capturer() noexcept
     : pimpl { std::make_unique<Impl>() } { }
