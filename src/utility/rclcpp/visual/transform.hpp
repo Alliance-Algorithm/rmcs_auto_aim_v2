@@ -1,35 +1,22 @@
 #pragma once
+
 #include "utility/math/linear.hpp"
+#include "utility/pimpl.hpp"
 #include "utility/rclcpp/node.hpp"
-#include "utility/rclcpp/visual/movable.hpp"
 
 namespace rmcs::util::visual {
 
-struct Transform : Movable {
-    friend Movable;
+using rmcs::Transform;
+
+struct DynamicTransform {
+    RMCS_PIMPL_DEFINITION(DynamicTransform)
 
 public:
-    struct Config {
-        RclcppNode& rclcpp;
+    explicit DynamicTransform(RclcppNode&);
 
-        std::string topic;
-        std::string parent_frame;
-        std::string child_frame;
-    };
+    auto set_link(const std::string& parent, const std::string& child) -> void;
 
-    explicit Transform(const Config&);
-    ~Transform() noexcept;
-
-    Transform(const Transform&)            = delete;
-    Transform& operator=(const Transform&) = delete;
-
-    auto update() -> void;
-
-private:
-    auto impl_move(const Translation&, const Orientation&) -> void;
-
-    struct Impl;
-    std::unique_ptr<Impl> pimpl;
+    auto publish(const Transform&) -> void;
 };
 
 }

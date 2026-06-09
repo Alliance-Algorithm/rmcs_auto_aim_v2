@@ -57,9 +57,8 @@ struct Visualization::Impl {
     SessionConfig session_config;
 
     debug::MpcPlanVisualizer mpc_plan;
-
+    visual::DynamicTransform odom_transform { rclcpp };
     std::unique_ptr<visual::Arrow> aiming_direction;
-    std::unique_ptr<visual::Transform> camera_transform;
     std::unordered_map<std::string, visual::Armors> armor_publishers;
     std::unordered_map<std::string, visual::Lightbars> lightbar_publishers;
 
@@ -93,12 +92,6 @@ struct Visualization::Impl {
             .rclcpp = rclcpp,
             .name   = "aiming_direction",
             .tf     = kOdomLink,
-        });
-        camera_transform = std::make_unique<visual::Transform>(visual::Transform::Config {
-            .rclcpp       = rclcpp,
-            .topic        = "odom_to_camera_transform",
-            .parent_frame = kOdomLink,
-            .child_frame  = kCameraLink,
         });
 
         is_initialized = true;
@@ -190,11 +183,10 @@ struct Visualization::Impl {
         mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
     }
 
-    auto update_camera_pose(const Transform& t) const -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
-        camera_transform->move(t.translation, t.orientation);
-        camera_transform->update();
+    auto publish_odom(const Transform& t, const std::string& name) -> void {
+        if (!is_initialized || !config.publishable) return;
+        odom_transform.set_link(kOdomLink, name);
+        odom_transform.publish(t);
     }
 };
 
@@ -229,8 +221,8 @@ auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, d
     pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
-auto Visualization::update_camera_pose(const Transform& t) const -> void {
-    pimpl->update_camera_pose(t);
+auto Visualization::publish_odom(const Transform& t, const std::string& name) -> void {
+    pimpl->publish_odom(t, name);
 }
 
 Visualization::Visualization() noexcept

@@ -17,7 +17,8 @@ public:
     struct Addition {
         Armor3ds origin;
         std::vector<cv::Rect2i> areas;
-        Point2d center;
+        Point2d center_2d;
+        Point3d center_3d;
         Lightbar2ds predicted_near;
         Lightbar2ds predicted_away;
         Lightbar2ds detected_2d;

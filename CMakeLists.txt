@@ -32,6 +32,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(rmcs_msgs REQUIRED)
 
 find_package(rmcs_executor REQUIRED)
@@ -48,6 +49,7 @@ include_directories(
     ${ament_index_cpp_INCLUDE_DIRS}
     ${visualization_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
+    ${tf2_ros_INCLUDE_DIRS}
     ${rmcs_msgs_INCLUDE_DIRS}
 
     ${rmcs_executor_INCLUDE_DIRS}
@@ -95,6 +97,7 @@ target_link_libraries(
         ${hikcamera_LIBRARIES}
         ${visualization_msgs_LIBRARIES}
         ${geometry_msgs_LIBRARIES}
+        ${tf2_ros_LIBRARIES}
     PRIVATE
         tinympcstatic
 )

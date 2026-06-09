@@ -123,7 +123,7 @@ auto main() -> int {
 
             context = *closest;
         }
-        visualization.update_camera_pose(context.camera_transform);
+        visualization.publish_odom(context.camera_transform, "camera_link");
 
         if (framerate.tick()) {
             node.info("Autoaim Framerate: {}", framerate.fps());
@@ -175,6 +175,10 @@ auto main() -> int {
             visualization.draw_later(addition.predicted_near);
             visualization.draw_later(addition.predicted_away);
             visualization.publish(addition.origin, "origin_armors");
+            visualization.publish(addition.detected_3d, "outpost_lightbars");
+
+            auto center_transform = Transform { addition.center_3d, Orientation::kIdentity() };
+            visualization.publish_odom(center_transform, "center_3d");
 
             armors_3d = result;
             if (armors_3d.empty()) continue;

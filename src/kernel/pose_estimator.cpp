@@ -164,7 +164,8 @@ struct PoseEstimator::Impl {
             addition.predicted_away.clear();
             addition.detected_2d.clear();
             addition.detected_3d.clear();
-            addition.center = { };
+            addition.center_2d = Point2d::kNaN();
+            addition.center_3d = Point3d::kNaN();
         }
 
         // 前哨站专属优化
@@ -195,10 +196,8 @@ struct PoseEstimator::Impl {
                 if (outpost_optimizer.solve()) {
                     addition.origin.push_back(*outpost3d);
 
-                    auto& result = outpost_optimizer.result;
-
-                    outpost_in_camera = result.armor;
-                    *outpost3d        = into_odom_link(result.armor);
+                    outpost_in_camera = outpost_optimizer.result.armor;
+                    *outpost3d        = into_odom_link(outpost_in_camera);
 
                     // 投影到 2d 看效果
                     auto solution                  = NeighborBarSolution { };
@@ -206,6 +205,10 @@ struct PoseEstimator::Impl {
                     solution.input.in_right        = lightbar.is_right;
                     solution.input.armor_thickness = config.outpost_armor_thickness;
                     solution.solve();
+
+                    addition.center_3d = into_odom_link(
+                        Transform { solution.result.center, Orientation::kIdentity() })
+                                             .translation;
 
                     const auto& near_bar =
                         lightbar.is_upper ? solution.result.upper_near : solution.result.lower_near;
@@ -263,7 +266,7 @@ struct PoseEstimator::Impl {
                 std::ranges::copy(
                     result->predicted_away, std::back_inserter(addition.predicted_away));
                 std::ranges::copy(result->found, std::back_inserter(addition.detected_2d));
-                addition.center = result->center;
+                addition.center_2d = result->center;
             }
         }
         return armor3ds;

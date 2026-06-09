@@ -2,49 +2,59 @@
 #include "utility/panic.hpp"
 #include "utility/rclcpp/node.details.hpp"
 
+#include <cmath>
 #include <format>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_ros/transform_broadcaster.h>
 
 using namespace rmcs::util::visual;
-using TransformMsg = geometry_msgs::msg::TransformStamped;
 
-struct Transform::Impl {
+struct DynamicTransform::Impl {
     static inline rclcpp::Clock rclcpp_clock { RCL_STEADY_TIME };
 
-    TransformMsg msg;
-    rclcpp::Publisher<TransformMsg>::SharedPtr rclcpp_pub;
+    RclcppNode& node;
+    std::string parent_frame;
+    std::string child_frame;
+    tf2_ros::TransformBroadcaster tf_broadcaster;
 
-    explicit Impl(const Config& config) {
-        if (!prefix::check_naming(config.topic) || !prefix::check_naming(config.parent_frame)
-            || !prefix::check_naming(config.child_frame)) {
-            util::panic(std::format(
-                "Invalid naming for transform topic/frame: {}", prefix::naming_standard));
+    explicit Impl(RclcppNode& node) noexcept
+        : node { node }
+        , tf_broadcaster { node.details->rclcpp } { }
+
+    auto set_link(const std::string& parent, const std::string& child) -> void {
+        if (!prefix::check_naming(parent) || !prefix::check_naming(child)) {
+            util::panic(
+                std::format("Invalid naming for transform frame: {}", prefix::naming_standard));
+        }
+        parent_frame = parent;
+        child_frame  = child;
+    }
+
+    auto publish(const Transform& transform) -> void {
+        if (std::isnan(transform.translation.x) || std::isnan(transform.translation.y)
+            || std::isnan(transform.translation.z)) {
+            return;
         }
 
-        auto& rclcpp = config.rclcpp.details->rclcpp;
-        const auto topic_name { config.rclcpp.get_pub_topic_prefix() + config.topic };
-        rclcpp_pub = rclcpp->create_publisher<TransformMsg>(topic_name, qos::debug);
+        geometry_msgs::msg::TransformStamped msg;
+        msg.header.stamp    = rclcpp_clock.now();
+        msg.header.frame_id = parent_frame;
+        msg.child_frame_id  = child_frame;
 
-        msg.header.frame_id = config.parent_frame;
-        msg.child_frame_id  = config.child_frame;
-    }
+        transform.translation.copy_to(msg.transform.translation);
+        transform.orientation.copy_to(msg.transform.rotation);
 
-    auto move(const Translation& t, const Orientation& q) {
-        t.copy_to(msg.transform.translation);
-        q.copy_to(msg.transform.rotation);
-    }
-
-    auto update() noexcept {
-        msg.header.stamp = rclcpp_clock.now();
-        rclcpp_pub->publish(msg);
+        tf_broadcaster.sendTransform(msg);
     }
 };
 
-auto Transform::update() -> void { pimpl->update(); }
+DynamicTransform::DynamicTransform(RclcppNode& node)
+    : pimpl { std::make_unique<Impl>(node) } { }
 
-auto Transform::impl_move(const Translation& t, const Orientation& q) -> void { pimpl->move(t, q); }
+DynamicTransform::~DynamicTransform() noexcept = default;
 
-Transform::Transform(const Config& config)
-    : pimpl { std::make_unique<Impl>(config) } { }
+auto DynamicTransform::set_link(const std::string& parent, const std::string& child) -> void {
+    pimpl->set_link(parent, child);
+}
 
-Transform::~Transform() noexcept = default;
+auto DynamicTransform::publish(const Transform& transform) -> void { pimpl->publish(transform); }
