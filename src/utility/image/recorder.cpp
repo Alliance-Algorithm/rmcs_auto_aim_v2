@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <format>
 #include <memory>
-#include <print>
 #include <string>
 #include <utility>
 
@@ -32,11 +31,12 @@ struct VideoRecorder::Impl {
 
         explicit Session(const std::filesystem::path& dir) {
             // 创建一个人类可读的录制文件名称并将其打开
-            const auto now       = std::chrono::system_clock::now();
+            const auto now =
+                std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
             const auto our_zone  = std::chrono::locate_zone("Asia/Shanghai");
             const auto zone_time = std::chrono::zoned_time { our_zone, now };
 
-            const auto filename  = std::format("autoaim-{:%Y%m%d_%H%M%S}.avi", zone_time);
+            const auto filename  = std::format("autoaim_{:%Y-%m-%d_%H-%M-%S}.avi", zone_time);
             const auto file_path = dir / filename;
 
             path = file_path;
@@ -85,7 +85,10 @@ struct VideoRecorder::Impl {
 
         auto filename() const { return path.string(); }
 
-        auto duration() const { return std::chrono::steady_clock::now() - opened_timestamp; }
+        auto duration() const {
+            return std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - opened_timestamp);
+        }
 
         auto set_remove_later() { remove_later = true; }
 
@@ -96,10 +99,15 @@ struct VideoRecorder::Impl {
     Config config;
     std::filesystem::path selected_directory { };
 
+    std::optional<std::string> stop_reason = std::nullopt;
+
     auto stop(bool save = true) {
         if (session && !save) {
             session->set_remove_later();
         }
+        if (session && !stop_reason)
+            stop_reason = std::format(
+                "录制已由用户停止，文件保存至 {}({})", session->filename(), session->duration());
         session = nullptr;
     }
 
@@ -108,15 +116,18 @@ struct VideoRecorder::Impl {
             return;
         }
         // 时长过长，则自动停止录制，保存至本地
-        if (session->duration() > config.max_duration) {
+        if (session->duration() >= config.max_duration) {
+            stop_reason = std::format("录制时长超过限制({})，已自动停止，文件保存至 {}",
+                config.max_duration, session->filename());
             stop(true);
-            std::println("到点了，哥");
             return;
         }
         session->append(mat);
     }
 
     auto start() -> std::expected<void, std::string> {
+        stop_reason.reset();
+
         { // 从配置中选择第一个有效的目录
             const auto& directories = config.directories;
             for (const auto& dir : directories) {
@@ -163,6 +174,15 @@ struct VideoRecorder::Impl {
 
         return { };
     }
+
+    auto status() const -> std::string {
+        if (stop_reason) {
+            return *stop_reason;
+        }
+        return session != nullptr
+            ? std::format("录制中({})，当前文件为 {}", session->duration(), session->filename())
+            : std::format("未开始录制");
+    }
 };
 
 auto VideoRecorder::update_config(Config config) -> void { pimpl->config = std::move(config); }
@@ -181,6 +201,8 @@ auto VideoRecorder::filename() const -> std::optional<std::string> {
     }
     return pimpl->session->filename();
 }
+
+auto VideoRecorder::status() const -> std::string { return pimpl->status(); }
 
 VideoRecorder::VideoRecorder() noexcept
     : pimpl { std::make_unique<Impl>() } { }
