@@ -35,4 +35,10 @@ struct StaticString {
 template <std::size_t N>
 StaticString(const char (&)[N]) -> StaticString<N>;
 
+template <StaticString String>
+struct Named {
+    static constexpr auto kView = String.view();
+    static constexpr auto kData = String.data;
+};
+
 }

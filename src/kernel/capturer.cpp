@@ -3,13 +3,17 @@
 #include "module/capturer/hikcamera.hpp"
 #include "module/capturer/local_video.hpp"
 #include "utility/framerate.hpp"
+#include "utility/image/image.details.hpp"
+#include "utility/image/recorder.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/service.hpp"
 #include "utility/singleton/running.hpp"
 #include "utility/thread/spsc_queue.hpp"
 #include "utility/times_limit.hpp"
 
-#include <rclcpp/utilities.hpp>
+#include <ranges>
 #include <thread>
+#include <vector>
 
 using namespace rmcs::kernel;
 using namespace rmcs::cap;
@@ -17,18 +21,83 @@ using namespace rmcs::cap;
 struct Capturer::Impl {
     using RawImage = Image*;
 
+    struct Config : util::Serializable {
+        std::string source;
+        bool show_loss_framerate;
+        int show_loss_framerate_interval;
+        int reconnect_wait_interval;
+        bool record_enable;
+        std::vector<std::string> saving_pathes;
+        int max_duration_seconds;
+        std::size_t record_fps;
+        std::uintmax_t max_videos_size_gb;
+
+        // clang-format off
+        static constexpr std::tuple metas {
+            &Config::source,                    "source",
+            &Config::show_loss_framerate,       "show_loss_framerate",
+            &Config::show_loss_framerate_interval, "show_loss_framerate_interval",
+            &Config::reconnect_wait_interval,   "reconnect_wait_interval",
+            &Config::record_enable,             "record_enable",
+            &Config::saving_pathes,             "saving_pathes",
+            &Config::max_duration_seconds,      "max_duration_seconds",
+            &Config::record_fps,                "record_fps",
+            &Config::max_videos_size_gb,        "max_videos_size_gb",
+        };
+        // clang-format on
+    } config;
+
     std::unique_ptr<Interface> interface;
 
     Printer log { "Capturer" };
     FramerateCounter loss_image_framerate { };
 
-    std::chrono::milliseconds reconnect_wait_interval { 500 };
-
     util::spsc_queue<Image*, 10> capture_queue;
     std::jthread runtime_thread;
 
+    VideoRecorder recorder { };
+
+    std::atomic<std::int8_t> record_request = 0;
+    std::jthread service_thread { [this](const std::stop_token& token) {
+        using namespace util;
+        auto service = Service {
+            Named<"cap"> { },
+            Action { Named<"record">(),
+                [this](std::string_view data) {
+                    constexpr auto kT = std::array { "1", "true" };
+                    constexpr auto kF = std::array { "0", "false" };
+
+                    const auto lower = std::ranges::to<std::string>(data
+                        | std::views::drop_while([](char c) { return c == '\n' || c == '\r'; })
+                        | std::views::reverse
+                        | std::views::drop_while([](char c) { return c == '\n' || c == '\r'; })
+                        | std::views::reverse | std::views::transform(::tolower));
+                    const auto equal = [&](std::string_view target) {
+                        return std::ranges::equal(lower, target);
+                    };
+                    /*^^*/ if (std::ranges::any_of(kT, equal)) {
+                        record_request = +1;
+                    } else if (std::ranges::any_of(kF, equal)) {
+                        record_request = -1;
+                    } else {
+                        log.error("无法处理请求: {}, 忽略", data);
+                    }
+                } },
+        };
+        while (!token.stop_requested()) {
+            service.spin();
+
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(100ms);
+        }
+    } };
+
     auto initialize(const YAML::Node& yaml) noexcept -> Result try {
-        auto source = yaml["source"].as<std::string>();
+        if (auto result = config.serialize(yaml); !result.has_value()) {
+            return std::unexpected { result.error() };
+        }
+
+        auto& source = config.source;
 
         auto instantitation_result = std::expected<void, std::string> {
             std::unexpected { "Unknown capturer source or not implemented source" },
@@ -50,7 +119,7 @@ struct Capturer::Impl {
             interface = std::move(instance);
         };
 
-        /*  */ if (source == "hikcamera") {
+        /*^^*/ if (source == "hikcamera") {
             system_instantiation.operator()<Hikcamera>(source);
         } else if (source == "local_video") {
             system_instantiation.operator()<LocalVideo>(source);
@@ -61,19 +130,21 @@ struct Capturer::Impl {
             return std::unexpected { instantitation_result.error() };
         }
 
-        auto show_loss_framerate          = yaml["show_loss_framerate"].as<bool>();
-        auto show_loss_framerate_interval = yaml["show_loss_framerate_interval"].as<int>();
-
-        loss_image_framerate.enable = show_loss_framerate;
+        loss_image_framerate.enable = config.show_loss_framerate;
         loss_image_framerate.set_interval(
-            std::chrono::milliseconds { show_loss_framerate_interval });
-
-        reconnect_wait_interval =
-            std::chrono::milliseconds { yaml["reconnect_wait_interval"].as<int>() };
+            std::chrono::milliseconds { config.show_loss_framerate_interval });
 
         runtime_thread = std::jthread {
             [this](const auto& t) { runtime_task(t); },
         };
+
+        recorder.update_config({
+            .directories     = config.saving_pathes,
+            .max_duration    = std::chrono::seconds { config.max_duration_seconds },
+            .record_fps      = config.record_fps,
+            .max_videos_size = config.max_videos_size_gb * 1024 * 1024 * 1024,
+        });
+
         return { };
 
     } catch (const std::exception& e) {
@@ -103,6 +174,8 @@ struct Capturer::Impl {
         // Success context
         auto success_callback = [&](std::unique_ptr<Image> image) {
             auto newest = image.release();
+            recorder.tick(newest->details().mat);
+
             if (!capture_queue.push(newest)) {
 
                 // Failed to push, drop the oldest one
@@ -136,7 +209,8 @@ struct Capturer::Impl {
                 log.error("- Newest error: {}", msg);
                 log.error("- Reconnect capturer now...");
 
-                rclcpp::sleep_for(reconnect_wait_interval);
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds { config.reconnect_wait_interval });
                 capture_failed_limit.reset();
             }
         };
@@ -158,19 +232,34 @@ struct Capturer::Impl {
                     log.error("{} times, stop printing errors", error_limit.count);
                 }
             }
-            rclcpp::sleep_for(reconnect_wait_interval);
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds { config.reconnect_wait_interval });
         };
 
-        for (;;) {
-            if (!util::get_running()) [[unlikely]]
-                break;
-
-            if (token.stop_requested()) [[unlikely]]
-                break;
-
+        while (util::get_running() && !token.stop_requested()) {
             if (!interface->connected()) {
                 reconnect();
                 continue;
+            }
+
+            if (config.record_enable) {
+                const auto request = record_request.load(std::memory_order::relaxed);
+                /*^^*/ if (request == +1) {
+                    // 开始录制
+                    if (!recorder.recording()) {
+                        auto result = recorder.start();
+                        if (!result.has_value()) {
+                            log.error("无法开启录制，报错如下: {}", result.error());
+                        } else {
+                            log.info("成功开启录制");
+                        }
+                    }
+                } else if (request == -1) {
+                    // 停止录制
+                    recorder.stop();
+                    log.info("{}", recorder.status());
+                }
+                record_request.store(0, std::memory_order::relaxed);
             }
 
             if (auto result = interface->wait_image()) {

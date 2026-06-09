@@ -20,6 +20,13 @@ capturer:
   show_loss_framerate_interval: 500
   reconnect_wait_interval: 100
 
+  record_enable: false
+  saving_pathes:
+    ["/home/root/autoaim/", "/home/ubuntu/autoaim/", "/tmp/autoaim/"]
+  max_duration_seconds: 60
+  record_fps: 24
+  max_videos_size_gb: 50
+
   # source: "local_video"
   source: "hikcamera"
 

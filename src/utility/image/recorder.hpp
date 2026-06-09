@@ -33,6 +33,8 @@ public:
 
     auto recording() const -> bool;
     auto filename() const -> std::optional<std::string>;
+
+    auto status() const -> std::string;
 };
 
 }
