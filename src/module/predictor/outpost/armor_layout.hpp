@@ -1,12 +1,14 @@
 #pragma once
 
+#include <array>
 #include <optional>
 
 namespace rmcs::predictor {
 
 struct OutpostArmorLayout {
-    enum class HeightTemplate { PositiveOnSlot1, NegativeOnSlot1 };
-    std::optional<HeightTemplate> height_template;
+    static constexpr int kSlotCount = 3;
+
+    std::array<std::optional<int>, kSlotCount> height_levels {};
 };
 
 } // namespace rmcs::predictor

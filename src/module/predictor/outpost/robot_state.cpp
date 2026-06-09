@@ -21,9 +21,11 @@ struct OutpostRobotState::Impl {
             OutpostEKFParameters::P_initial_dig().asDiagonal() };
         time_stamp = t;
 
-        layout       = OutpostArmorLayout {};
-        update_count = 0;
-        initialized  = true;
+        layout                  = OutpostArmorLayout {};
+        layout.height_levels[0] = 0;
+        last_match              = LastMatch { 0, 0 };
+        update_count            = 0;
+        initialized             = true;
     }
 
     auto predict(TimePoint t) -> void {
@@ -80,45 +82,55 @@ struct OutpostRobotState::Impl {
 private:
     struct MatchedArmor {
         Armor3d armor;
+        int height_level;
         double height_offset;
         OutpostArmorLayout layout;
     };
 
-    auto resolve_layout(int armor_id, double height_offset) const -> OutpostArmorLayout {
-        auto next_layout = layout;
-        if (next_layout.height_template.has_value() || armor_id == 0) return next_layout;
+    struct LastMatch {
+        int armor_id;
+        int height_level;
+    };
 
-        auto const positive_on_slot1 = (armor_id == 1) == (height_offset > 0.0);
-        next_layout.height_template  = positive_on_slot1
-             ? OutpostArmorLayout::HeightTemplate::PositiveOnSlot1
-             : OutpostArmorLayout::HeightTemplate::NegativeOnSlot1;
-        return next_layout;
+    static auto next_armor_id(int armor_id, int direction) -> int {
+        constexpr auto armor_count = OutpostEKFParameters::kOutpostArmorCount;
+        return (armor_id + direction + armor_count) % armor_count;
     }
 
     auto visit_match_hypotheses(auto&& visit) const -> void {
-        using rmcs::kOutpostArmorHeightStep;
+        if (!last_match.has_value()) return;
 
-        auto const visit_hypothesis = [&](int armor_id, double height_offset = 0.0) {
-            visit(armor_id, height_offset, resolve_layout(armor_id, height_offset));
+        auto const visit_hypothesis = [&](int armor_id, int height_level) {
+            auto next_layout  = layout;
+            auto& known_level = next_layout.height_levels[static_cast<std::size_t>(armor_id)];
+            if (known_level.has_value() && *known_level != height_level) return;
+
+            known_level = height_level;
+            visit(armor_id, height_level, OutpostEKFParameters::height_offset(height_level),
+                next_layout);
         };
 
-        visit_hypothesis(0);
+        auto const& last = *last_match;
+        visit_hypothesis(last.armor_id, last.height_level);
 
-        if (!layout.height_template.has_value()) {
-            auto const visit_side_hypotheses = [&](int armor_id) {
-                visit_hypothesis(armor_id, +kOutpostArmorHeightStep);
-                visit_hypothesis(armor_id, -kOutpostArmorHeightStep);
-            };
+        auto const visit_next_hypotheses = [&](int direction, int first_delta, int second_delta) {
+            auto const armor_id = next_armor_id(last.armor_id, direction);
+            visit_hypothesis(armor_id, last.height_level + first_delta);
+            visit_hypothesis(armor_id, last.height_level + second_delta);
+        };
 
-            visit_side_hypotheses(1);
-            visit_side_hypotheses(2);
+        auto const omega = ekf.x[6];
+        if (omega > omega_deadzone) {
+            visit_next_hypotheses(-1, +1, -2);
+            return;
+        }
+        if (omega < -omega_deadzone) {
+            visit_next_hypotheses(+1, -1, +2);
             return;
         }
 
-        for (int armor_id : { 1, 2 }) {
-            visit_hypothesis(
-                armor_id, OutpostEKFParameters::height_offset(*layout.height_template, armor_id));
-        }
+        visit_next_hypotheses(-1, +1, -2);
+        visit_next_hypotheses(+1, -1, +2);
     }
 
     auto evaluate_match(OutpostEKFParameters::Measurement const& measurement, Armor3d const& armor,
@@ -137,6 +149,7 @@ private:
         color        = CampColor::UNKNOWN;
         ekf          = EKF {};
         layout       = OutpostArmorLayout {};
+        last_match   = std::nullopt;
         time_stamp   = t;
         initialized  = false;
         update_count = 0;
@@ -149,7 +162,7 @@ private:
         for (auto const& armor : armors) {
             auto const measurement = OutpostEKFParameters::measurement(armor);
 
-            visit_match_hypotheses([&](int armor_id, double height_offset,
+            visit_match_hypotheses([&](int armor_id, int height_level, double height_offset,
                                        OutpostArmorLayout const& next_layout) {
                 auto matched_armor = armor;
                 matched_armor.id   = armor_id;
@@ -159,7 +172,8 @@ private:
                 if (*mahalanobis >= best_mahalanobis) return;
 
                 best_mahalanobis = *mahalanobis;
-                best_match       = MatchedArmor { matched_armor, height_offset, next_layout };
+                best_match =
+                    MatchedArmor { matched_armor, height_level, height_offset, next_layout };
             });
         }
 
@@ -177,19 +191,22 @@ private:
                 EKF::XVec const& x) { return OutpostEKFParameters::H(x, armor, height_offset); },
             measurement.R, OutpostEKFParameters::x_add, OutpostEKFParameters::z_subtract);
 
-        layout = match.layout;
+        layout     = match.layout;
+        last_match = LastMatch { match.armor.id, match.height_level };
         update_count++;
     }
 
     CampColor color { CampColor::UNKNOWN };
     EKF ekf { EKF {} };
     OutpostArmorLayout layout {};
+    std::optional<LastMatch> last_match;
     TimePoint time_stamp;
 
     bool initialized { false };
     int update_count { 0 };
     std::chrono::duration<double> reset_interval { 1.5 };
     double mahalanobis_gate { 5.0 };
+    double omega_deadzone { 0.2 };
 };
 
 OutpostRobotState::OutpostRobotState() noexcept

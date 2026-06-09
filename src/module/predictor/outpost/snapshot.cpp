@@ -34,13 +34,13 @@ struct OutpostSnapshot::Impl {
 
     auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
         auto const predicted_x = predict_state_at(t);
-        auto const predicted_armor_count =
-            layout.height_template.has_value() ? OutpostEKFParameters::kOutpostArmorCount : 1;
 
         auto armors = std::vector<Armor3d> {};
-        armors.reserve(predicted_armor_count);
+        armors.reserve(OutpostEKFParameters::kOutpostArmorCount);
 
-        for (int id = 0; id < predicted_armor_count; ++id) {
+        for (int id = 0; id < OutpostEKFParameters::kOutpostArmorCount; ++id) {
+            if (!layout.height_levels[static_cast<std::size_t>(id)].has_value()) continue;
+
             auto armor          = make_armor(DeviceId::OUTPOST, color, id);
             auto const height   = OutpostEKFParameters::height_offset(layout, armor.id);
             auto const angle    = OutpostEKFParameters::armor_yaw(predicted_x, id);

@@ -69,25 +69,20 @@ struct OutpostEKFParameters {
         return armor_yaw(x, phase_offset(armor_id));
     }
 
-    static auto height_offset(OutpostArmorLayout::HeightTemplate height_template, int armor_id)
-        -> double {
+    static auto height_offset(int height_level) -> double {
         using rmcs::kOutpostArmorHeightStep;
-        constexpr auto kHeightOffsets = std::array<double, kOutpostArmorCount> { 0.0,
-            +kOutpostArmorHeightStep, -kOutpostArmorHeightStep };
-        if (armor_id < 0 || armor_id >= kOutpostArmorCount) {
-            util::panic("outpost armor id out of range");
-        }
-        auto const sign =
-            (height_template == OutpostArmorLayout::HeightTemplate::PositiveOnSlot1) ? +1.0 : -1.0;
-        return sign * kHeightOffsets[static_cast<std::size_t>(armor_id)];
+        return height_level * kOutpostArmorHeightStep;
     }
 
     static auto height_offset(OutpostArmorLayout const& layout, int armor_id) -> double {
-        if (armor_id == 0) return 0.0;
-        if (!layout.height_template.has_value()) {
-            util::panic("outpost side armor height template is unknown");
+        if (armor_id < 0 || armor_id >= kOutpostArmorCount) {
+            util::panic("outpost armor id out of range");
         }
-        return height_offset(*layout.height_template, armor_id);
+        auto const height_level = layout.height_levels[static_cast<std::size_t>(armor_id)];
+        if (!height_level.has_value()) {
+            util::panic("outpost armor height level is unknown");
+        }
+        return height_offset(*height_level);
     }
 
     static auto h_armor_xyz(EKF::XVec const& x, double phase_offset, double height_offset)
