@@ -1,4 +1,3 @@
-localhost_develop: false
 use_visualization: true
 
 camera_matrix:

@@ -114,17 +114,6 @@ target_link_libraries(
     ${rmcs_executor_LIBRARIES}
 )
 
-## 运行时构建: runtime
-add_executable(
-    ${PROJECT_NAME}_runtime
-    ${PROJECT_SOURCE_DIR}/src/runtime.cpp
-)
-target_link_libraries(
-    ${PROJECT_NAME}_runtime
-    ${PROJECT_NAME}_kernel
-    ${PROJECT_NAME}_module
-)
-
 ## 安装配置
 install(
     TARGETS
@@ -141,12 +130,6 @@ install(
         models/
     DESTINATION
         share/${PROJECT_NAME}
-)
-install(
-    TARGETS
-        ${PROJECT_NAME}_runtime
-    DESTINATION
-        lib/${PROJECT_NAME}
 )
 
 ## plugins for rmcs_executor
