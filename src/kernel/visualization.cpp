@@ -124,10 +124,9 @@ struct Visualization::Impl {
             session_config.format.w = mat.cols;
             session_config.format.h = mat.rows;
 
-            auto open_result = session.open(session_config);
-            if (!open_result) {
+            if (auto result = session.open(session_config); !result) {
                 rclcpp.error("Failed to open visualization session");
-                rclcpp.error("  e: {}", open_result.error());
+                rclcpp.error("  e: {}", result.error());
                 return false;
             }
             rclcpp.info("Visualization session is opened");
@@ -140,14 +139,13 @@ struct Visualization::Impl {
     }
 
     auto draw_later(std::unique_ptr<IDrawable> drawable) -> void {
-        if (is_initialized) {
+        if (is_initialized && config.drawable) {
             drawables.emplace_back(std::move(drawable));
         }
     }
 
-    auto publish(std::span<const Armor3d> armors, const std::string& name) -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
+    auto publish(std::span<const Armor3d> armors, const std::string& name) {
+        if (!is_initialized || !config.publishable) return;
 
         auto iter = armor_publishers.find(name);
         if (iter == armor_publishers.end()) {

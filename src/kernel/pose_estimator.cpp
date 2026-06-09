@@ -197,9 +197,6 @@ struct PoseEstimator::Impl {
 
                     auto& result = outpost_optimizer.result;
 
-                    // 只优化距离，旋转保持原来的
-                    result.armor.orientation = outpost_in_camera.orientation;
-
                     outpost_in_camera = result.armor;
                     *outpost3d        = into_odom_link(result.armor);
 

@@ -187,7 +187,7 @@ struct VideoRecorder::Impl {
 
 auto VideoRecorder::update_config(Config config) -> void { pimpl->config = std::move(config); }
 
-auto VideoRecorder::tick(const cv::Mat& mat) -> void { pimpl->tick(mat); }
+auto VideoRecorder::tick(const cv::Mat& mat, Clock::time_point) -> void { pimpl->tick(mat); }
 
 auto VideoRecorder::start() -> std::expected<void, std::string> { return pimpl->start(); }
 
