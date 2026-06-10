@@ -7,9 +7,6 @@
 
 namespace rmcs {
 
-using namespace util;
-using namespace kernel;
-
 class AutoAimComponent final : public rmcs_executor::Component {
 private:
     AutoAim auto_aim { };
