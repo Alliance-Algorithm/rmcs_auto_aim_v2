@@ -8,6 +8,10 @@
 namespace rmcs {
 
 class AutoAimComponent final : public rmcs_executor::Component {
+    static inline const auto kNaN  = std::numeric_limits<double>::quiet_NaN();
+    static inline const auto kTNaN = Eigen::Vector3d { kNaN, kNaN, kNaN };
+    static inline const auto kQNaN = Eigen::Quaterniond { kNaN, kNaN, kNaN, kNaN };
+
 private:
     AutoAim auto_aim { };
 
@@ -25,6 +29,8 @@ private:
     OutputInterface<double> pitch_acc;
     OutputInterface<bool> feedforward_valid;
 
+    std::chrono::steady_clock::time_point last_command_timestamp;
+
 public:
     explicit AutoAimComponent() noexcept {
         register_input("/auto_aim/camera_transform", camera_transform, false);
@@ -32,22 +38,27 @@ public:
         register_input("/referee/id", robot_id, false);
 
         register_output("/auto_aim/should_control", should_control, false);
-        register_output("/auto_aim/control_direction", target_direction, Eigen::Vector3d::Zero());
-        register_output("/auto_aim/robot_center", robot_center, Eigen::Vector3d::Zero());
+        register_output("/auto_aim/control_direction", target_direction, kTNaN);
+        register_output("/auto_aim/robot_center", robot_center, kTNaN);
         register_output("/auto_aim/should_shoot", should_shoot, false);
-        register_output("/auto_aim/yaw_rate", yaw_rate, 0.0);
-        register_output("/auto_aim/pitch_rate", pitch_rate, 0.0);
-        register_output("/auto_aim/yaw_acc", yaw_acc, 0.0);
-        register_output("/auto_aim/pitch_acc", pitch_acc, 0.0);
+        register_output("/auto_aim/yaw_rate", yaw_rate, kNaN);
+        register_output("/auto_aim/pitch_rate", pitch_rate, kNaN);
+        register_output("/auto_aim/yaw_acc", yaw_acc, kNaN);
+        register_output("/auto_aim/pitch_acc", pitch_acc, kNaN);
         register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
     }
 
     auto before_updating() -> void override {
-        if (!camera_transform.ready())
+        if (!camera_transform.ready()) {
             camera_transform.make_and_bind_directly(Eigen::Isometry3d::Identity());
-        if (!barrel_direction.ready())
+        }
+        if (!barrel_direction.ready()) {
             barrel_direction.make_and_bind_directly(Eigen::Vector3d::UnitX());
-        if (!robot_id.ready()) robot_id.make_and_bind_directly(rmcs_msgs::RobotId::UNKNOWN);
+        }
+        if (!robot_id.ready()) {
+            robot_id.make_and_bind_directly(rmcs_msgs::RobotId::UNKNOWN);
+        }
+        last_command_timestamp = std::chrono::steady_clock::now();
     }
 
     auto update() -> void override {
@@ -67,6 +78,7 @@ public:
             ctx.id = *robot_id;
         });
 
+        const auto now = std::chrono::steady_clock::now();
         if (auto_aim.command_updated()) {
             auto_aim.with_command([this](const AutoAimState& cmd) {
                 using namespace std::chrono_literals;
@@ -95,6 +107,14 @@ public:
                     std::sin(pitch),
                 };
             });
+            last_command_timestamp = now;
+        }
+
+        using namespace std::chrono_literals;
+        if (now - last_command_timestamp > 100ms) {
+            *should_control   = false;
+            *should_shoot     = false;
+            *target_direction = kTNaN;
         }
     }
 };

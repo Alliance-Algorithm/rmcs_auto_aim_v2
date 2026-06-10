@@ -52,7 +52,7 @@ struct AutoAim::Impl {
 
             auto context = SystemContext::kIdentity();
             {
-                std::lock_guard lock(self.context_mutex);
+                std::lock_guard lock { self.context_mutex };
                 context = self.current_context;
             }
             visual.publish(context.camera_transform, "camera_link");
@@ -62,8 +62,10 @@ struct AutoAim::Impl {
             }
 
             [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
-                visual.draw_later(
-                    Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 640, 20 } });
+                visual.draw_later( // 录制开关
+                    Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
+                visual.draw_later( // 自瞄帧率
+                    Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
                 visual.update_image(*image);
             } };
 
@@ -139,24 +141,27 @@ struct AutoAim::Impl {
                     cmd.feedforward_valid = result->feedforward_valid;
                     cmd.robot_center      = result->center_position;
 
+                    /// TODO:
+                    /// 统一控制侧和自瞄侧的 Pitch 符号方向定义
                     visual.update_aiming_direction(cmd.yaw, -cmd.pitch);
                     visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
                         cmd.yaw_acc, cmd.pitch_acc);
                 }
             }
+            visual.draw_later(Text { "ATTACK", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
+            visual.draw_later(Text { "CONTROL", { 10, 640 }, cmd.should_control ? kRed : kWhite });
 
             {
-                std::lock_guard lock(self.command_mutex);
+                std::lock_guard lock { self.command_mutex };
                 self.current_command = cmd;
                 self.unread_command.store(true, std::memory_order::release);
             }
         }
-
-        node.shutdown();
+        RclcppNode::shutdown();
     }
 
     explicit Impl(AutoAim& self) {
-        std::signal(SIGINT, [](int) { util::set_running(false); });
+        std::signal(SIGINT, +[](int) { util::set_running(false); });
 
         const auto configs           = util::configs();
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();
@@ -201,6 +206,12 @@ struct AutoAim::Impl {
         }
 
         worker = std::jthread([this, &self](const std::stop_token& stop) { run(self, stop); });
+    }
+    ~Impl() {
+        worker.request_stop();
+        if (worker.joinable()) {
+            worker.join();
+        }
     }
 };
 
