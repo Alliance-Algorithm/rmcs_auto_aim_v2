@@ -10,9 +10,11 @@
 
 本项目以工程化为最终目的，为机器人提供一个测试与工作流完备，配置友好，重构开销小，错误提示拟人的自瞄系统，方便队员的后续维护和持续开发，为迭代提供舒适的代码基础
 
-## 部署步骤
+## 快速开始
 
-先确保海康相机的 SDK 正确构建，再保证 `rmcs_executor` 正确构建，如果要运行 RMCS 控制系统的话
+### 项目构建
+
+先确保海康相机的 SDK 正确构建，再保证 `rmcs_executor` 正确构建
 
 ```sh
 # 进入工作空间的 src/ 目录下
@@ -23,7 +25,7 @@ git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
 build-rmcs
 ```
 
-### 在 RMCS 控制系统中启用自瞄
+### 运行自瞄
 
 自瞄系统以 Component 的形式集成到 RMCS 控制系统中。在机器人配置文件（如 `sentry.yaml`）的 `components` 列表中添加：
 
@@ -31,21 +33,58 @@ build-rmcs
 - rmcs::AutoAimComponent -> auto_aim_component
 ```
 
+这是一份可以在本机运行的最小配置:
+
+```yaml
+# mock-autoaim.yaml
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs::AutoAimComponent -> auto_aim_component
+
+```
+
+你可以用如下方式在本机启动自瞄:
+
+```bash
+# 持久化指定运行配置
+set-robot mock-autoaim
+launch-rmcs
+
+# 或者临时手动指定
+ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
+```
+
 与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的配置文件统一配置，因此实例名可以随意取，不影响参数读取。
 
-**输入接口**
+配置文件按以下优先级加载（位于运行时 share 目录下），默认只提供 `config.yaml`：
 
-| 接口名称 | 类型 | 必填 | 说明 |
-|----------|------|------|------|
-| `/auto_aim/camera_transform` | `Eigen::Isometry3d` | 否 | 相机在 OdomImu 坐标系下的位姿 |
-| `/auto_aim/barrel_direction` | `Eigen::Vector3d` | 否 | 枪口在 OdomImu 坐标系下的方向 |
-| `/referee/id` | `rmcs_msgs::RobotId` | 否 | 机器人 ID，用于判断敌方颜色 |
+1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
+2. `custom.yaml` / `custom.yml`
+3. `config.override.yaml` / `config.override.yml`
+4. `config.yaml` / `config.yml`
 
-如果使用 `fast_tf` 发布 TF 树，可以通过以下方式获取这两个输入：
+所以我们可以在 `config/` 下面创建一个 `custom.yaml`，作为自己机器人的配置文件，同步至远端时，自瞄会自动选用优先级更高的配置文件，同时除了 `config.yaml` 以外的上述优先级列表中的名字，都写入了 `.gitignore` 中，避免更新仓库时会和本地配置冲突
+
+我们也可以简单用 `export AUTOAIM_CONFIG=unreal.yaml` 来选择默认优先级列表没有的配置文件名，方便本地调试
+
+### 接入自瞄
+
+运行自瞄后，下面的输入输出便处于可用状态，我们需要提供自瞄需要的信息，处理自瞄回传的指令，来实现自瞄控制
+
+#### 输入接口
+
+| 接口名称 | 类型 | 说明 |
+|----------|------|------|
+| `/auto_aim/camera_transform` | `Eigen::Isometry3d` | 相机在 OdomImu 坐标系下的位姿 |
+| `/auto_aim/barrel_direction` | `Eigen::Vector3d` | 枪口在 OdomImu 坐标系下的方向 |
+| `/referee/id` | `rmcs_msgs::RobotId` | 机器人 ID，用于判断敌方颜色 |
+
+通过类似下面的方式获取需要的变换：
 
 ```cpp
 #include <rmcs_description/tf_description.hpp>
-#include <fast_tf/rcl.hpp>
 
 // 从 TF 树中查询相机位姿
 auto camera_transform = fast_tf::lookup_transform<
@@ -57,7 +96,7 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
     rmcs_description::PitchLink::DirectionVector { Eigen::Vector3d::UnitX() }, *tf);
 ```
 
-**输出接口**
+#### 输出接口
 
 | 接口名称 | 类型 | 说明 |
 |----------|------|------|
@@ -71,20 +110,11 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
 | `/auto_aim/pitch_acc` | `double` | pitch 角加速度 |
 | `/auto_aim/feedforward_valid` | `bool` | 前馈数据是否有效 |
 
-### 配置文件
-
-配置文件按以下优先级加载（位于运行时 share 目录下）：
-
-1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
-2. `custom.yaml` / `custom.yml`
-3. `config.override.yaml` / `config.override.yml`
-4. `config.yaml` / `config.yml`
-
 ## 项目架构
 
 ### 文件排布
 
-- `kernel`: 运行时业务内核，与业务逻辑强相关，包含识别、跟踪、位姿估计、火控、可视化等核心流程，以及 `AutoAim` 类（主循环）
+- `kernel`: 运行时业务内核，与业务逻辑强相关，包含识别、跟踪、位姿估计、火控、可视化等核心流程
 
 - `module`: 特定任务的通用实现模块，不包含运行时逻辑，可在不同上下文中复用
 
@@ -96,9 +126,7 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
 
 - **AutoAim**（`auto_aim.hpp`）：在独立的 `worker` 线程中运行自瞄主循环，负责图像采集、目标识别、位姿估计、跟踪、火控解算等算法逻辑
 
-- **AutoAimComponent**（`component.cpp`）：运行在 RMCS 主线程中，负责与 RMCS 控制系统对接。通过 `with_context()` 传入相机位姿等信息，通过 `with_command()` 获取自瞄控制指令
-
-两个线程通过 `std::mutex` 保护的共享状态进行数据交换，使用 `std::atomic<bool>` 避免不必要的锁竞争
+- **AutoAimComponent**（`component.cpp`）：运行在 RMCS 主线程中，负责与 RMCS 控制系统对接
 
 ## 调试指南
 
@@ -110,7 +138,7 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
 
 ```sh
 sudo apt install ros-$ROS_DISTRO-foxglove-bridge
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml
 ```
 
 在哪里运行程序发布 Topic，就在哪里启动该转发端
@@ -172,10 +200,13 @@ export LIBGL_ALWAYS_SOFTWARE=1
 
 诚然，依靠 ROS2 的 Topic 来发布 `cv::Mat`，然后使用 `rviz` 或者 `foxglove` 来查看图像不失为一个方便的方法，但经验告诉我们，网络带宽和 ROS2 的性能无法支撑起高帧率高画质的视频显示，所以我们采用 RTP 推流的方式来串流自瞄画面，完全支撑得起 100hz 以上的流畅显示，且在较差的网络环境也能相对流畅地串流，这是 ROS2 不能带给我们的良好体验
 
+使用下面的脚本安装依赖，然后启动即可:
+
 ```sh
 ./tool/install-server.sh local        # 本地安装
 ./tool/install-server.sh remote       # 远程安装到机器人，需要先设置 remote
-start-streamer                        # 启动串流服务
+
+start-streamer                        # 启动串流服务，阻塞在当前终端
 ```
 
 串流服务包含两个部分：
@@ -189,7 +220,7 @@ start-streamer                        # 启动串流服务
 
 ### 视频流录制
 
-也可通过 FFmpeg 录制串流：
+也可通过 FFmpeg 直接录制串流：
 
 ```sh
 ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
