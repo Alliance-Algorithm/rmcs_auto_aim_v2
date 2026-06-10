@@ -21,16 +21,6 @@ git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
 
 # 构建依赖
 build-rmcs
-
-# 启动运行时
-ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
-
-# 或使用 launch 文件启动（带自动重启）
-ros2 launch rmcs_auto_aim_v2 launch.py
-
-# 运行测试
-colcon test --packages-select rmcs_auto_aim_v2
-colcon test-result --all --verbose
 ```
 
 ### 在 RMCS 控制系统中启用自瞄
@@ -43,6 +33,44 @@ colcon test-result --all --verbose
 
 与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的配置文件统一配置，因此实例名可以随意取，不影响参数读取。
 
+**输入接口**
+
+| 接口名称 | 类型 | 必填 | 说明 |
+|----------|------|------|------|
+| `/auto_aim/camera_transform` | `Eigen::Isometry3d` | 否 | 相机在 OdomImu 坐标系下的位姿 |
+| `/auto_aim/barrel_direction` | `Eigen::Vector3d` | 否 | 枪口在 OdomImu 坐标系下的方向 |
+| `/referee/id` | `rmcs_msgs::RobotId` | 否 | 机器人 ID，用于判断敌方颜色 |
+
+如果使用 `fast_tf` 发布 TF 树，可以通过以下方式获取这两个输入：
+
+```cpp
+#include <rmcs_description/tf_description.hpp>
+#include <fast_tf/rcl.hpp>
+
+// 从 TF 树中查询相机位姿
+auto camera_transform = fast_tf::lookup_transform<
+    rmcs_description::OdomImu,
+    rmcs_description::CameraLink>(*tf);
+
+// 从 TF 树中查询枪口方向
+auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
+    rmcs_description::PitchLink::DirectionVector { Eigen::Vector3d::UnitX() }, *tf);
+```
+
+**输出接口**
+
+| 接口名称 | 类型 | 说明 |
+|----------|------|------|
+| `/auto_aim/should_control` | `bool` | 是否需要云台跟踪 |
+| `/auto_aim/should_shoot` | `bool` | 是否可以发弹 |
+| `/auto_aim/control_direction` | `Eigen::Vector3d` | 目标方向向量 |
+| `/auto_aim/robot_center` | `Eigen::Vector3d` | 目标机器人中心位置 |
+| `/auto_aim/yaw_rate` | `double` | yaw 角速度 |
+| `/auto_aim/pitch_rate` | `double` | pitch 角速度 |
+| `/auto_aim/yaw_acc` | `double` | yaw 角加速度 |
+| `/auto_aim/pitch_acc` | `double` | pitch 角加速度 |
+| `/auto_aim/feedforward_valid` | `bool` | 前馈数据是否有效 |
+
 ### 配置文件
 
 配置文件按以下优先级加载（位于运行时 share 目录下）：
@@ -52,25 +80,11 @@ colcon test-result --all --verbose
 3. `config.override.yaml` / `config.override.yml`
 4. `config.yaml` / `config.yml`
 
-启用后，RMCS 控制系统启动时会自动加载 Component，但 Runtime 需要单独启动：
-
-```sh
-# 方式一：直接运行
-ros2 run rmcs_auto_aim_v2 rmcs_auto_aim_v2_runtime
-
-# 方式二：通过 launch 文件启动（带自动重启）
-ros2 launch rmcs_auto_aim_v2 launch.py
-```
-
-两个进程通过共享内存（`feishu`）通信：Runtime 负责图像采集、识别、跟踪、火控解算等算法逻辑，Component 负责与 RMCS 控制系统对接并下发控制指令
-
 ## 项目架构
 
 ### 文件排布
 
-- `adapter`: 车辆适配层，将不同车型的底盘、云台等接口统一为自瞄可用的抽象接口
-
-- `kernel`: 运行时业务内核，与业务逻辑强相关，包含识别、跟踪、位姿估计、火控、可视化等核心流程，以及进程间通信（`feishu`）
+- `kernel`: 运行时业务内核，与业务逻辑强相关，包含识别、跟踪、位姿估计、火控、可视化等核心流程，以及 `AutoAim` 类（主循环）
 
 - `module`: 特定任务的通用实现模块，不包含运行时逻辑，可在不同上下文中复用
 
@@ -78,13 +92,13 @@ ros2 launch rmcs_auto_aim_v2 launch.py
 
 ### 架构设计
 
-本项目采用**进程分离**架构，自瞄系统分为两个独立进程：
+本项目采用**单进程多线程**架构，自瞄系统作为 Component 集成到 RMCS 控制系统中：
 
-- **Component**（`component.cpp`）：运行在 RMCS 控制系统中，负责与 RMCS 通信，通过进程间共享内存（`feishu`）接收 Runtime 下发的控制指令。与 RMCS 共享进程空间，不执行任何图像处理或算法逻辑
+- **AutoAim**（`auto_aim.hpp`）：在独立的 `worker` 线程中运行自瞄主循环，负责图像采集、目标识别、位姿估计、跟踪、火控解算等算法逻辑
 
-- **Runtime**（`runtime.cpp`）：独立运行的自瞄主进程，负责图像采集、目标识别、位姿估计、跟踪、火控解算等内存密集型操作。通过 `feishu` 将控制指令发送给 Component
+- **AutoAimComponent**（`component.cpp`）：运行在 RMCS 主线程中，负责与 RMCS 控制系统对接。通过 `with_context()` 传入相机位姿等信息，通过 `with_command()` 获取自瞄控制指令
 
-这种分离确保了自瞄系统在进行频繁内存操作时，即使出现异常也不会影响 RMCS 控制系统的稳定性。两个进程通过 `feishu`（基于共享内存的进程间通信）进行数据交换
+两个线程通过 `std::mutex` 保护的共享状态进行数据交换，使用 `std::atomic<bool>` 避免不必要的锁竞争
 
 ## 调试指南
 

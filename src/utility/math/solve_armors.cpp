@@ -1,5 +1,5 @@
 #include "solve_armors.hpp"
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Geometry>
 #include <ranges>
 
 namespace rmcs::util {

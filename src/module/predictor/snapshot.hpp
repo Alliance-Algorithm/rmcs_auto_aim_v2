@@ -1,11 +1,9 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
 #include <memory>
 #include <vector>
 
 #include "utility/clock.hpp"
-#include "utility/math/kalman_filter/ekf.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 
@@ -20,11 +18,8 @@ namespace detail {
 
 class Snapshot {
 public:
-    using NormalEKF  = util::EKF<11, 4>;
-    using OutpostEKF = util::EKF<6, 4>;
-
     struct Kinematics {
-        Eigen::Vector3d center_position;
+        Point3d center_position;
         double angular_velocity;
     };
 

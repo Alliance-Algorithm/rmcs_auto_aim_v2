@@ -22,7 +22,7 @@ struct TargetSolutionSolver::Impl {
         };
 
         auto target_kinematics = snapshot.kinematics();
-        auto target_position   = target_kinematics.center_position;
+        auto target_position   = target_kinematics.center_position.make<Eigen::Vector3d>();
         auto current_fly_time  = target_position.norm() / bullet_speed;
 
         auto best_candidate = std::optional<BestCandidate> {};
@@ -42,7 +42,7 @@ struct TargetSolutionSolver::Impl {
             best_candidate        = BestCandidate {
                        .attitude        = sample->attitude,
                        .impact_time     = t_target,
-                       .center_position = predicted_kinematics.center_position,
+                       .center_position = predicted_kinematics.center_position.make<Eigen::Vector3d>(),
                        .aim_point       = sample->aim_point,
             };
             if (time_error < kMaxFlyTimeThreshold) break;

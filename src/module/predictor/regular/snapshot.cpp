@@ -20,8 +20,8 @@ namespace {
     }
 
     struct RegularSnapshotBackend final : ISnapshotBackend {
-        explicit RegularSnapshotBackend(Snapshot::NormalEKF::XVec x, DeviceId device,
-            CampColor color, int armor_num, TimePoint stamp) noexcept
+        explicit RegularSnapshotBackend(detail::NormalEKF::XVec x, DeviceId device, CampColor color,
+            int armor_num, TimePoint stamp) noexcept
             : ISnapshotBackend { device, color, armor_num, stamp }
             , x { std::move(x) } { }
 
@@ -50,22 +50,22 @@ namespace {
         }
 
     private:
-        static auto kinematics_of(Snapshot::NormalEKF::XVec const& x) -> Snapshot::Kinematics {
-            return { Eigen::Vector3d { x[0], x[2], x[4] }, x[7] };
+        static auto kinematics_of(detail::NormalEKF::XVec const& x) -> Snapshot::Kinematics {
+            return { Point3d { x[0], x[2], x[4] }, x[7] };
         }
 
-        auto predict_state_at(TimePoint t) const -> Snapshot::NormalEKF::XVec {
+        auto predict_state_at(TimePoint t) const -> detail::NormalEKF::XVec {
             auto const dt = util::delta_time(t, stamp).count();
             return EKFParameters::f(dt)(x);
         }
 
-        Snapshot::NormalEKF::XVec x;
+        detail::NormalEKF::XVec x;
     };
 
 } // namespace
 
-auto detail::make_regular_snapshot(Snapshot::NormalEKF::XVec ekf_x, DeviceId device,
-    CampColor color, int armor_num, TimePoint stamp) noexcept -> Snapshot {
+auto detail::make_regular_snapshot(NormalEKF::XVec ekf_x, DeviceId device, CampColor color,
+    int armor_num, TimePoint stamp) noexcept -> Snapshot {
     return detail::make_snapshot(std::make_unique<RegularSnapshotBackend>(
         std::move(ekf_x), device, color, armor_num, stamp));
 }

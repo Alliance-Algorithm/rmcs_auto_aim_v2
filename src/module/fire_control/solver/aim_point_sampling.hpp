@@ -1,10 +1,9 @@
 #pragma once
 
 #include <expected>
-#include <optional>
 #include <string>
 
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
 
 #include "module/fire_control/aim_point_chooser.hpp"
 #include "module/predictor/snapshot.hpp"

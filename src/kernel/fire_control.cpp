@@ -73,7 +73,7 @@ struct FireControl::Impl {
             };
         }
 
-        return {};
+        return { };
     }
 
     auto solve(predictor::Snapshot const& snapshot, double current_yaw) -> std::optional<Result> {
@@ -141,15 +141,15 @@ struct FireControl::Impl {
             .yaw_acc           = yaw_acc,
             .feedforward_valid = feedforward_valid,
             .shoot_permitted   = shoot_permitted,
-            .center_position   = center_position,
+            .center_position   = Point3d { center_position },
         };
     }
 
-    MpcTrajectoryPlanner mpc_trajectory_planner {};
-    ReferenceTrajectoryBuilder reference_trajectory_builder {};
-    TargetSolutionSolver target_solution_solver {};
-    ShootEvaluator shoot_evaluator {};
-    AimPointChooser aim_point_chooser {};
+    MpcTrajectoryPlanner mpc_trajectory_planner { };
+    ReferenceTrajectoryBuilder reference_trajectory_builder { };
+    TargetSolutionSolver target_solution_solver { };
+    ShootEvaluator shoot_evaluator { };
+    AimPointChooser aim_point_chooser { };
 };
 
 FireControl::FireControl() noexcept

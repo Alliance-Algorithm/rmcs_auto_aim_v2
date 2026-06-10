@@ -1,6 +1,6 @@
 #pragma once
 
-#include <eigen3/Eigen/Geometry>
+#include <eigen3/Eigen/Core>
 
 #include <expected>
 #include <optional>

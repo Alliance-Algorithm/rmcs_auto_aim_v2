@@ -115,8 +115,7 @@ ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
 
 using namespace rmcs::debug;
 
-// 检查依赖支持，对于 rmcs-runtime 可以忽略这个步骤
-// 镜像内已经内置好了相关依赖
+// 检查依赖支持
 auto check = StreamContext::check_support();
 if (!check) std::println("{}", check.error());
 

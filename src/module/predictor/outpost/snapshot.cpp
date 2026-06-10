@@ -27,7 +27,7 @@ namespace {
     }
 
     struct OutpostSnapshotBackend final : ISnapshotBackend {
-        explicit OutpostSnapshotBackend(Snapshot::OutpostEKF::XVec x, CampColor color,
+        explicit OutpostSnapshotBackend(detail::OutpostEKF::XVec x, CampColor color,
             int armor_num, TimePoint stamp, int spin_sign, OutpostArmorLayout layout) noexcept
             : ISnapshotBackend { DeviceId::OUTPOST, color, armor_num, stamp }
             , x { std::move(x) }
@@ -63,7 +63,7 @@ namespace {
         }
 
     private:
-        auto kinematics_of(Snapshot::OutpostEKF::XVec const& x) const -> Snapshot::Kinematics {
+        auto kinematics_of(detail::OutpostEKF::XVec const& x) const -> Snapshot::Kinematics {
             auto const max_armors =
                 std::clamp(armor_num, 0, OutpostEKFParameters::kOutpostArmorCount);
             double height_sum  = 0.0;
@@ -77,22 +77,22 @@ namespace {
             auto const center_z = x[4]
                 + (assigned_count == 0 ? 0.0 : height_sum / static_cast<double>(assigned_count));
             auto const angular_velocity = static_cast<double>(spin_sign) * kOutpostAngularSpeed;
-            return { Eigen::Vector3d { x[0], x[2], center_z }, angular_velocity };
+            return { Point3d { x[0], x[2], center_z }, angular_velocity };
         }
 
-        auto predict_state_at(TimePoint t) const -> Snapshot::OutpostEKF::XVec {
+        auto predict_state_at(TimePoint t) const -> detail::OutpostEKF::XVec {
             auto const dt = util::delta_time(t, stamp).count();
             return OutpostEKFParameters::f(dt, spin_sign)(x);
         }
 
-        Snapshot::OutpostEKF::XVec x;
+        detail::OutpostEKF::XVec x;
         int spin_sign;
         OutpostArmorLayout layout;
     };
 
 } // namespace
 
-auto detail::make_outpost_snapshot(Snapshot::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
+auto detail::make_outpost_snapshot(detail::OutpostEKF::XVec ekf_x, CampColor color, int armor_num,
     TimePoint stamp, int outpost_spin_sign, OutpostArmorLayout outpost_layout) noexcept
     -> Snapshot {
     return detail::make_snapshot(std::make_unique<OutpostSnapshotBackend>(

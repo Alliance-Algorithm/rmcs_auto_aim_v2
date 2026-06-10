@@ -1,6 +1,6 @@
 #pragma once
 
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
 
 #include <expected>
 #include <limits>
