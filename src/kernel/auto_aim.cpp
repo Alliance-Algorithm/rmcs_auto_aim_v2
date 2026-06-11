@@ -157,12 +157,9 @@ struct AutoAim::Impl {
                 self.unread_command.store(true, std::memory_order::release);
             }
         }
-        RclcppNode::shutdown();
     }
 
     explicit Impl(AutoAim& self) {
-        std::signal(SIGINT, +[](int) { util::set_running(false); });
-
         const auto configs           = util::configs();
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();
         const auto distort_coeff     = configs["distort_coeff"].as<std::array<double, 5>>();

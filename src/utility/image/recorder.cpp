@@ -179,9 +179,8 @@ struct VideoRecorder::Impl {
         if (stop_reason) {
             return *stop_reason;
         }
-        return session != nullptr
-            ? std::format("录制中({})，当前文件为 {}", session->duration(), session->filename())
-            : std::format("未开始录制");
+        return session ? std::format("录制中，当前文件为 {}", session->filename())
+                       : std::format("未开始录制");
     }
 };
 
@@ -191,7 +190,7 @@ auto VideoRecorder::tick(const cv::Mat& mat, Clock::time_point) -> void { pimpl-
 
 auto VideoRecorder::start() -> std::expected<void, std::string> { return pimpl->start(); }
 
-auto VideoRecorder::stop() -> void { pimpl->stop(true); }
+auto VideoRecorder::stop(bool save) -> void { pimpl->stop(save); }
 
 auto VideoRecorder::recording() const -> bool { return pimpl->session != nullptr; }
 

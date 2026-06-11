@@ -1,4 +1,5 @@
 #include "stream_session.hpp"
+#include "utility/singleton/running.hpp"
 
 #include <functional>
 #include <memory>
@@ -38,10 +39,8 @@ public:
 
     auto initialize(StreamType type, const StreamTarget& target, const VideoFormat& format) noexcept
         -> void {
-        context  = std::make_unique<StreamContext>(type, format, target);
-        notifier = [](const std::string&) { };
-        thread   = std::make_unique<std::jthread>(
-            [this](const std::stop_token& token) { streaming_thread(token); });
+        context = std::make_unique<StreamContext>(type, format, target);
+        thread = std::jthread { [this](const std::stop_token& token) { streaming_thread(token); } };
     }
 
     auto open() noexcept -> std::expected<void, std::string> { return context->open(); }
@@ -61,7 +60,7 @@ private:
             static_cast<long long>(std::round(1.0 / context->video_format().hz * 1e9)),
         };
 
-        while (!token.stop_requested()) {
+        while (!token.stop_requested() && util::get_running()) {
             auto now = std::chrono::steady_clock::now();
 
             auto latest = cv::Mat { };
@@ -128,12 +127,12 @@ private:
 
 private:
     std::unique_ptr<StreamContext> context;
-    std::unique_ptr<std::jthread> thread;
+    std::jthread thread;
 
     static constexpr auto buffer_capacity = std::size_t { 100 };
     boost::lockfree::spsc_queue<cv::Mat, boost::lockfree::capacity<buffer_capacity>> buffer;
 
-    std::function<void(const std::string&)> notifier;
+    std::function<void(const std::string&)> notifier = [](const std::string&) { };
 };
 
 StreamSession::StreamSession() noexcept

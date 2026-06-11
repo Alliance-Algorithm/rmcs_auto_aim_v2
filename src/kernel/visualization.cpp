@@ -74,6 +74,8 @@ struct Visualization::Impl {
         }
         rclcpp.set_pub_topic_prefix("/autoaim/");
 
+        session.set_notifier([&](const auto& text) { rclcpp.info("{}", text); });
+
         // 用 {} 区分初始化的部分
         session_config.target.host = config.monitor_host;
         session_config.target.port = config.monitor_port;

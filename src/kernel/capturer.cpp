@@ -57,6 +57,16 @@ struct Capturer::Impl {
 
     VideoRecorder recorder { };
 
+    struct {
+        std::atomic<bool> updated = true;
+        std::mutex lock { };
+
+        std::string filename = "not started";
+        std::string status   = "404 not found";
+
+        bool record_on = false;
+    } context;
+
     std::atomic<std::int8_t> record_request = 0;
     std::jthread service_thread { [this](const std::stop_token& token) {
         using namespace util;
@@ -84,8 +94,16 @@ struct Capturer::Impl {
                     }
                 } },
         };
-        while (!token.stop_requested()) {
+        while (!token.stop_requested() && util::get_running()) {
             service.spin();
+
+            if (context.updated.exchange(false, std::memory_order::acquire)) {
+                std::lock_guard guard { context.lock };
+
+                service.update_later("filename", context.filename);
+                service.update_later("status", context.status);
+                service.update_later("record_on", std::to_string(context.record_on));
+            }
 
             using namespace std::chrono_literals;
             std::this_thread::sleep_for(100ms);
@@ -96,6 +114,10 @@ struct Capturer::Impl {
         runtime_thread.request_stop();
         if (runtime_thread.joinable()) {
             runtime_thread.join();
+        }
+        service_thread.request_stop();
+        if (service_thread.joinable()) {
+            service_thread.join();
         }
     }
 
@@ -245,7 +267,15 @@ struct Capturer::Impl {
             }
 
             if (config.record_enable) {
-                const auto request = record_request.load(std::memory_order::relaxed);
+                const auto update_context = [&] {
+                    std::lock_guard guard { context.lock };
+                    context.filename  = recorder.filename().value_or("filename not found");
+                    context.status    = recorder.status();
+                    context.record_on = recorder.recording();
+
+                    context.updated.store(true, std::memory_order::release);
+                };
+                const auto request = record_request.load(std::memory_order::acquire);
                 /*^^*/ if (request == +1) {
                     // 开始录制
                     if (!recorder.recording()) {
@@ -255,13 +285,16 @@ struct Capturer::Impl {
                         } else {
                             log.info("成功开启录制");
                         }
+                        update_context();
                     }
                 } else if (request == -1) {
                     // 停止录制
-                    recorder.stop();
+                    recorder.stop(true);
                     log.info("{}", recorder.status());
+
+                    update_context();
                 }
-                record_request.store(0, std::memory_order::relaxed);
+                record_request.store(0, std::memory_order::release);
             }
 
             if (auto result = interface->wait_image()) {

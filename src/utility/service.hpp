@@ -6,7 +6,9 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <print>
 #include <stdexcept>
+#include <unordered_map>
 
 #include <fcntl.h>
 #include <poll.h>
@@ -69,6 +71,30 @@ template <StaticString Name, typename... Actions>
 class Service {
     static constexpr auto kNameView = std::string_view { Named<Name>::kView };
 
+private:
+    /// @NOTE: 这里的析构顺序，必须保证 actions > on_exit > location
+    std::string service_location { };
+    struct OnExit {
+        const std::string& to_remove;
+        ~OnExit() {
+            namespace fs = std::filesystem;
+            if (fs::exists(to_remove)) {
+                fs::remove_all(to_remove);
+            }
+        }
+    } on_exit { service_location };
+
+    duck_array<Actions...> actions;
+
+    bool context_updated = false;
+    std::string context_path;
+    std::unordered_map<std::string, std::string> context_map;
+
+    template <typename Action>
+    auto write_action_path(std::ofstream& file, std::string_view prefix) -> void {
+        file << "- " << prefix << Action::kNameView << "\n";
+    }
+
 public:
     explicit Service(Named<Name>, Actions&&... context)
         : actions { details::action_checker { }, std::forward<Actions>(context)... } {
@@ -88,40 +114,37 @@ public:
         auto actions_path = std::format("{}actions", service_location);
         auto filestream   = std::ofstream { actions_path };
         if (!filestream) {
-            throw std::runtime_error { std::format("无法创建 actions 文件: {}", actions_path) };
+            throw std::runtime_error { std::format("无法创建 actions 文件") };
         }
         (write_action_path<Actions>(filestream, service_location), ...);
         filestream.close();
 
-        // 设置为只读 0444
         fs::permissions(actions_path,
             fs::perms::owner_read | fs::perms::group_read | fs::perms::others_read,
             fs::perm_options::replace);
+
+        context_path = std::format("{}context", service_location);
     }
 
     auto spin() -> void {
         actions.foreach ([](auto& action) { action.spin_once(); });
+
+        namespace fs = std::filesystem;
+        if (context_updated) {
+            context_updated = false;
+
+            auto stream = std::ofstream { context_path, std::ios::out | std::ios::trunc };
+            for (const auto& [name, content] : context_map) {
+                std::println(stream, "{}: {}", name, content);
+            }
+            stream.flush();
+        }
     }
 
-private:
-    /// @NOTE: 这里的析构顺序，必须保证 actions > on_exit > location
-    std::string service_location { };
-    struct OnExit {
-        std::string_view to_remove;
-        ~OnExit() {
-            namespace fs = std::filesystem;
-            if (fs::exists(to_remove)) {
-                fs::remove_all(to_remove);
-            }
-        }
-    } on_exit { service_location };
-
-    duck_array<Actions...> actions;
-
-    template <typename Action>
-    auto write_action_path(std::ofstream& file, std::string_view prefix) -> void {
-        file << prefix << Action::kNameView << "\n";
+    auto update_later(const std::string& name, const std::string& content) {
+        context_map[name] = content;
+        context_updated   = true;
     }
 };
 
-} // namespace rmcs::util
+}

@@ -46,7 +46,7 @@ public:
     }
 
     auto start() -> std::expected<void, std::string>;
-    auto stop() -> void;
+    auto stop(bool save = true) -> void;
 
     auto recording() const -> bool;
     auto filename() const -> std::optional<std::string>;
