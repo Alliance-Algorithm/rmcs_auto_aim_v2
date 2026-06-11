@@ -191,21 +191,29 @@ auto main() -> int {
             auto armors    = snapshot->predicted_armors(Clock::now());
             visualization.publish(armors, "visible_robot");
 
-            const auto yaw = context.yaw;
-            if (auto result = fire_control.solve(*snapshot, yaw)) {
-                command.should_control    = true;
-                command.target            = target.target_id;
-                command.should_shoot      = result->shoot_permitted;
-                command.yaw               = result->yaw;
-                command.pitch             = result->pitch;
-                command.yaw_rate          = result->yaw_rate;
-                command.pitch_rate        = result->pitch_rate;
-                command.yaw_acc           = result->yaw_acc;
-                command.pitch_acc         = result->pitch_acc;
-                command.feedforward_valid = result->feedforward_valid;
-                command.robot_center      = result->center_position;
+            auto const gimbal_state = fire_control::GimbalState {
+                .timestamp = context.timestamp,
+                .yaw       = context.yaw,
+                .pitch     = context.pitch,
+            };
+            if (auto result = fire_control.solve(*snapshot, gimbal_state)) {
+                command.should_control = true;
+                command.target         = target.target_id;
+                command.should_shoot   = result->shoot_permitted;
+                command.yaw            = result->yaw;
+                command.pitch          = result->pitch;
+                command.robot_center   = result->center_position;
 
-                visualization.update_aiming_direction(command.yaw, -command.pitch);
+                if (result->feedforward.has_value()) {
+                    command.yaw_rate   = result->feedforward->yaw_rate;
+                    command.pitch_rate = result->feedforward->pitch_rate;
+                    command.yaw_acc    = result->feedforward->yaw_acc;
+                    command.pitch_acc  = result->feedforward->pitch_acc;
+                }
+
+                auto impact_armors = snapshot->predicted_armors(result->impact_time);
+                visualization.publish(impact_armors, "impact_robot");
+                visualization.update_aiming_direction(command.yaw, command.pitch);
 
                 // TODO: 将 MPC 的 target 曲线和 Yaw 置于一个统一的参考系
                 visualization.update_mpc_plan(command.yaw, command.pitch, command.yaw_rate,

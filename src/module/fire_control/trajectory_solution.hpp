@@ -15,8 +15,8 @@ struct TrajectorySolution {
 
     struct Output {
         double fly_time { 0. }; // s
-        double yaw { 0. };      // rad
-        double pitch { 0. };    // rad
+        double yaw { 0. }; // rad
+        double pitch { 0. }; // rad
     } result;
 
     auto solve() const -> std::optional<Output>;
@@ -26,7 +26,7 @@ private:
         -> std::tuple<double, double>;
 
     const int kMaxIterateCount { 10 };
-    const double kMaxPitchThreold { 57.3 / 57.3 };
+    const double kMaxPitchThreold { 80.0 / 57.3 };
     const double kEstimateDeltaTime { 0.005 };
     const double kHeightErrorThreold { 0.001 };
     const double kEstimateTimeOutThreold { 4.0 };

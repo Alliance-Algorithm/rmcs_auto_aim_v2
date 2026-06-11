@@ -43,7 +43,6 @@ private:
     OutputInterface<double> pitch_rate;
     OutputInterface<double> yaw_acc;
     OutputInterface<double> pitch_acc;
-    OutputInterface<bool> feedforward_valid;
 
     InputInterface<rmcs_msgs::RobotId> robot_id;
 
@@ -81,7 +80,6 @@ public:
         register_output("/auto_aim/pitch_rate", pitch_rate, 0.0);
         register_output("/auto_aim/yaw_acc", yaw_acc, 0.0);
         register_output("/auto_aim/pitch_acc", pitch_acc, 0.0);
-        register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
 
         register_input("/referee/id", robot_id, true);
     }
@@ -95,15 +93,14 @@ public:
 
         // Reset all command
         {
-            *should_control    = false;
-            *should_shoot      = false;
-            *target_direction  = kVectorNaN;
-            *robot_center      = kVectorNaN;
-            *yaw_rate          = kNaN;
-            *pitch_rate        = kNaN;
-            *yaw_acc           = kNaN;
-            *pitch_acc         = kNaN;
-            *feedforward_valid = false;
+            *should_control   = false;
+            *should_shoot     = false;
+            *target_direction = kVectorNaN;
+            *robot_center     = kVectorNaN;
+            *yaw_rate         = kNaN;
+            *pitch_rate       = kNaN;
+            *yaw_acc          = kNaN;
+            *pitch_acc        = kNaN;
         }
 
         feishu.heartbeat();
@@ -119,14 +116,13 @@ public:
         }
 
         // 业务开关
-        *should_control    = command.should_control;
-        *should_shoot      = command.should_shoot;
-        *yaw_rate          = command.yaw_rate;
-        *pitch_rate        = command.pitch_rate;
-        *yaw_acc           = command.yaw_acc;
-        *pitch_acc         = command.pitch_acc;
-        *feedforward_valid = command.feedforward_valid;
-        *robot_center      = {
+        *should_control = command.should_control;
+        *should_shoot   = command.should_shoot;
+        *yaw_rate       = command.yaw_rate;
+        *pitch_rate     = command.pitch_rate;
+        *yaw_acc        = command.yaw_acc;
+        *pitch_acc      = command.pitch_acc;
+        *robot_center   = {
             command.robot_center.x,
             command.robot_center.y,
             command.robot_center.z,
@@ -139,7 +135,7 @@ public:
         *target_direction = Eigen::Vector3d {
             std::cos(pitch) * std::cos(yaw),
             std::cos(pitch) * std::sin(yaw),
-            std::sin(pitch),
+            -std::sin(pitch),
         };
     }
 };

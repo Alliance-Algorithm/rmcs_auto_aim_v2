@@ -4,12 +4,11 @@
 #include <string>
 
 #include "module/fire_control/planner/mpc_types.hpp"
-
 #include "utility/pimpl.hpp"
 
 namespace rmcs::fire_control {
 
-class TinyMpcAxisSolver {
+class MpcAxisSolver {
 public:
     struct AngularKinematics {
         double angle { 0.0 };
@@ -26,11 +25,10 @@ public:
     };
 
     auto initialize(Config const& config) -> std::expected<void, std::string>;
-    auto solve_center(MpcAxisTrajectory const& reference) -> std::expected<double, std::string>;
-    auto solve_center_kinematics(MpcAxisTrajectory const& reference)
+    auto solve_kinematics(MpcAxisTrajectory const& reference, AngularKinematics const& initial)
         -> std::expected<AngularKinematics, std::string>;
 
-    RMCS_PIMPL_DEFINITION(TinyMpcAxisSolver)
+    RMCS_PIMPL_DEFINITION(MpcAxisSolver)
 };
 
 } // namespace rmcs::fire_control

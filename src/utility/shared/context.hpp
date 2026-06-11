@@ -16,7 +16,7 @@ struct AutoAimState {
     static constexpr auto kLength = 512;
     static constexpr auto kNaN    = std::numeric_limits<double>::quiet_NaN();
 
-    TimePoint timestamp { };
+    TimePoint timestamp {};
 
     bool should_control { false };
     bool should_shoot = { false };
@@ -27,8 +27,6 @@ struct AutoAimState {
     double pitch_rate { kNaN };
     double yaw_acc { kNaN };
     double pitch_acc { kNaN };
-    bool feedforward_valid { false };
-
     Translation robot_center { kNaN, kNaN, kNaN };
 
     DeviceId target { DeviceId::UNKNOWN };
@@ -50,7 +48,7 @@ struct SystemContext {
 
     /// Dynamic Context
     ///
-    TimePoint timestamp { };
+    TimePoint timestamp {};
 
     double yaw { kNaN };
     double pitch { kNaN };
