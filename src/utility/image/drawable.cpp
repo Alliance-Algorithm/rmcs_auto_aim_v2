@@ -99,4 +99,9 @@ auto Canvas::draw(const Text& text) -> void {
     cv::putText(mat, text.content, org, font, scale, font_color, line_thickness, cv::LINE_AA);
 }
 
+auto Canvas::draw(const Point& point) -> void {
+    auto& mat = canvas.details().mat;
+    cv::circle(mat, point.origin, point.radius, point.color, -1, cv::LINE_AA);
+}
+
 }

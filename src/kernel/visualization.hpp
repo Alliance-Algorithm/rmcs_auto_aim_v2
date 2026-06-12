@@ -38,6 +38,8 @@ public:
 
     auto publish(const Transform& t, const std::string& name) -> void;
 
+    auto publish(double value, const std::string& name) -> void;
+
     auto update_aiming_direction(double yaw, double pitch) const -> void;
 
     auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,

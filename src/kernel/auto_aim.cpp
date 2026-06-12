@@ -50,6 +50,8 @@ struct AutoAim::Impl {
             auto image = cap.fetch_image();
             if (!image) continue;
 
+            // @TODO:
+            //  避免拷贝，而是把需要的具体量拿出来
             auto context = SystemContext::kIdentity();
             {
                 std::lock_guard lock { self.context_mutex };
@@ -63,9 +65,9 @@ struct AutoAim::Impl {
 
             [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
                 visual.draw_later( // 录制开关
-                    Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
+                    Canvas::Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
                 visual.draw_later( // 自瞄帧率
-                    Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
+                    Canvas::Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
                 visual.update_image(*image);
             } };
 
@@ -148,8 +150,10 @@ struct AutoAim::Impl {
                         cmd.yaw_acc, cmd.pitch_acc);
                 }
             }
-            visual.draw_later(Text { "ATTACK", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
-            visual.draw_later(Text { "CONTROL", { 10, 640 }, cmd.should_control ? kRed : kWhite });
+            visual.draw_later(
+                Canvas::Text { "ATTACK", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
+            visual.draw_later(
+                Canvas::Text { "CONTROL", { 10, 640 }, cmd.should_control ? kRed : kWhite });
 
             {
                 std::lock_guard lock { self.command_mutex };
