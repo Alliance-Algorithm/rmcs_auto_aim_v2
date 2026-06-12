@@ -31,6 +31,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(pluginlib REQUIRED)
 
@@ -71,6 +72,7 @@ target_include_directories(
     PRIVATE
         ${visualization_msgs_INCLUDE_DIRS}
         ${geometry_msgs_INCLUDE_DIRS}
+        ${std_msgs_INCLUDE_DIRS}
         ${tf2_ros_INCLUDE_DIRS}
 )
 target_link_libraries(
@@ -84,6 +86,7 @@ target_link_libraries(
     PRIVATE
         ${visualization_msgs_LIBRARIES}
         ${geometry_msgs_LIBRARIES}
+        ${std_msgs_LIBRARIES}
         ${tf2_ros_LIBRARIES}
 )
 

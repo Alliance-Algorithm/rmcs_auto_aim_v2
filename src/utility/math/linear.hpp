@@ -264,4 +264,6 @@ struct Transform {
     }
 };
 
+constexpr auto kNaN = std::numeric_limits<double>::quiet_NaN();
+
 }

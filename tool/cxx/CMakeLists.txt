@@ -119,6 +119,21 @@ if(HIKCAMERA_AVAILABLE)
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
     )
+
+    # Rotation Estimator
+    add_executable(
+        rotation_estimator
+        ${TOOL_DIR}/rotation_estimator.cpp
+        ${RMCS_SRC_DIR}/module/perception/rotation_estimator.cpp
+        ${RMCS_SRC_DIR}/utility/image/image.cpp
+    )
+    target_link_libraries(
+        rotation_estimator
+        rclcpp::rclcpp
+        ${geometry_msgs_LIBRARIES}
+        ${OpenCV_LIBS}
+        ${hikcamera_LIBRARIES}
+    )
 else()
     message(STATUS "hikcamera 未检测到，跳过相关构建")
 endif()
