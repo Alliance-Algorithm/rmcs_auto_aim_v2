@@ -36,14 +36,27 @@ struct OutpostRobotState::Impl {
         double score { std::numeric_limits<double>::infinity() };
     };
 
+    struct RotationTopology {
+        double angular_velocity { 0.0 };
+        int slot_delta { 0 };
+        double phase_delta { 0.0 };
+        std::array<double, 2> height_steps {};
+    };
+
+    struct RotationEvidence {
+        std::optional<MotionMode> mode;
+        int count { 0 };
+    };
+
     explicit Impl(TimePoint stamp) noexcept
         : time_stamp { stamp } { }
 
     auto initialize(Armor3d const& armor, TimePoint t) -> void {
-        color        = armor_color2camp_color(armor.color);
-        time_stamp   = t;
-        update_count = 0;
-        motion_mode  = std::nullopt;
+        color             = armor_color2camp_color(armor.color);
+        time_stamp        = t;
+        update_count      = 0;
+        motion_mode       = std::nullopt;
+        rotation_evidence = {};
 
         layout = OutpostArmorLayout {};
         assign_slot(0, 0.0, 0.0);
@@ -109,15 +122,10 @@ struct OutpostRobotState::Impl {
     }
 
 private:
-    static constexpr auto kPhaseOffsets = std::array {
-        0.0,
-        OutpostEKFParameters::kPhaseStep,
-        -OutpostEKFParameters::kPhaseStep,
-    };
-
-    static constexpr auto kModeConfirmWindow             = std::chrono::duration<double> { 0.2 };
-    static constexpr auto kStaticReferenceYawThreshold   = 0.08;
-    static constexpr auto kRotationReferenceYawThreshold = 0.25;
+    static constexpr auto kModeConfirmWindow            = std::chrono::duration<double> { 0.2 };
+    static constexpr auto kStaticYawDeltaThreshold      = util::deg2rad(4.6);
+    static constexpr auto kRotationYawDeltaThreshold    = util::deg2rad(14.3);
+    static constexpr int kRotationConfirmCandidateCount = 3;
 
     auto assign_slot(int slot_id, double phase_offset, double height_offset) -> void {
         auto& slot         = layout.slots.at(slot_id);
@@ -126,49 +134,39 @@ private:
         slot.assigned      = true;
     }
 
-    static constexpr auto mode_angular_velocity(MotionMode mode) -> double {
+    static constexpr auto topology_of(MotionMode mode) -> std::optional<RotationTopology> {
         switch (mode) {
-        case MotionMode::STATIC:
-            return 0.0;
         case MotionMode::CW:
-            return -kOutpostAngularSpeed;
+            return RotationTopology {
+                .angular_velocity = -kOutpostAngularSpeed,
+                .slot_delta       = 1,
+                .phase_delta      = OutpostEKFParameters::kPhaseStep,
+                .height_steps     = { -1.0, 2.0 },
+            };
         case MotionMode::CCW:
-            return kOutpostAngularSpeed;
+            return RotationTopology {
+                .angular_velocity = kOutpostAngularSpeed,
+                .slot_delta       = -1,
+                .phase_delta      = -OutpostEKFParameters::kPhaseStep,
+                .height_steps     = { 1.0, -2.0 },
+            };
+        case MotionMode::STATIC:
+            return std::nullopt;
         }
 
-        return 0.0;
+        return std::nullopt;
     }
 
     auto angular_velocity() const -> double {
         if (!motion_mode.has_value()) return 0.0;
-        return mode_angular_velocity(*motion_mode);
+        auto const topology = topology_of(*motion_mode);
+        if (!topology.has_value()) return 0.0;
+        return topology->angular_velocity;
     }
 
-    static constexpr auto next_slot_id(int slot_id, MotionMode mode) -> int {
+    static constexpr auto wrap_slot_id(int slot_id) -> int {
         constexpr int slot_count = OutpostEKFParameters::kOutpostArmorCount;
-        switch (mode) {
-        case MotionMode::CW:
-            return (slot_id + 1) % slot_count;
-        case MotionMode::CCW:
-            return (slot_id + slot_count - 1) % slot_count;
-        case MotionMode::STATIC:
-            return slot_id;
-        }
-
-        return slot_id;
-    }
-
-    static constexpr auto height_steps(MotionMode mode) {
-        switch (mode) {
-        case MotionMode::CW:
-            return std::array { -1.0, 2.0 };
-        case MotionMode::CCW:
-            return std::array { 1.0, -2.0 };
-        case MotionMode::STATIC:
-            return std::array { 0.0, 0.0 };
-        }
-
-        return std::array { 0.0, 0.0 };
+        return (slot_id + slot_count) % slot_count;
     }
 
     auto candidate_for_assigned_slot(int slot_id) const -> Candidate {
@@ -216,17 +214,24 @@ private:
 
     auto append_next_slot_candidates(std::vector<Candidate>& candidates, MotionMode mode) const
         -> void {
+        auto const topology = topology_of(mode);
+        if (!topology.has_value()) return;
+
         auto const source_slot_id = last_matched_slot_id;
-        auto const target_slot_id = next_slot_id(source_slot_id, mode);
+        auto const target_slot_id = wrap_slot_id(source_slot_id + topology->slot_delta);
         auto const& source_slot   = layout.slots.at(source_slot_id);
         auto const& target_slot   = layout.slots.at(target_slot_id);
 
         if (target_slot.assigned) return;
 
-        for (auto const height_step : height_steps(mode)) {
+        for (auto const height_step : topology->height_steps) {
+            auto const phase_offset =
+                util::normalize_angle(source_slot.phase_offset + topology->phase_delta);
+            auto const height_offset =
+                source_slot.height_offset + height_step * kOutpostArmorHeightStep;
+
             candidates.emplace_back(
-                candidate_for_slot(target_slot_id, kPhaseOffsets.at(target_slot_id),
-                    source_slot.height_offset + height_step * kOutpostArmorHeightStep, mode));
+                candidate_for_slot(target_slot_id, phase_offset, height_offset, mode));
         }
     }
 
@@ -271,10 +276,11 @@ private:
             auto const observation     = OutpostEKFParameters::observe(armor);
             auto const candidate_score = best_candidate(observation);
             if (!candidate_score.has_value()) continue;
-            if (best_match.has_value() && candidate_score->score >= best_match->score) continue;
 
             auto const reference_yaw =
                 util::normalize_angle(observation.ypr[0] - candidate_score->candidate.phase_offset);
+            if (best_match.has_value() && candidate_score->score >= best_match->score) continue;
+
             best_match = MatchResult {
                 .observation   = observation,
                 .candidate     = candidate_score->candidate,
@@ -289,10 +295,11 @@ private:
     auto apply_match(MatchResult const& match) -> bool {
         if (!motion_mode.has_value() && !match.candidate.assigned
             && match.candidate.motion_mode.has_value()) {
-            motion_mode = *match.candidate.motion_mode;
+            update_rotation_evidence(*match.candidate.motion_mode);
             return false;
         }
 
+        rotation_evidence = {};
         update_motion_mode(match);
 
         auto const& candidate = match.candidate;
@@ -315,6 +322,22 @@ private:
         return true;
     }
 
+    auto update_rotation_evidence(MotionMode candidate_mode) -> void {
+        if (rotation_evidence.mode == candidate_mode) {
+            ++rotation_evidence.count;
+        } else {
+            rotation_evidence = {
+                .mode  = candidate_mode,
+                .count = 1,
+            };
+        }
+
+        if (rotation_evidence.count >= kRotationConfirmCandidateCount) {
+            motion_mode       = candidate_mode;
+            rotation_evidence = {};
+        }
+    }
+
     auto update_motion_mode(MatchResult const& match) -> void {
         if (motion_mode.has_value()) return;
 
@@ -323,12 +346,13 @@ private:
             return;
         }
 
-        if (util::delta_time(time_stamp, mode_reference_stamp) < kModeConfirmWindow) return;
+        auto const elapsed = util::delta_time(time_stamp, mode_reference_stamp);
+        if (elapsed < kModeConfirmWindow) return;
 
         auto const mode_delta = util::normalize_angle(match.reference_yaw - mode_reference_yaw);
         auto const abs_delta  = std::abs(mode_delta);
-        if (abs_delta < kStaticReferenceYawThreshold) motion_mode = MotionMode::STATIC;
-        else if (abs_delta > kRotationReferenceYawThreshold) {
+        if (abs_delta < kStaticYawDeltaThreshold) motion_mode = MotionMode::STATIC;
+        else if (abs_delta > kRotationYawDeltaThreshold) {
             motion_mode = mode_delta > 0.0 ? MotionMode::CCW : MotionMode::CW;
         }
 
@@ -346,6 +370,7 @@ private:
     int last_matched_slot_id { 0 };
 
     std::optional<MotionMode> motion_mode;
+    RotationEvidence rotation_evidence;
     double mode_reference_yaw { 0.0 };
     TimePoint mode_reference_stamp;
 };
