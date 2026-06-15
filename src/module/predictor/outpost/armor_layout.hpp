@@ -1,14 +1,19 @@
 #pragma once
 
 #include <array>
-#include <optional>
 
 namespace rmcs::predictor {
+
+struct OutpostArmorSlot {
+    double phase_offset { 0.0 };
+    double height_offset { 0.0 };
+    bool assigned { false };
+};
 
 struct OutpostArmorLayout {
     static constexpr int kSlotCount = 3;
 
-    std::array<std::optional<int>, kSlotCount> height_levels {};
+    std::array<OutpostArmorSlot, kSlotCount> slots {};
 };
 
 } // namespace rmcs::predictor

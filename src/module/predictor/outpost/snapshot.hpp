@@ -14,7 +14,7 @@ public:
     using EKF = OutpostEKFParameters::EKF;
 
     explicit OutpostSnapshot(EKF::XVec x, CampColor color, TimePoint stamp,
-        OutpostArmorLayout layout);
+        OutpostArmorLayout layout, double angular_velocity);
     OutpostSnapshot(OutpostSnapshot const&) = delete;
     OutpostSnapshot(OutpostSnapshot&&) noexcept;
     OutpostSnapshot& operator=(OutpostSnapshot const&) = delete;
