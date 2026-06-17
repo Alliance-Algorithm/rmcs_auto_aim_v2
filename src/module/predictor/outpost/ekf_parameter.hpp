@@ -30,18 +30,13 @@ struct OutpostEKFParameters {
     // vx, vy：前哨站旋转中心在世界坐标系下的线速度
     // z：参考装甲板(id 0)在世界坐标系下的 z 坐标
     // a：参考装甲板(id 0)的 yaw 角
-    static auto x(Armor3d const& armor) -> EKF::XVec {
-        const auto [trans_x, trans_y, trans_z]      = armor.translation;
-        const auto [quat_x, quat_y, quat_z, quat_w] = armor.orientation;
-        const auto orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
-
-        const auto ypr      = util::eulers(orientation);
-        const auto yaw      = ypr[0];
-        const auto center_x = trans_x + kOutpostRadius * std::cos(yaw);
-        const auto center_y = trans_y + kOutpostRadius * std::sin(yaw);
+    static auto x(ArmorObservation const& obs) -> EKF::XVec {
+        auto const yaw      = obs.ypr[0];
+        auto const center_x = obs.xyz[0] + kOutpostRadius * std::cos(yaw);
+        auto const center_y = obs.xyz[1] + kOutpostRadius * std::sin(yaw);
 
         auto x = EKF::XVec {};
-        x << center_x, 0.0, center_y, 0.0, trans_z, yaw;
+        x << center_x, 0.0, center_y, 0.0, obs.xyz[2], yaw;
         return x;
     }
 
