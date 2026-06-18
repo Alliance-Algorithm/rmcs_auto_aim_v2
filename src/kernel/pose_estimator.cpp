@@ -2,6 +2,7 @@
 #include "module/identifier/adjacency_lightbar.hpp"
 
 #include "utility/math/conversion.hpp"
+#include "utility/math/corners_optimizor.hpp"
 #include "utility/math/outpost.hpp"
 #include "utility/math/reprojection.hpp"
 #include "utility/math/solve_pnp/outpost_distance_optimizer.hpp"
@@ -163,7 +164,8 @@ struct PoseEstimator::Impl {
             addition.predicted_away.clear();
             addition.detected_2d.clear();
             addition.detected_3d.clear();
-            addition.center = { };
+            addition.center_2d = Point2d::kNaN();
+            addition.center_3d = Point3d::kNaN();
         }
 
         // 前哨站专属优化
@@ -176,13 +178,11 @@ struct PoseEstimator::Impl {
             return armor3ds;
         }
 
-        /// @FIXME(creeper5820):
-        ///  1. 坐标系变换存在问题，导致 Pitch 随着观测角度的变化而变化
-        ///  2. 前哨站装甲板的 Yaw 在角度较大时，会出现剧烈的二义性翻转
         auto outpost_in_camera = into_camera_link(*outpost3d);
         if (auto result = adjacency_finder.find(image, *outpost2d, outpost_in_camera)) {
             if (!result->found.empty()) {
-                const auto& lightbar = result->found[0];
+                auto& lightbar = result->found[0];
+                util::optimize_corners(image, lightbar);
 
                 auto& input = outpost_optimizer.input;
 
@@ -196,13 +196,8 @@ struct PoseEstimator::Impl {
                 if (outpost_optimizer.solve()) {
                     addition.origin.push_back(*outpost3d);
 
-                    auto& result = outpost_optimizer.result;
-
-                    // 只优化距离，旋转保持原来的
-                    result.armor.orientation = outpost_in_camera.orientation;
-
-                    outpost_in_camera = result.armor;
-                    *outpost3d        = into_odom_link(result.armor);
+                    outpost_in_camera = outpost_optimizer.result.armor;
+                    *outpost3d        = into_odom_link(outpost_in_camera);
 
                     // 投影到 2d 看效果
                     auto solution                  = NeighborBarSolution { };
@@ -210,6 +205,10 @@ struct PoseEstimator::Impl {
                     solution.input.in_right        = lightbar.is_right;
                     solution.input.armor_thickness = config.outpost_armor_thickness;
                     solution.solve();
+
+                    addition.center_3d = into_odom_link(
+                        Transform { solution.result.center, Orientation::kIdentity() })
+                                             .translation;
 
                     const auto& near_bar =
                         lightbar.is_upper ? solution.result.upper_near : solution.result.lower_near;
@@ -251,9 +250,10 @@ struct PoseEstimator::Impl {
 
                         auto& result = projection.result;
                         addition.detected_2d.push_back(Lightbar2d {
-                            .color      = bar.color,
-                            .upper      = Point2d { result.projected_points[0] },
-                            .lower      = Point2d { result.projected_points[1] },
+                            .color = bar.color,
+                            .upper = Point2d { result.projected_points[0] },
+                            .lower = Point2d { result.projected_points[1] },
+
                             .draw_color = color,
                         });
                     }
@@ -266,7 +266,7 @@ struct PoseEstimator::Impl {
                 std::ranges::copy(
                     result->predicted_away, std::back_inserter(addition.predicted_away));
                 std::ranges::copy(result->found, std::back_inserter(addition.detected_2d));
-                addition.center = result->center;
+                addition.center_2d = result->center;
             }
         }
         return armor3ds;

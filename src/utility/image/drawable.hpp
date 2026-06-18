@@ -4,16 +4,38 @@
 
 namespace rmcs {
 
-struct Text {
-    std::string content;
-    cv::Point2i center;
-};
-struct Area {
-    cv::Rect2i rect;
-    cv::Scalar color { 0, 0, 0, 255 };
-};
+inline const auto kRed      = cv::Scalar { 000, 000, 255, 255 };
+inline const auto kGreen    = cv::Scalar { 000, 255, 000, 255 };
+inline const auto kBlue     = cv::Scalar { 255, 000, 000, 255 };
+inline const auto kYellow   = cv::Scalar { 000, 255, 255, 255 };
+inline const auto kMagenta  = cv::Scalar { 255, 000, 255, 255 };
+inline const auto kCyan     = cv::Scalar { 255, 255, 000, 255 };
+inline const auto kBlack    = cv::Scalar { 000, 000, 000, 255 };
+inline const auto kWhite    = cv::Scalar { 255, 255, 255, 255 };
+inline const auto kGray     = cv::Scalar { 192, 192, 192, 255 };
+inline const auto kDarkGray = cv::Scalar { 128, 128, 128, 255 };
+inline const auto kBrown    = cv::Scalar { 000, 000, 128, 255 };
+inline const auto kOrange   = cv::Scalar { 000, 165, 255, 255 };
+inline const auto kPurple   = cv::Scalar { 128, 000, 128, 255 };
+inline const auto kPink     = cv::Scalar { 203, 192, 255, 255 };
 
 struct Canvas {
+    struct Text {
+        std::string content;
+        cv::Point2i top_left;
+        cv::Scalar color = kWhite;
+    };
+    struct Area {
+        cv::Rect2i rect;
+        cv::Scalar color = kWhite;
+    };
+    struct Point {
+        cv::Point2i origin;
+        int radius;
+
+        cv::Scalar color = kWhite;
+    };
+
     Image& canvas;
 
     std::uint8_t transparency   = 255;
@@ -23,6 +45,7 @@ struct Canvas {
     auto draw(const Lightbar2d&) -> void;
     auto draw(const cv::Rect2i&) -> void;
     auto draw(const Text&) -> void;
+    auto draw(const Point&) -> void;
 };
 template <class T>
 concept drawable_trait = requires(Canvas& canvas) { canvas.draw(std::declval<T>()); };

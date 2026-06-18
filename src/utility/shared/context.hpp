@@ -8,15 +8,8 @@
 
 namespace rmcs {
 
-template <class T>
-concept context_trait = std::is_trivially_copyable_v<T>;
-
 struct AutoAimState {
-    static constexpr auto kLabel  = "/shm_autoaim_state";
-    static constexpr auto kLength = 512;
-    static constexpr auto kNaN    = std::numeric_limits<double>::quiet_NaN();
-
-    TimePoint timestamp {};
+    TimePoint timestamp { };
 
     bool should_control { false };
     bool should_shoot = { false };
@@ -37,23 +30,18 @@ struct AutoAimState {
         };
     }
 };
-static_assert(context_trait<AutoAimState>);
 
 struct SystemContext {
     using RobotId = rmcs_msgs::RobotId;
 
-    static constexpr auto kLabel  = "/shm_control_state";
-    static constexpr auto kLength = 512;
-    static constexpr auto kNaN    = std::numeric_limits<double>::quiet_NaN();
-
     /// Dynamic Context
     ///
-    TimePoint timestamp {};
+    TimePoint timestamp { };
 
     double yaw { kNaN };
     double pitch { kNaN };
 
-    Transform camera_transform = Transform::kNaN(); // Imu Odom Link
+    Transform camera_transform = Transform::kNaN();
 
     /// Lazy Context
     ///
@@ -77,6 +65,5 @@ struct SystemContext {
         };
     }
 };
-static_assert(context_trait<SystemContext>);
 
 } // namespace rmcs

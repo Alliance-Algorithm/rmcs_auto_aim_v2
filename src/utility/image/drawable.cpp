@@ -82,20 +82,26 @@ auto Canvas::draw(const Text& text) -> void {
     auto& mat = canvas.details().mat;
 
     const auto font  = cv::FONT_HERSHEY_SIMPLEX;
-    const auto scale = 0.6;
-    const auto white = cv::Scalar { 255, 255, 255, static_cast<double>(transparency) };
-    const auto black = cv::Scalar { 0, 0, 0, static_cast<double>(transparency) };
+    const auto scale = 0.5;
+
+    const auto font_color = text.color;
+    const auto back_color = cv::Scalar { 0, 0, 0 };
 
     auto baseline   = 0;
     const auto size = cv::getTextSize(text.content, font, scale, line_thickness, &baseline);
     const auto org  = cv::Point2i {
-        text.center.x - size.width / 2,
-        text.center.y + size.height / 2,
+        text.top_left.x,
+        text.top_left.y + size.height,
     };
 
-    cv::putText(mat, text.content, org + cv::Point2i { 1, 1 }, font, scale, black,
+    cv::putText(mat, text.content, org + cv::Point2i { 1, 1 }, font, scale, back_color,
         line_thickness + 2, cv::LINE_AA);
-    cv::putText(mat, text.content, org, font, scale, white, line_thickness, cv::LINE_AA);
+    cv::putText(mat, text.content, org, font, scale, font_color, line_thickness, cv::LINE_AA);
+}
+
+auto Canvas::draw(const Point& point) -> void {
+    auto& mat = canvas.details().mat;
+    cv::circle(mat, point.origin, point.radius, point.color, -1, cv::LINE_AA);
 }
 
 }

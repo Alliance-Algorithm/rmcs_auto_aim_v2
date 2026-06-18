@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
+"""AutoAim 流媒体服务器
 
+启动 MediaMTX 和 HTTP 服务器，提供视频播放页面和录制控制 API。
+"""
+
+import json
 import os
 import signal
 import subprocess
@@ -9,104 +14,238 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-INSTALL_ROOT = Path("/opt/autoaim")
-PLAYER_PORT = 18080
-MEDIAMTX_PORT = 8889
-PLAYER_ROUTE = "/res/playing.html"
-PLAYER_FILE = "playing.html"
+# ── 配置常量 ──────────────────────────────────────────────────────────────────
+
+defaultInstallRoot = Path("/opt/autoaim")
+defaultPlayerPort = 18080
+defaultMediamtxPort = 8889
+playerRoute = "/res/playing.html"
+playerFile = "playing.html"
+fifoRecordPath = "/tmp/autoaim/cap/record"
+contextPath = "/tmp/autoaim/cap/context"
 
 
-def require_file(path: Path) -> None:
-    if not path.is_file():
-        raise SystemExit(f"Missing file: {path}")
+# ── HTTP Handler ─────────────────────────────────────────────────────────────
 
 
-class Handler(SimpleHTTPRequestHandler):
-    root_directory = INSTALL_ROOT
+class AutoAimHandler(SimpleHTTPRequestHandler):
+    """处理 HTTP 请求，提供静态文件服务和录制控制 API。"""
 
-    def do_GET(self):
+    rootDirectory: str = str(defaultInstallRoot)
+
+    def do_GET(self) -> None:
         if self.path in ("/autoaim", "/autoaim/"):
-            self.path = PLAYER_ROUTE
+            self.path = playerRoute
+        elif self.path == "/api/context":
+            self.handleContext()
+            return
         return super().do_GET()
 
+    def do_POST(self) -> None:
+        if self.path == "/api/record":
+            self.handleRecord()
+            return
+        self.send_error(404, "Not Found")
 
-def terminate_process(process: subprocess.Popen[str] | None) -> None:
-    if process is None or process.poll() is not None:
-        return
+    def handleRecord(self) -> None:
+        contentLength = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(contentLength).decode().strip()
 
-    os.killpg(process.pid, signal.SIGTERM)
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=5)
+        if body not in ("0", "1", "true", "false"):
+            self.jsonResponse(
+                400, {"status": "error", "message": "invalid value"})
+            return
+
+        fd = None
+        try:
+            fd = os.open(fifoRecordPath, os.O_WRONLY | os.O_NONBLOCK)
+            os.write(fd, body.encode())
+            self.jsonResponse(200, {"status": "ok"})
+        except OSError as e:
+            self.jsonResponse(500, {"status": "error", "message": str(e)})
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+    def handleContext(self) -> None:
+        try:
+            recordContext = self.readContext()
+        except OSError as e:
+            self.jsonResponse(503, {"status": "error", "message": str(e)})
+            return
+        self.jsonResponse(200, {"status": "ok", "context": recordContext})
+
+    def readContext(self) -> dict[str, object]:
+        context: dict[str, object] = {
+            "filename": "not started",
+            "recordStatus": "context not found",
+            "recordOn": False,
+        }
+
+        with open(contextPath, "r") as f:
+            for line in f:
+                name, separator, content = line.partition(":")
+                if not separator:
+                    continue
+                value = content.strip()
+                if name == "filename":
+                    context["filename"] = value
+                elif name == "status":
+                    context["recordStatus"] = value
+                elif name == "record_on":
+                    context["recordOn"] = value in ("1", "true")
+
+        return context
+
+    def jsonResponse(self, code: int, data: dict) -> None:
+        body = json.dumps(data).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args) -> None:
+        sys.stderr.write(f"[HTTP] {format % args}\n")
+
+
+# ── 进程管理 ──────────────────────────────────────────────────────────────────
+
+
+class ProcessManager:
+    """管理子进程的生命周期。"""
+
+    def __init__(self) -> None:
+        self.process: subprocess.Popen[str] | None = None
+
+    def start(self, args: list[str], cwd: Path) -> subprocess.Popen[str]:
+        self.process = subprocess.Popen(
+            args, cwd=cwd, start_new_session=True,
+        )
+        return self.process
+
+    def terminate(self) -> None:
+        proc = self.process
+        if proc is None or proc.poll() is not None:
+            return
+        os.killpg(proc.pid, signal.SIGTERM)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5)
+
+
+# ── 服务器 ────────────────────────────────────────────────────────────────────
+
+
+class StreamServer:
+    """AutoAim 流媒体服务器，协调 MediaMTX 和 HTTP 服务。"""
+
+    def __init__(
+        self,
+        installRoot: Path,
+        playerPort: int,
+        mediamtxPort: int,
+    ) -> None:
+        self.installRoot = installRoot
+        self.playerPort = playerPort
+        self.mediamtxPort = mediamtxPort
+        self.binDir = installRoot / "bin"
+        self.resDir = installRoot / "res"
+        self.mediamtxProcess = ProcessManager()
+        self.httpServer: ThreadingHTTPServer | None = None
+        self.shutdownEvent = threading.Event()
+
+    def run(self) -> int:
+        self.validateFiles()
+        self.startMediamtx()
+        self.startHttpServer()
+        self.setupSignalHandlers()
+
+        host = os.environ.get("HOSTNAME", "<ip>")
+        self.printStartupInfo(host)
+
+        try:
+            self.httpServer.serve_forever()
+        finally:
+            self.cleanup()
+
+        return 0
+
+    def validateFiles(self) -> None:
+        required = [
+            self.binDir / "mediamtx",
+            self.resDir / "mediamtx.yml",
+            self.resDir / playerFile,
+        ]
+        for path in required:
+            if not path.is_file():
+                raise SystemExit(f"Missing file: {path}")
+
+    def startMediamtx(self) -> None:
+        args = [
+            str(self.binDir / "mediamtx"),
+            str(self.resDir / "mediamtx.yml"),
+        ]
+        self.mediamtxProcess.start(args, self.installRoot)
+        threading.Thread(target=self.watchMediamtx, daemon=True).start()
+
+    def watchMediamtx(self) -> None:
+        proc = self.mediamtxProcess.process
+        if proc is None:
+            return
+        exitCode = proc.wait()
+        if exitCode != 0:
+            print(f"MediaMTX exited with code {exitCode}", file=sys.stderr)
+        self.shutdown()
+
+    def startHttpServer(self) -> None:
+        AutoAimHandler.rootDirectory = str(self.installRoot)
+        self.httpServer = ThreadingHTTPServer(
+            ("0.0.0.0", self.playerPort),
+            partial(AutoAimHandler, directory=str(self.installRoot)),
+        )
+
+    def setupSignalHandlers(self) -> None:
+        signal.signal(signal.SIGINT, lambda *_: self.shutdown())
+        signal.signal(signal.SIGTERM, lambda *_: self.shutdown())
+
+    def shutdown(self) -> None:
+        if self.shutdownEvent.is_set():
+            return
+        self.shutdownEvent.set()
+        if self.httpServer:
+            threading.Thread(target=self.httpServer.shutdown,
+                             daemon=True).start()
+
+    def cleanup(self) -> None:
+        if self.httpServer:
+            self.httpServer.server_close()
+        self.mediamtxProcess.terminate()
+
+    def printStartupInfo(self, host: str) -> None:
+        print("AutoAim stream server started.\n")
+        print(f"Player page:\n  http://127.0.0.1:{self.playerPort}/autoaim\n")
+        print(f"Remote page:\n  http://{host}:{self.playerPort}/autoaim\n")
+        print(
+            f"WHEP endpoint:\n  http://127.0.0.1:{self.mediamtxPort}/autoaim/whep\n")
+        print("Press Ctrl+C to stop.")
+
+
+# ── 入口 ──────────────────────────────────────────────────────────────────────
 
 
 def main() -> int:
-    install_root = Path(sys.argv[1]) if len(sys.argv) > 1 else INSTALL_ROOT
-    bin_dir = install_root / "bin"
-    res_dir = install_root / "res"
-    player_port = int(os.environ.get("AUTOAIM_PLAYER_PORT", str(PLAYER_PORT)))
-    mediamtx_port = int(os.environ.get(
-        "AUTOAIM_MEDIAMTX_PORT", str(MEDIAMTX_PORT)))
+    installRoot = Path(sys.argv[1]) if len(
+        sys.argv) > 1 else defaultInstallRoot
+    playerPort = int(os.environ.get(
+        "AUTOAIM_PLAYER_PORT", str(defaultPlayerPort)))
+    mediamtxPort = int(os.environ.get(
+        "AUTOAIM_MEDIAMTX_PORT", str(defaultMediamtxPort)))
 
-    mediamtx_bin = bin_dir / "mediamtx"
-    mediamtx_config = res_dir / "mediamtx.yml"
-    player_entry = res_dir / PLAYER_FILE
-
-    require_file(mediamtx_bin)
-    require_file(mediamtx_config)
-    require_file(player_entry)
-
-    Handler.root_directory = install_root
-
-    mediamtx = subprocess.Popen(
-        [str(mediamtx_bin), str(mediamtx_config)],
-        cwd=install_root,
-        start_new_session=True,
-    )
-
-    server = ThreadingHTTPServer(
-        ("0.0.0.0", player_port),
-        partial(Handler, directory=str(install_root)),
-    )
-
-    shutdown_started = threading.Event()
-
-    def shutdown(*_args):
-        if shutdown_started.is_set():
-            return
-        shutdown_started.set()
-        threading.Thread(target=server.shutdown, daemon=True).start()
-
-    def watch_mediamtx():
-        exit_code = mediamtx.wait()
-        if exit_code != 0:
-            print(f"MediaMTX exited with code {exit_code}", file=sys.stderr)
-        shutdown()
-
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
-    threading.Thread(target=watch_mediamtx, daemon=True).start()
-
-    host = os.environ.get("HOSTNAME", "<ip>")
-    print("AutoAim stream server started.")
-    print()
-    print(f"Player page:\n  http://127.0.0.1:{player_port}/autoaim")
-    print()
-    print(f"Remote page:\n  http://{host}:{player_port}/autoaim")
-    print()
-    print(f"WHEP endpoint:\n  http://127.0.0.1:{mediamtx_port}/autoaim/whep")
-    print()
-    print("Press Ctrl+C to stop.")
-
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-        terminate_process(mediamtx)
-
-    return 0
+    server = StreamServer(installRoot, playerPort, mediamtxPort)
+    return server.run()
 
 
 if __name__ == "__main__":

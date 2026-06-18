@@ -1,6 +1,5 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
 #include <expected>
 #include <optional>
 
@@ -30,7 +29,7 @@ public:
         double yaw;
         std::optional<Feedforward> feedforward;
         bool shoot_permitted;
-        Eigen::Vector3d center_position;
+        Point3d center_position;
         TimePoint impact_time;
     };
 

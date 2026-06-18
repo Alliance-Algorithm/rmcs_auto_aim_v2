@@ -1,31 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#fefbff">
     <title>AutoAim Stream</title>
     <style>
         :root {
-            --md-sys-color-primary: #0059c7;
-            --md-sys-color-on-primary: #ffffff;
-            --md-sys-color-primary-container: #d9e2ff;
-            --md-sys-color-on-primary-container: #001a43;
-            --md-sys-color-secondary: #575e71;
-            --md-sys-color-secondary-container: #dbe2f9;
-            --md-sys-color-surface: #fefbff;
-            --md-sys-color-surface-container-low: #f2f3fc;
-            --md-sys-color-surface-container: #eaeefb;
-            --md-sys-color-surface-container-high: #e2e8f8;
-            --md-sys-color-outline-variant: #c5c6d0;
-            --md-sys-color-on-surface: #1b1b1f;
-            --md-sys-color-on-surface-variant: #44464f;
-            --md-sys-color-video: #10131a;
-            --md-sys-color-shadow: rgba(0, 0, 0, 0.08);
-            --radius-lg: 14px;
-            --radius-md: 10px;
-            --gap-lg: 12px;
-            --gap-sm: 8px;
+            color-scheme: light;
+            --color-page: #fefbff;
+            --color-page-glow: rgba(0, 89, 199, 0.12);
+            --color-panel: #f2f3fc;
+            --color-panel-strong: #eaeefb;
+            --color-card: #e2e8f8;
+            --color-video: #10131a;
+            --color-text: #1b1b1f;
+            --color-muted: #44464f;
+            --color-subtle: #575e71;
+            --color-line: #c5c6d0;
+            --color-primary: #0059c7;
+            --color-primary-strong: #0059c7;
+            --color-primary-soft: #d9e2ff;
+            --color-danger-soft: #d9e2ff;
+            --shadow-panel: 0 10px 24px -18px rgba(0, 0, 0, 0.08);
+            --radius-xl: 24px;
+            --radius-lg: 18px;
+            --radius-md: 14px;
+            --gap-lg: 16px;
+            --gap-sm: 10px;
         }
 
         *,
@@ -38,34 +41,51 @@
         body {
             height: 100%;
             margin: 0;
-            background: var(--md-sys-color-surface);
-            color: var(--md-sys-color-on-surface);
+            background: var(--color-page);
+            color: var(--color-text);
             font-family: "Noto Sans", "Microsoft YaHei", sans-serif;
         }
 
         body {
             overflow: hidden;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: rgba(0, 89, 199, 0.16);
+            background: var(--color-page);
         }
 
         .layout {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 320px;
+            grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
             gap: var(--gap-lg);
             height: 100%;
-            padding: var(--gap-lg);
+            padding:
+                max(var(--gap-lg), env(safe-area-inset-top)) max(var(--gap-lg), env(safe-area-inset-right)) max(var(--gap-lg), env(safe-area-inset-bottom)) max(var(--gap-lg), env(safe-area-inset-left));
+            overflow-x: hidden;
         }
 
         .stream-pane,
         .side-panel {
-            border: 1px solid var(--md-sys-color-outline-variant);
-            background: var(--md-sys-color-surface-container-low);
-            box-shadow: 0 10px 24px -18px var(--md-sys-color-shadow);
+            border: 1px solid var(--color-line);
+            background: var(--color-panel);
+            box-shadow: var(--shadow-panel);
         }
 
         .stream-pane {
             min-height: 0;
             overflow: hidden;
-            border-radius: var(--radius-lg);
+            border-radius: var(--radius-xl);
+            position: relative;
+        }
+
+        .stream-pane::before {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            content: "";
+            border: 1px solid rgba(255, 255, 255, 0.48);
+            border-radius: inherit;
+            box-shadow: inset 0 0 0 1px rgba(0, 89, 199, 0.08);
         }
 
         video {
@@ -73,7 +93,7 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: var(--md-sys-color-video);
+            background: var(--color-video);
         }
 
         .side-panel,
@@ -85,52 +105,39 @@
         .side-panel {
             min-height: 0;
             gap: var(--gap-lg);
-            padding: 14px;
-            border-radius: var(--radius-lg);
+            padding: 18px;
+            border-radius: var(--radius-xl);
+            backdrop-filter: none;
         }
 
-        .panel-header h1,
-        .panel-header p,
+        .panel-group h1,
         .panel-group h2,
         .panel-group p {
             margin: 0;
         }
 
-        .panel-header {
-            display: flex;
-            flex-direction: column;
-            gap: var(--gap-sm);
-            color: var(--md-sys-color-on-primary-container);
-            background: var(--md-sys-color-primary-container);
-        }
-
-        .panel-header h1 {
-            font-size: 22px;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-
-        .panel-header p {
-            color: var(--md-sys-color-on-primary-container);
-            line-height: 1.5;
-        }
-
         .panel-group p {
-            color: var(--md-sys-color-on-surface-variant);
+            color: var(--color-muted);
             line-height: 1.5;
+            overflow-wrap: anywhere;
         }
 
         .panel-group {
             gap: var(--gap-sm);
-            padding: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            min-width: 0;
+            padding: 16px;
+            border: 1px solid var(--color-line);
             border-radius: var(--radius-md);
-            background: var(--md-sys-color-surface-container-high);
+            background: linear-gradient(180deg, var(--color-panel-strong), var(--color-card));
         }
 
+        .panel-group h1,
         .panel-group h2 {
-            font-size: 14px;
-            font-weight: 600;
+            color: var(--color-text);
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-wrap: balance;
         }
 
         .capture-button,
@@ -138,35 +145,90 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-height: 40px;
-            padding: 10px 24px;
-            border: 1px solid var(--md-sys-color-outline-variant);
+            min-height: 46px;
+            padding: 12px 24px;
+            border: 1px solid var(--color-line);
             border-radius: 999px;
-            background: var(--md-sys-color-surface-container-high);
-            color: var(--md-sys-color-primary);
+            background: var(--color-card);
+            color: var(--color-primary-strong);
             font: inherit;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 700;
             line-height: 20px;
             cursor: pointer;
-            transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+            transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+            user-select: none;
         }
 
-        .capture-button:hover,
-        .record-button:hover {
-            border-color: var(--md-sys-color-primary);
-            background: var(--md-sys-color-primary-container);
+        .capture-button:not(:disabled):hover,
+        .record-button:not(:disabled):hover {
+            border-color: var(--color-primary);
+            background: var(--color-primary-soft);
+            color: var(--color-primary);
+            transform: translateY(-1px);
         }
 
         .capture-button:focus-visible,
         .record-button:focus-visible {
-            outline: 2px solid var(--md-sys-color-primary);
-            outline-offset: 2px;
+            outline: 3px solid rgba(0, 89, 199, 0.42);
+            outline-offset: 3px;
         }
 
-        .capture-button:active,
-        .record-button:active {
+        .capture-button:not(:disabled):active,
+        .record-button:not(:disabled):active {
+            transform: translateY(0);
             background: #cfdcff;
+        }
+
+        .record-button.is-recording {
+            border-color: var(--color-primary);
+            background: var(--color-danger-soft);
+            color: var(--color-primary);
+        }
+
+        .record-context {
+            display: grid;
+            gap: 8px;
+            color: var(--color-muted);
+            font-size: 13px;
+            line-height: 1.4;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .context-row {
+            display: grid;
+            grid-template-columns: max-content minmax(0, 1fr);
+            gap: var(--gap-sm);
+        }
+
+        .context-row>span:first-child {
+            color: var(--color-subtle);
+        }
+
+        .context-value {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            color: var(--color-text);
+            font-family: monospace;
+        }
+
+        .capture-button:disabled,
+        .record-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
         }
 
         @media (max-width: 960px) {
@@ -181,26 +243,74 @@
             }
 
             .stream-pane {
-                min-height: 50vh;
+                min-height: 52vh;
+            }
+
+            .side-panel {
+                border-radius: var(--radius-lg);
+            }
+        }
+
+        @media (max-width: 520px) {
+            .layout {
+                gap: 12px;
+                padding: 12px;
+            }
+
+            .stream-pane {
+                min-height: 42vh;
+                border-radius: var(--radius-lg);
+            }
+
+            .side-panel {
+                padding: 12px;
+            }
+
+            .capture-button,
+            .record-button {
+                width: 100%;
             }
         }
     </style>
 </head>
 
 <body>
-    <main class="layout">
-        <section class="stream-pane">
-            <video id="video" autoplay muted controls playsinline></video>
+    <main class="layout" aria-label="自瞄串流播放器">
+        <section class="stream-pane" aria-label="视频串流">
+            <video id="video" autoplay muted controls playsinline aria-label="AutoAim 实时视频"></video>
         </section>
         <aside class="side-panel">
+
             <section class="panel-group">
-                <h2>自瞄串流播放器</h2>
-                <p>关注 Alliance 战队喵！</p>
+                <h1>自瞄串流播放器</h1>
+                <p>关注 <span translate="no">Alliance</span> 战队喵！</p>
             </section>
-            <button id="capture-button" class="capture-button" type="button">捕获画面</button>
-            <button id="record-button" class="record-button" type="button">
+            <button id="capture-button" class="capture-button" type="button" disabled>捕获画面</button>
+            <button id="record-button" class="record-button" type="button" disabled>
                 <span class="record-button-label">开始录制</span>
             </button>
+
+            <div style="height: 10px; flex: 0 0 auto;" aria-hidden="true"></div>
+
+            <section class="panel-group">
+                <h2>远程录制控制</h2>
+                <p>HFYU 录制格式，约 1.4&nbsp;MB 每帧，压缩比 3:1，注意硬盘空间哦</p>
+                <div class="record-context" aria-live="polite">
+                    <div class="context-row">
+                        <span>录制</span>
+                        <span id="backend-record-on-value" class="context-value">未知</span>
+                    </div>
+                    <div class="context-row">
+                        <span>状态</span>
+                        <span id="backend-status-value" class="context-value">等待录制状态</span>
+                    </div>
+                    <div class="context-row">
+                        <span>文件</span>
+                        <span id="backend-filename-value" class="context-value">-</span>
+                    </div>
+                </div>
+            </section>
+            <button id="backend-record-button" class="record-button" type="button" disabled>等待录制状态</button>
         </aside>
     </main>
 
@@ -222,6 +332,8 @@
         let lastFrameAt = 0;
         let lastPlaybackTime = 0;
         let recordingWanted = false;
+        /** @type {boolean | null} */
+        let backendRecordOn = null;
         /** @type {BlobPart[]} */
         let recordedChunks = [];
         /** @type {'playing' | 'paused'} */
@@ -235,6 +347,14 @@
         const captureButton = document.getElementById('capture-button');
         /** @type {HTMLSpanElement} */
         const recordButtonLabel = document.querySelector('.record-button-label');
+        /** @type {HTMLButtonElement} */
+        const backendRecordButton = document.getElementById('backend-record-button');
+        /** @type {HTMLSpanElement} */
+        const backendRecordOnValue = document.getElementById('backend-record-on-value');
+        /** @type {HTMLSpanElement} */
+        const backendStatusValue = document.getElementById('backend-status-value');
+        /** @type {HTMLSpanElement} */
+        const backendFilenameValue = document.getElementById('backend-filename-value');
 
         video.addEventListener('play', () => {
             playbackStatus = 'playing';
@@ -253,6 +373,13 @@
             }
         });
         captureButton.addEventListener('click', captureFrame);
+        backendRecordButton.addEventListener('click', toggleBackendRecording);
+
+        function updateLocalActionButtons() {
+            const hasStream = Boolean(currentStream);
+            captureButton.disabled = !hasStream;
+            recordButton.disabled = !hasStream && !recordingWanted;
+        }
 
         function updateRecordButton() {
             if (recordingWanted) {
@@ -261,6 +388,68 @@
                 recordButtonLabel.textContent = '开始录制';
             }
             recordButton.classList.toggle('is-recording', recordingWanted);
+            updateLocalActionButtons();
+        }
+
+        function updateBackendRecordButton() {
+            if (backendRecordOn === null) {
+                backendRecordButton.textContent = '等待录制状态';
+                backendRecordButton.disabled = true;
+                return;
+            }
+
+            backendRecordButton.textContent = backendRecordOn ? '停止远程录制' : '开启远程录制';
+            backendRecordButton.disabled = false;
+        }
+
+        async function fetchRecordContext() {
+            try {
+                const response = await fetch('/api/context', {cache: 'no-store'});
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const recordContext = data.context || {};
+                backendRecordOn = Boolean(recordContext.recordOn);
+                backendRecordOnValue.textContent = backendRecordOn ? '开启' : '关闭';
+                backendStatusValue.textContent = recordContext.recordStatus || '-';
+                backendFilenameValue.textContent = recordContext.filename || '-';
+            } catch (error) {
+                backendRecordOn = null;
+                backendRecordOnValue.textContent = '未知';
+                backendStatusValue.textContent = '状态不可用';
+                backendFilenameValue.textContent = '-';
+                console.error('Failed to fetch record context:', error);
+            }
+
+            updateBackendRecordButton();
+        }
+
+        async function sendRecordCommand(value) {
+            backendRecordButton.disabled = true;
+            try {
+                const response = await fetch('/api/record', {
+                    method: 'POST',
+                    body: value,
+                });
+                if (!response.ok) {
+                    console.error('Record command failed:', response.status);
+                    return;
+                }
+                await fetchRecordContext();
+            } catch (error) {
+                console.error('Failed to send record command:', error);
+            } finally {
+                updateBackendRecordButton();
+            }
+        }
+
+        function toggleBackendRecording() {
+            if (backendRecordOn === null) {
+                return;
+            }
+            sendRecordCommand(backendRecordOn ? '0' : '1');
         }
 
         function downloadRecording() {
@@ -268,7 +457,7 @@
                 return;
             }
 
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const blob = new Blob(recordedChunks, {type: 'video/webm'});
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -283,7 +472,7 @@
                 return;
             }
 
-            recorder = new MediaRecorder(currentStream, { mimeType: 'video/webm' });
+            recorder = new MediaRecorder(currentStream, {mimeType: 'video/webm'});
             recorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     recordedChunks.push(event.data);
@@ -371,6 +560,7 @@
             lastFrameAt = 0;
             lastPlaybackTime = 0;
             currentStream = null;
+            updateLocalActionButtons();
 
             if (retryTimer) {
                 clearTimeout(retryTimer);
@@ -385,7 +575,7 @@
             }
 
             if (sessionUrl) {
-                fetch(sessionUrl, { method: 'DELETE' }).catch(() => { });
+                fetch(sessionUrl, {method: 'DELETE'}).catch(() => { });
                 sessionUrl = null;
             }
         }
@@ -422,10 +612,10 @@
         async function connect() {
             cleanup();
 
-            const peer = new RTCPeerConnection({ iceServers: [] });
+            const peer = new RTCPeerConnection({iceServers: []});
             peerConnection = peer;
 
-            peer.addTransceiver('video', { direction: 'recvonly' });
+            peer.addTransceiver('video', {direction: 'recvonly'});
             peer.ontrack = (event) => {
                 if (peer !== peerConnection) {
                     return;
@@ -442,6 +632,7 @@
 
                 video.srcObject = event.streams[0];
                 currentStream = event.streams[0];
+                updateLocalActionButtons();
                 ensureRecording();
                 watchVideoFrames(peer);
             };
@@ -472,7 +663,7 @@
 
                 const response = await fetch(WHEP_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/sdp' },
+                    headers: {'Content-Type': 'application/sdp'},
                     body: peer.localDescription.sdp,
                 });
                 if (response.status !== 201) {
@@ -485,7 +676,7 @@
 
                 sessionUrl = new URL(response.headers.get('location'), WHEP_URL).toString();
                 const answer = await response.text();
-                await peer.setRemoteDescription({ type: 'answer', sdp: answer });
+                await peer.setRemoteDescription({type: 'answer', sdp: answer});
             } catch (error) {
                 if (peer !== peerConnection) {
                     return;
@@ -525,6 +716,8 @@
         }, 400);
 
         updateRecordButton();
+        fetchRecordContext();
+        setInterval(fetchRecordContext, 1000);
         connect();
     </script>
 </body>

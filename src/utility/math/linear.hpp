@@ -122,6 +122,14 @@ namespace linear::details {
 }
 
 struct Scalar2d {
+    static constexpr auto kZero() { return Scalar2d { 0, 0 }; }
+    static constexpr auto kNaN() {
+        return Scalar2d {
+            std::numeric_limits<double>::quiet_NaN(),
+            std::numeric_limits<double>::quiet_NaN(),
+        };
+    }
+
     double x = 0;
     double y = 0;
 
@@ -144,13 +152,18 @@ struct Scalar2d {
         auto result = T { };
         return linear::details::clone_scalar2d(*this, result);
     }
-
-    static constexpr auto kZero() { return Scalar2d { 0, 0 }; }
 };
 using Point2d = Scalar2d;
 
 struct Scalar3d {
     static constexpr auto kZero() { return Scalar3d { 0, 0, 0 }; }
+    static constexpr auto kNaN() {
+        return Scalar3d {
+            std::numeric_limits<double>::quiet_NaN(),
+            std::numeric_limits<double>::quiet_NaN(),
+            std::numeric_limits<double>::quiet_NaN(),
+        };
+    }
 
     double x = 0;
     double y = 0;
@@ -250,5 +263,7 @@ struct Transform {
         };
     }
 };
+
+constexpr auto kNaN = std::numeric_limits<double>::quiet_NaN();
 
 }

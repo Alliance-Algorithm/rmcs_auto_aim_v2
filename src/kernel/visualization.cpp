@@ -7,6 +7,7 @@
 #include "utility/rclcpp/visual/armor.hpp"
 #include "utility/rclcpp/visual/arrow.hpp"
 #include "utility/rclcpp/visual/lightbar.hpp"
+#include "utility/rclcpp/visual/scalar.hpp"
 #include "utility/rclcpp/visual/transform.hpp"
 #include "utility/serializable.hpp"
 
@@ -57,11 +58,11 @@ struct Visualization::Impl {
     SessionConfig session_config;
 
     debug::MpcPlanVisualizer mpc_plan;
-
+    visual::DynamicTransform odom_transform { rclcpp };
     std::unique_ptr<visual::Arrow> aiming_direction;
-    std::unique_ptr<visual::Transform> camera_transform;
     std::unordered_map<std::string, visual::Armors> armor_publishers;
     std::unordered_map<std::string, visual::Lightbars> lightbar_publishers;
+    std::unordered_map<std::string, visual::Scalar> scalar_publishers;
 
     bool is_initialized  = false;
     bool size_determined = false;
@@ -74,6 +75,8 @@ struct Visualization::Impl {
             return std::unexpected { result.error() };
         }
         rclcpp.set_pub_topic_prefix("/autoaim/");
+
+        session.set_notifier([&](const auto& text) { rclcpp.info("{}", text); });
 
         // 用 {} 区分初始化的部分
         session_config.target.host = config.monitor_host;
@@ -93,12 +96,6 @@ struct Visualization::Impl {
             .rclcpp = rclcpp,
             .name   = "aiming_direction",
             .tf     = kOdomLink,
-        });
-        camera_transform = std::make_unique<visual::Transform>(visual::Transform::Config {
-            .rclcpp       = rclcpp,
-            .topic        = "odom_to_camera_transform",
-            .parent_frame = kOdomLink,
-            .child_frame  = kCameraLink,
         });
 
         is_initialized = true;
@@ -124,10 +121,9 @@ struct Visualization::Impl {
             session_config.format.w = mat.cols;
             session_config.format.h = mat.rows;
 
-            auto open_result = session.open(session_config);
-            if (!open_result) {
+            if (auto result = session.open(session_config); !result) {
                 rclcpp.error("Failed to open visualization session");
-                rclcpp.error("  e: {}", open_result.error());
+                rclcpp.error("  e: {}", result.error());
                 return false;
             }
             rclcpp.info("Visualization session is opened");
@@ -140,15 +136,13 @@ struct Visualization::Impl {
     }
 
     auto draw_later(std::unique_ptr<IDrawable> drawable) -> void {
-        if (is_initialized) {
+        if (is_initialized && config.drawable) {
             drawables.emplace_back(std::move(drawable));
         }
     }
 
-    auto publish(std::span<const Armor3d> armors, const std::string& name) -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
-
+    auto publish(std::span<const Armor3d> armors, const std::string& name) {
+        if (!is_initialized || !config.publishable) return;
         auto iter = armor_publishers.find(name);
         if (iter == armor_publishers.end()) {
             auto config = visual::Armors::Config {
@@ -162,9 +156,7 @@ struct Visualization::Impl {
     }
 
     auto publish(std::span<const Lightbar3d> lightbars, const std::string& name) -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
-
+        if (!is_initialized || !config.publishable) return;
         auto iter = lightbar_publishers.find(name);
         if (iter == lightbar_publishers.end()) {
             auto config = visual::Lightbars::Config {
@@ -175,6 +167,20 @@ struct Visualization::Impl {
             iter = lightbar_publishers.emplace(name, std::move(config)).first;
         }
         iter->second.update(lightbars);
+    }
+    auto publish(const Transform& t, const std::string& name) -> void {
+        if (!is_initialized || !config.publishable) return;
+        odom_transform.set_link(kOdomLink, name);
+        odom_transform.publish(t);
+    }
+
+    auto publish(double value, const std::string& name) -> void {
+        if (!is_initialized || !config.publishable) return;
+        auto iter = scalar_publishers.find(name);
+        if (iter == scalar_publishers.end()) {
+            iter = scalar_publishers.emplace(name, visual::Scalar { rclcpp, name }).first;
+        }
+        iter->second.publish(value);
     }
 
     auto update_aiming_direction(double yaw, double pitch) const -> void {
@@ -190,13 +196,6 @@ struct Visualization::Impl {
         if (!config.publishable) return;
         mpc_plan.publish_planned_yaw(yaw, yaw_rate, yaw_acc);
         mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
-    }
-
-    auto update_camera_pose(const Transform& t) const -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
-        camera_transform->move(t.translation, t.orientation);
-        camera_transform->update();
     }
 };
 
@@ -231,8 +230,12 @@ auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, d
     pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
-auto Visualization::update_camera_pose(const Transform& t) const -> void {
-    pimpl->update_camera_pose(t);
+auto Visualization::publish(const Transform& t, const std::string& name) -> void {
+    pimpl->publish(t, name);
+}
+
+auto Visualization::publish(double value, const std::string& name) -> void {
+    pimpl->publish(value, name);
 }
 
 Visualization::Visualization() noexcept

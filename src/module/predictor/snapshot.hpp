@@ -4,10 +4,10 @@
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 
+#include <eigen3/Eigen/Core>
+
 #include <memory>
 #include <vector>
-
-#include <eigen3/Eigen/Core>
 
 namespace rmcs::predictor {
 
@@ -44,4 +44,4 @@ private:
     std::unique_ptr<Impl> pimpl;
 };
 
-}
+} // namespace rmcs::predictor

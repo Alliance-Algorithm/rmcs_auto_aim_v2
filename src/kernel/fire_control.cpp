@@ -71,7 +71,7 @@ struct FireControl::Impl {
             };
         }
 
-        return {};
+        return { };
     }
 
     auto solve(predictor::Snapshot const& snapshot, GimbalState const& gimbal_state)
@@ -160,16 +160,16 @@ struct FireControl::Impl {
             .yaw             = yaw,
             .feedforward     = feedforward,
             .shoot_permitted = shoot_permitted,
-            .center_position = center_position,
+            .center_position = Point3d { center_position },
             .impact_time     = target_solution.impact_time,
         };
     }
 
-    TrajectoryPlanner trajectory_planner {};
-    TargetSolver target_solver {};
-    ShootEvaluator shoot_evaluator {};
-    ArmorSelector armor_selector {};
-    std::optional<int> last_selected_armor_id {};
+    TrajectoryPlanner trajectory_planner { };
+    TargetSolver target_solver { };
+    ShootEvaluator shoot_evaluator { };
+    ArmorSelector armor_selector { };
+    std::optional<int> last_selected_armor_id { };
 };
 
 FireControl::FireControl() noexcept

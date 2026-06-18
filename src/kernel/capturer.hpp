@@ -24,6 +24,8 @@ public:
     ///   - Thread-safe: safe to call from multiple threads, but only one thread
     ///     should fetch at a time.
     auto fetch_image() noexcept -> ImageUnique;
+
+    auto recording() const -> bool;
 };
 
 }
