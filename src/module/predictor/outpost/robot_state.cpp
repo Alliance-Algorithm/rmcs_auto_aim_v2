@@ -4,6 +4,7 @@
 #include "utility/math/angle.hpp"
 #include "utility/time.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -59,7 +60,7 @@ struct OutpostRobotState::Impl {
         assign_slot(0, 0.0, 0.0);
         last_matched_slot_id = 0;
 
-        ekf         = EKF { Params::x(Params::observe(armor)), Params::P_initial_dig().asDiagonal() };
+        ekf = EKF { Params::x(Params::observe(armor)), Params::P_initial_dig().asDiagonal() };
         initialized = true;
 
         auto const observation = Params::observe(armor);
@@ -118,10 +119,9 @@ struct OutpostRobotState::Impl {
 
 private:
     static constexpr auto kModeConfirmWindow            = std::chrono::duration<double> { 0.2 };
-    static constexpr auto kStaticYawDeltaThreshold      = util::deg2rad(4.6);
-    static constexpr auto kRotationYawDeltaThreshold    = util::deg2rad(14.3);
+    static constexpr auto kStaticYawDeltaThreshold      = util::deg2rad(5.0);
+    static constexpr auto kRotationYawDeltaThreshold    = util::deg2rad(15.0);
     static constexpr int kRotationConfirmCandidateCount = 3;
-    static constexpr double kHeightMismatchThreshold    = kOutpostArmorHeightStep / 2.0;
 
     auto assign_slot(int slot_id, double phase_offset, double height_offset) -> void {
         auto& slot         = layout.slots.at(slot_id);
@@ -149,16 +149,18 @@ private:
         if (!layout.slots[0].assigned || !layout.slots[1].assigned || !layout.slots[2].assigned)
             return true;
 
-        auto height_tier = [](double h) {
-            auto c = static_cast<int>(std::round(h / kOutpostArmorHeightStep)) % 3;
-            return (c + 3) % 3;
+        auto height_step = [](double height_offset) {
+            return static_cast<int>(std::round(height_offset / kOutpostArmorHeightStep));
         };
 
-        auto c0 = height_tier(layout.slots[0].height_offset);
-        auto c1 = height_tier(layout.slots[1].height_offset);
-        auto c2 = height_tier(layout.slots[2].height_offset);
+        auto s0 = height_step(layout.slots[0].height_offset);
+        auto s1 = height_step(layout.slots[1].height_offset);
+        auto s2 = height_step(layout.slots[2].height_offset);
 
-        return c0 != c1 && c1 != c2 && c0 != c2;
+        auto min_step = std::min({ s0, s1, s2 });
+        auto max_step = std::max({ s0, s1, s2 });
+
+        return max_step - min_step == 2 && s0 != s1 && s1 != s2 && s0 != s2;
     }
 
     static constexpr auto topology_of(MotionMode mode) -> std::optional<RotationTopology> {
@@ -289,13 +291,6 @@ private:
 
     auto apply_match(MatchResult const& match) -> bool {
         auto const& candidate = match.candidate;
-
-        auto const predicted_z = ekf.x[4] + candidate.height_offset;
-        auto const z_error     = std::abs(match.observation.xyz[2] - predicted_z);
-        if (z_error > kHeightMismatchThreshold) {
-            reset_state(candidate.slot_id, match.observation);
-            return true;
-        }
 
         if (!motion_mode.has_value() && !candidate.assigned && candidate.motion_mode.has_value()) {
             update_rotation_evidence(*candidate.motion_mode);
