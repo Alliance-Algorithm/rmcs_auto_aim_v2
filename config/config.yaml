@@ -116,8 +116,10 @@ fire_control:
 
   shoot_evaluator:
     is_lazy_gimbal: false
-    near_angle_tolerance: 3 # degree
-    far_angle_tolerance: 2 # degree
+    near_yaw_tolerance: 2 # degree
+    far_yaw_tolerance: 0.7 # degree
+    near_pitch_tolerance: 2 # degree
+    far_pitch_tolerance: 1 # degree
     split_distance: 2 # m
 
 visualization:

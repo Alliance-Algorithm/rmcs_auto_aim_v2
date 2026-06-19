@@ -148,10 +148,11 @@ struct FireControl::Impl {
         {
             auto shoot_command = ShootEvaluator::Command {
                 .yaw                = yaw,
+                .pitch              = pitch,
                 .center_position    = center_position,
                 .aim_point_position = aim_point_position,
             };
-            shoot_permitted = shoot_evaluator.evaluate(shoot_command, gimbal_state.yaw);
+            shoot_permitted = shoot_evaluator.evaluate(shoot_command, gimbal_state);
         }
 
         // 6. 组装结果

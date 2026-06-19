@@ -8,6 +8,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "module/fire_control/gimbal_state.hpp"
 #include "utility/pimpl.hpp"
 
 namespace rmcs::fire_control {
@@ -18,6 +19,7 @@ class ShootEvaluator {
 public:
     struct Command {
         double yaw { std::numeric_limits<double>::quiet_NaN() };
+        double pitch { std::numeric_limits<double>::quiet_NaN() };
         Eigen::Vector3d center_position { Eigen::Vector3d::Zero() };
         Eigen::Vector3d aim_point_position { Eigen::Vector3d::Zero() };
     };
@@ -25,7 +27,7 @@ public:
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
     auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
-    auto evaluate(Command const& command, double current_yaw) noexcept -> bool;
+    auto evaluate(Command const& command, GimbalState const& state) noexcept -> bool;
 };
 
 } // namespace rmcs::fire_control
