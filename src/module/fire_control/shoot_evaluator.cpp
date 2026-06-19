@@ -10,10 +10,10 @@ using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
     struct Config : util::Serializable {
-        double near_yaw_tolerance { 4.0 };
+        double near_yaw_tolerance { 3.0 };
         double far_yaw_tolerance { 2.0 };
-        double near_pitch_tolerance { 4.0 };
-        double far_pitch_tolerance { 2.0 };
+        double near_pitch_tolerance { 2.0 };
+        double far_pitch_tolerance { 1.0 };
         double split_distance { 3.0 };
         bool is_lazy_gimbal { false };
 
@@ -94,7 +94,7 @@ struct ShootEvaluator::Impl {
                 std::abs(util::normalize_angle(state.yaw - last_command_->yaw));
             const auto pitch_delta = std::abs(util::normalize_angle(state.pitch - command.pitch));
 
-            should_fire = (yaw_delta < yaw_tolerance * 2.0) && (track_delta < yaw_tolerance)
+            should_fire = (yaw_delta < yaw_tolerance) && (track_delta < yaw_tolerance)
                 && (pitch_delta < pitch_tolerance);
         }
 
