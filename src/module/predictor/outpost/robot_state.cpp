@@ -58,7 +58,6 @@ struct OutpostRobotState::Impl {
 
         layout = OutpostArmorLayout {};
         assign_slot(0, 0.0, 0.0);
-        last_matched_slot_id = 0;
 
         ekf = EKF { Params::x(Params::observe(armor)), Params::P_initial_dig().asDiagonal() };
         initialized = true;
@@ -128,21 +127,6 @@ private:
         slot.phase_offset  = phase_offset;
         slot.height_offset = height_offset;
         slot.assigned      = true;
-    }
-
-    auto reset_state(int slot_id, Params::ArmorObservation const& obs) -> void {
-        ekf = EKF { Params::x(obs), Params::P_initial_dig().asDiagonal() };
-
-        layout = OutpostArmorLayout {};
-        assign_slot(slot_id, 0.0, 0.0);
-        last_matched_slot_id = slot_id;
-
-        motion_mode       = std::nullopt;
-        rotation_evidence = {};
-        update_count      = 0;
-
-        mode_reference_yaw   = obs.ypr[0];
-        mode_reference_stamp = time_stamp;
     }
 
     auto is_layout_consistent() const -> bool {
@@ -231,26 +215,29 @@ private:
         auto const topology = topology_of(mode);
         if (!topology.has_value()) return;
 
-        auto const source_slot_id = last_matched_slot_id;
-        auto const target_slot_id = normalize_slot_id(source_slot_id + topology->slot_delta);
-        auto const& source_slot   = layout.slots.at(source_slot_id);
-        auto const& target_slot   = layout.slots.at(target_slot_id);
+        for (int source_slot_id = 0; source_slot_id < Params::kOutpostArmorCount;
+            ++source_slot_id) {
+            auto const& source_slot = layout.slots.at(source_slot_id);
+            if (!source_slot.assigned) continue;
 
-        if (target_slot.assigned) return;
+            auto const target_slot_id = normalize_slot_id(source_slot_id + topology->slot_delta);
+            auto const& target_slot   = layout.slots.at(target_slot_id);
+            if (target_slot.assigned) continue;
 
-        for (auto const height_step : topology->height_steps) {
-            auto const phase_offset =
-                util::normalize_angle(source_slot.phase_offset + topology->phase_delta);
-            auto const height_offset =
-                source_slot.height_offset + height_step * kOutpostArmorHeightStep;
+            for (auto const height_step : topology->height_steps) {
+                auto const phase_offset =
+                    util::normalize_angle(source_slot.phase_offset + topology->phase_delta);
+                auto const height_offset =
+                    source_slot.height_offset + height_step * kOutpostArmorHeightStep;
 
-            candidates.emplace_back(Candidate {
-                .slot_id       = target_slot_id,
-                .phase_offset  = phase_offset,
-                .height_offset = height_offset,
-                .assigned      = false,
-                .motion_mode   = mode,
-            });
+                candidates.emplace_back(Candidate {
+                    .slot_id       = target_slot_id,
+                    .phase_offset  = phase_offset,
+                    .height_offset = height_offset,
+                    .assigned      = false,
+                    .motion_mode   = mode,
+                });
+            }
         }
     }
 
@@ -298,6 +285,14 @@ private:
         }
 
         rotation_evidence = {};
+
+        assign_slot(candidate.slot_id, candidate.phase_offset, candidate.height_offset);
+
+        if (!is_layout_consistent()) {
+            initialized = false;
+            return false;
+        }
+
         update_motion_mode(match);
 
         ekf.update(
@@ -309,13 +304,6 @@ private:
                 return Params::H(x, candidate.phase_offset, candidate.height_offset);
             },
             Params::R(match.observation), Params::x_add, Params::z_subtract);
-
-        assign_slot(candidate.slot_id, candidate.phase_offset, candidate.height_offset);
-        last_matched_slot_id = candidate.slot_id;
-
-        if (!is_layout_consistent()) {
-            reset_state(candidate.slot_id, match.observation);
-        }
 
         return true;
     }
@@ -378,7 +366,6 @@ private:
 
     bool initialized { false };
     int update_count { 0 };
-    int last_matched_slot_id { 0 };
 
     std::optional<MotionMode> motion_mode;
     RotationEvidence rotation_evidence;
