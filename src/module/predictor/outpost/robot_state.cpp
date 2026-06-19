@@ -93,13 +93,16 @@ struct OutpostRobotState::Impl {
         auto match = select_best_match(armors);
         if (!match.has_value()) return false;
 
-        if (apply_match(*match)) ++update_count;
+        if (!apply_match(*match)) return false;
+
+        ++update_count;
         return true;
     }
 
     auto is_converged() const -> bool {
         if (!initialized) return false;
         if (!std::isfinite(distance())) return false;
+        if (!motion_mode.has_value()) return false;
 
         constexpr int min_updates = 3;
         return layout.slots[0].assigned && update_count >= min_updates;

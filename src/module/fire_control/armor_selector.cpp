@@ -99,7 +99,7 @@ struct ArmorSelector::Impl {
         }
 
         const auto priority_key = [&](size_t index) {
-            const auto preferred_incoming = [&] {
+            const auto leaving_penalty = [&] {
                 const auto delta = candidate_evals[index].delta_yaw;
                 if (candidates[index].motion.angular_velocity > 0.0) return (delta > 0.0) ? 1 : 0;
                 if (candidates[index].motion.angular_velocity < 0.0) return (delta < 0.0) ? 1 : 0;
@@ -110,7 +110,7 @@ struct ArmorSelector::Impl {
             const auto is_last =
                 last_selected_armor_id.has_value() && (id == *last_selected_armor_id);
             const auto last_penalty = is_last ? 0 : 1;
-            return std::tuple { preferred_incoming, abs_delta, last_penalty, id, index };
+            return std::tuple { leaving_penalty, abs_delta, last_penalty, id, index };
         };
 
         auto best_idx = std::optional<size_t> {};
