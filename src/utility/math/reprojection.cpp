@@ -19,3 +19,26 @@ auto project_points::impl(std::span<const cv::Point3f> object_points, const cv::
 }
 
 }
+
+namespace rmcs {
+
+auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
+    -> std::optional<Point2d> {
+
+    auto object_points = std::vector<cv::Point3f> {
+        cv::Point3f {
+            static_cast<float>(point_camera.x),
+            static_cast<float>(point_camera.y),
+            static_cast<float>(point_camera.z),
+        },
+    };
+    auto projected = std::vector<cv::Point2f> { };
+
+    cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 }, cv::Vec3d { 0.0, 0.0, 0.0 },
+        camera.intrinsic(), camera.distortion(), projected);
+
+    if (projected.empty()) return std::nullopt;
+    return Point2d { projected[0] };
+}
+
+}

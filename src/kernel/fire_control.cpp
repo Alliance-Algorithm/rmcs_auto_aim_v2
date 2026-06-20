@@ -162,6 +162,7 @@ struct FireControl::Impl {
             .feedforward     = feedforward,
             .shoot_permitted = shoot_permitted,
             .center_position = Point3d { center_position },
+            .aim_point       = Point3d { aim_point_position },
             .impact_time     = target_solution.impact_time,
         };
     }

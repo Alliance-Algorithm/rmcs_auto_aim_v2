@@ -13,3 +13,8 @@ build-rmcs --packages-up-to rmcs_auto_aim_v2
 cmake -B build
 cmake --build build -j
 ```
+
+
+2. 规范
+
+- 项目头文件遵循最小引入原则，如果某个类型通过头文件间接引入了，那就不需要再引入该头文件

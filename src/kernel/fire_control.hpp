@@ -30,6 +30,7 @@ public:
         std::optional<Feedforward> feedforward;
         bool shoot_permitted;
         Point3d center_position;
+        Point3d aim_point;
         TimePoint impact_time;
     };
 

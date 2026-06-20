@@ -33,6 +33,8 @@ public:
     auto estimate_armor(const std::vector<Armor2d>&) const -> Armor3ds;
     auto estimate_armor(const std::vector<Armor2d>&, Image&) const -> Armor3ds;
 
+    auto make_point2d(const Point3d& point_odom) const -> std::optional<Point2d>;
+
     auto addition() -> const Addition&;
 };
 

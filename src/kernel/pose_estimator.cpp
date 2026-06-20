@@ -117,11 +117,11 @@ struct PoseEstimator::Impl {
 
         auto transformed = armor;
 
-        auto position = Eigen::Vector3d {};
+        auto position = Eigen::Vector3d { };
         transformed.translation.copy_to(position);
         transformed.translation = camera_orientation.inverse() * (position - camera_translation);
 
-        auto quat = Eigen::Quaterniond {};
+        auto quat = Eigen::Quaterniond { };
         transformed.orientation.copy_to(quat);
         transformed.orientation = camera_orientation.inverse() * quat;
 
@@ -271,6 +271,16 @@ struct PoseEstimator::Impl {
         }
         return armor3ds;
     }
+
+    auto make_point2d(const Point3d& point_odom) const -> std::optional<Point2d> {
+        // odom (ROS) -> camera (OpenCV)
+        const auto point_ros    = point_odom.make<Eigen::Vector3d>();
+        const auto point_opencv = ros2opencv_position(point_ros);
+        const auto point_cv     = Point3d { point_opencv };
+
+        // reproject
+        return reproject_point(point_cv, camera_feature);
+    }
 };
 
 auto PoseEstimator::initialize(const YAML::Node& yaml) noexcept
@@ -296,6 +306,10 @@ auto PoseEstimator::addition() -> const Addition& { return pimpl->addition; }
 
 auto PoseEstimator::update_camera_transform(const Transform& transform) -> void {
     return pimpl->update_camera_transform(transform);
+}
+
+auto PoseEstimator::make_point2d(const Point3d& point_odom) const -> std::optional<Point2d> {
+    return pimpl->make_point2d(point_odom);
 }
 
 PoseEstimator::PoseEstimator() noexcept

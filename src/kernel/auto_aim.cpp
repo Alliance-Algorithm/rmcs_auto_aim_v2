@@ -154,6 +154,14 @@ struct AutoAim::Impl {
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
                     visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
                         cmd.yaw_acc, cmd.pitch_acc);
+
+                    if (auto aim_2d = estimator.make_point2d(result->aim_point)) {
+                        visual.draw_later(Canvas::Point {
+                            .origin = aim_2d->make<cv::Point2i>(),
+                            .radius = 5,
+                            .color  = result->shoot_permitted ? kRed : kGreen,
+                        });
+                    }
                 }
             }
             visual.draw_later(
