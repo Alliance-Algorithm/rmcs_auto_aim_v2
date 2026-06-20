@@ -1,15 +1,15 @@
 #include "robot_state.hpp"
 
+#include "module/predictor/regular/snapshot.hpp"
+#include "utility/time.hpp"
+
 #include <cmath>
 #include <limits>
 #include <numbers>
 #include <optional>
 #include <vector>
 
-#include "module/predictor/regular/snapshot.hpp"
-#include "utility/time.hpp"
-
-using namespace rmcs::predictor;
+namespace rmcs::predictor {
 
 struct RegularRobotState::Impl {
     struct MatchDecision {
@@ -27,7 +27,7 @@ struct RegularRobotState::Impl {
     CampColor color { CampColor::UNKNOWN };
     int armor_num { 0 };
 
-    EKF ekf { EKF { } };
+    EKF ekf { EKF {} };
     TimePoint time_stamp;
 
     bool initialized { false };
@@ -107,9 +107,9 @@ struct RegularRobotState::Impl {
         return r_ok && l_ok && update_count >= min_updates;
     }
 
-    auto get_snapshot() const -> Snapshot {
-        if (!initialized) return Snapshot::empty(time_stamp);
-        return detail::make_regular_snapshot(ekf.x, device, color, armor_num, time_stamp);
+    auto get_snapshot() const -> std::optional<Snapshot> {
+        if (!initialized) return std::nullopt;
+        return Snapshot { RegularSnapshot { ekf.x, device, color, armor_num, time_stamp } };
     }
 
     auto distance() const -> double {
@@ -119,7 +119,7 @@ struct RegularRobotState::Impl {
 
 private:
     auto decide_match(Armor3d const& armor) const -> MatchDecision {
-        if (!initialized || armor.genre != device) return { };
+        if (!initialized || armor.genre != device) return {};
 
         auto armors_xyza = calculate_armors(ekf.x);
 
@@ -139,8 +139,10 @@ private:
             return (last_matched_armor_id + armor_num / 2) % armor_num;
         }();
 
-        for (auto&& [candidate_armor_id, pred] : armors_xyza | std::views::enumerate) {
-            if (candidate_armor_id == opposite_matched_armor_id) continue;
+        auto candidate_armor_id = 0;
+        for (auto const& pred : armors_xyza) {
+            auto const armor_id = candidate_armor_id++;
+            if (armor_id == opposite_matched_armor_id) continue;
 
             auto const ypd_pred   = util::xyz2ypd(pred.template head<3>());
             auto const view_delta = std::abs(util::normalize_angle(pred[3] - ypd_pred[0]));
@@ -150,11 +152,11 @@ private:
                 + std::abs(util::normalize_angle(ypd_in_world[0] - ypd_pred[0]));
             if (error >= min_error) continue;
 
-            best_matched_armor_id = candidate_armor_id;
+            best_matched_armor_id = armor_id;
             min_error             = error;
         }
 
-        if (best_matched_armor_id == kUnknownMatchedArmorId) return { };
+        if (best_matched_armor_id == kUnknownMatchedArmorId) return {};
 
         return {
             .matched_armor_id = best_matched_armor_id,
@@ -164,7 +166,7 @@ private:
     }
 
     auto select_best_match(std::span<Armor3d const> armors) const -> std::optional<BestMatch> {
-        auto best_match = std::optional<BestMatch> { };
+        auto best_match = std::optional<BestMatch> {};
         for (std::size_t observation_index = 0; observation_index < armors.size();
             ++observation_index) {
             auto decision = decide_match(armors[observation_index]);
@@ -191,7 +193,7 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto z = EKF::ZVec { };
+        auto z = EKF::ZVec {};
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
@@ -206,7 +208,7 @@ private:
     }
 
     auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> { };
+        auto armors = std::vector<Eigen::Vector4d> {};
         armors.reserve(armor_num);
         for (int i = 0; i < armor_num; ++i) {
             auto angle = EKFParameters::armor_yaw(device, x, i);
@@ -239,6 +241,10 @@ auto RegularRobotState::update(std::span<Armor3d const> armors) -> bool {
 
 auto RegularRobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
-auto RegularRobotState::get_snapshot() const -> Snapshot { return pimpl->get_snapshot(); }
+auto RegularRobotState::get_snapshot() const -> std::optional<Snapshot> {
+    return pimpl->get_snapshot();
+}
 
 auto RegularRobotState::distance() const -> double { return pimpl->distance(); }
+
+} // namespace rmcs::predictor

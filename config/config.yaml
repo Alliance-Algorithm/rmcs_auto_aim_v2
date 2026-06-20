@@ -25,7 +25,7 @@ capturer:
   record_fps: 24
   max_videos_size_gb: 50
 
-  # source: "local_video"
+  # source: "hikcamera" or "local_video"
   source: "hikcamera"
 
   hikcamera:
@@ -47,7 +47,7 @@ capturer:
     # 替换为你具体的路径
     location: "/path/to/your/video"
     # double 帧率
-    frame_rate: 40
+    frame_rate: 80
     # bool 是否循环播放
     loop_play: true
     # bool 是否允许跳帧以满足实时性
@@ -90,17 +90,18 @@ pose_estimator:
   outpost_armor_thickness: 0.022
 
 fire_control:
-  initial_bullet_speed: 21.4 # m/s
-  shoot_delay: 0.07 # s
+  initial_bullet_speed: 23.5 # m/s
+  shoot_delay: 0.04 # s
   mpc_enable: true
-  yaw_offset: 0.0 # degree
-  pitch_offset: 0.0 # degree
+  yaw_offset: -0.4 # degree
+  pitch_offset: +0.8 # degree
 
-  aim_point_chooser:
-    coming_angle: 70.0 # degree
+  armor_target_selector:
+    coming_angle: 60.0 # degree
     leaving_angle: 20.0 # degree
-    outpost_coming_angle: 70.0 # degree
-    outpost_leaving_angle: 20.0 # degree
+    outpost_coming_angle: 60.0 # degree
+    outpost_leaving_angle: 30.0 # degree
+    switch_threshold: 8.0 # degree
 
   mpc:
     mpc_max_yaw_acc: 50.0
@@ -111,11 +112,14 @@ fire_control:
     mpc_pitch_q_angle: 9000000.0
     mpc_pitch_q_rate: 0.0
     mpc_pitch_r_acc: 1.0
+    mpc_max_iter: 5
 
   shoot_evaluator:
     is_lazy_gimbal: false
-    near_angle_tolerance: 3 # degree
-    far_angle_tolerance: 2 # degree
+    near_yaw_tolerance: 2 # degree
+    far_yaw_tolerance: 1 # degree
+    near_pitch_tolerance: 2 # degree
+    far_pitch_tolerance: 1 # degree
     split_distance: 2 # m
 
 visualization:

@@ -20,8 +20,6 @@ struct AutoAimState {
     double pitch_rate { kNaN };
     double yaw_acc { kNaN };
     double pitch_acc { kNaN };
-    bool feedforward_valid { false };
-
     Translation robot_center { kNaN, kNaN, kNaN };
 
     DeviceId target { DeviceId::UNKNOWN };
@@ -43,7 +41,7 @@ struct SystemContext {
     double yaw { kNaN };
     double pitch { kNaN };
 
-    Transform camera_transform = Transform::kNaN(); // Imu Odom Link
+    Transform camera_transform = Transform::kNaN();
 
     /// Lazy Context
     ///

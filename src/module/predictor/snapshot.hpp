@@ -1,30 +1,29 @@
 #pragma once
 
-#include <memory>
-#include <vector>
-
 #include "utility/clock.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 
+#include <eigen3/Eigen/Core>
+
+#include <memory>
+#include <vector>
+
 namespace rmcs::predictor {
 
-struct ISnapshotBackend;
+class RegularSnapshot;
+class OutpostSnapshot;
 class Snapshot;
 
-namespace detail {
-    auto make_snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept -> Snapshot;
-}
+struct TargetMotion {
+    Eigen::Vector3d center_position;
+    double angular_velocity;
+};
 
 class Snapshot {
 public:
-    struct Kinematics {
-        Point3d center_position;
-        double angular_velocity;
-    };
-
-    static auto empty(TimePoint stamp) noexcept -> Snapshot;
-
+    explicit Snapshot(RegularSnapshot snapshot);
+    explicit Snapshot(OutpostSnapshot snapshot);
     Snapshot(Snapshot const&) = delete;
     Snapshot(Snapshot&&) noexcept;
     Snapshot& operator=(Snapshot const&) = delete;
@@ -33,20 +32,16 @@ public:
 
     auto time_stamp() const -> TimePoint;
     auto device_id() const -> DeviceId;
-    auto kinematics() const -> Kinematics;
-    auto kinematics_at(TimePoint t) const -> Kinematics;
+
+    auto motion() const -> TargetMotion;
+    auto motion_at(TimePoint t) const -> TargetMotion;
 
     auto predicted_armors() const { return predicted_armors(Clock::now()); }
-
     auto predicted_armors(TimePoint t) const -> std::vector<Armor3d>;
 
 private:
-    explicit Snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept;
-
-    std::unique_ptr<ISnapshotBackend> backend;
-
-    friend auto detail::make_snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept
-        -> Snapshot;
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
 };
 
-}
+} // namespace rmcs::predictor

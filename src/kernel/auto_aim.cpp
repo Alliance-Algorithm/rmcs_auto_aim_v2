@@ -129,23 +129,29 @@ struct AutoAim::Impl {
                 auto armors    = snapshot->predicted_armors(Clock::now());
                 visual.publish(armors, "visible_robot");
 
-                const auto yaw = context.yaw;
-                if (auto result = fire.solve(*snapshot, yaw)) {
-                    cmd.should_control    = true;
-                    cmd.target            = target.target_id;
-                    cmd.should_shoot      = result->shoot_permitted;
-                    cmd.yaw               = result->yaw;
-                    cmd.pitch             = result->pitch;
-                    cmd.yaw_rate          = result->yaw_rate;
-                    cmd.pitch_rate        = result->pitch_rate;
-                    cmd.yaw_acc           = result->yaw_acc;
-                    cmd.pitch_acc         = result->pitch_acc;
-                    cmd.feedforward_valid = result->feedforward_valid;
-                    cmd.robot_center      = result->center_position;
+                const auto gimbal_state = fire_control::GimbalState {
+                    .timestamp = context.timestamp,
+                    .yaw       = context.yaw,
+                    .pitch     = context.pitch,
+                };
+                if (auto result = fire.solve(*snapshot, gimbal_state)) {
+                    cmd.should_control = true;
+                    cmd.target         = target.target_id;
+                    cmd.should_shoot   = result->shoot_permitted;
+                    cmd.yaw            = result->yaw;
+                    cmd.pitch          = result->pitch;
+                    cmd.robot_center   = result->center_position;
 
-                    /// TODO:
-                    /// 统一控制侧和自瞄侧的 Pitch 符号方向定义
-                    visual.update_aiming_direction(cmd.yaw, -cmd.pitch);
+                    if (result->feedforward.has_value()) {
+                        cmd.yaw_rate   = result->feedforward->yaw_rate;
+                        cmd.pitch_rate = result->feedforward->pitch_rate;
+                        cmd.yaw_acc    = result->feedforward->yaw_acc;
+                        cmd.pitch_acc  = result->feedforward->pitch_acc;
+                    }
+
+                    auto impact_armors = snapshot->predicted_armors(result->impact_time);
+                    visual.publish(impact_armors, "impact_robot");
+                    visual.update_aiming_direction(cmd.yaw, cmd.pitch);
                     visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
                         cmd.yaw_acc, cmd.pitch_acc);
                 }

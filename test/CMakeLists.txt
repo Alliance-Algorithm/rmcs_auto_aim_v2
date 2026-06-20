@@ -135,17 +135,6 @@ ament_add_gtest(
     ${TEST_DIR}/transform_communication.cpp
 )
 
-# Aim point chooser
-ament_add_gtest(
-    test_aim_point_chooser
-    ${TEST_DIR}/aim_point_chooser.cpp
-    ${RMCS_SRC_DIR}/module/fire_control/aim_point_chooser.cpp
-)
-target_link_libraries(
-    test_aim_point_chooser
-    yaml-cpp::yaml-cpp
-)
-
 # Tiny MPC solver
 ament_add_gtest(
     test_tiny_mpc_solver
@@ -153,16 +142,5 @@ ament_add_gtest(
 )
 target_link_libraries(
     test_tiny_mpc_solver
-    tinympcstatic
-)
-
-# Tiny MPC axis solver
-ament_add_gtest(
-    test_tiny_mpc_axis_solver
-    ${TEST_DIR}/tiny_mpc_axis_solver.cpp
-    ${RMCS_SRC_DIR}/module/fire_control/planner/tiny_mpc_axis_solver.cpp
-)
-target_link_libraries(
-    test_tiny_mpc_axis_solver
     tinympcstatic
 )

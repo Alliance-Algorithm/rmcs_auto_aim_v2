@@ -11,7 +11,9 @@ struct OutpostArmorSlot {
 };
 
 struct OutpostArmorLayout {
-    std::array<OutpostArmorSlot, 3> slots {};
+    static constexpr int kSlotCount = 3;
+
+    std::array<OutpostArmorSlot, kSlotCount> slots {};
 };
 
 } // namespace rmcs::predictor

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
-
 #include <expected>
 #include <optional>
 #include <span>
@@ -9,28 +7,27 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include "module/fire_control/types.hpp"
 #include "utility/pimpl.hpp"
-#include "utility/robot/armor.hpp"
 
 namespace rmcs::fire_control {
 
-class AimPointChooser {
-    RMCS_PIMPL_DEFINITION(AimPointChooser)
+class ArmorSelector {
+    RMCS_PIMPL_DEFINITION(ArmorSelector)
 
 public:
     struct Config {
         double coming_angle;
         double leaving_angle;
-        double angular_velocity_threshold;
         double outpost_coming_angle;
         double outpost_leaving_angle;
+        double switch_threshold;
     };
 
-    auto initialize(Config const& config) noexcept -> void;
     auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
 
-    auto choose_armor(std::span<Armor3d const> armors, Eigen::Vector3d const& center_position,
-        double angular_velocity) -> std::optional<Armor3d>;
+    auto select(std::span<ArmorCandidate const> candidates,
+        std::optional<int> last_selected_armor_id) const -> std::optional<size_t>;
 };
 
 } // namespace rmcs::fire_control

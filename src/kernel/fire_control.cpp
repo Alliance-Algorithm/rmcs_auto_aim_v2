@@ -1,17 +1,15 @@
 #include "fire_control.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <format>
-#include <limits>
 #include <memory>
 #include <optional>
 
-#include "module/fire_control/aim_point_chooser.hpp"
-#include "module/fire_control/planner/mpc_trajectory_planner.hpp"
-#include "module/fire_control/planner/reference_trajectory_builder.hpp"
+#include "module/fire_control/armor_selector.hpp"
+#include "module/fire_control/planner/trajectory_planner.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
-#include "module/fire_control/solver/aim_point_sampling.hpp"
-#include "module/fire_control/solver/target_solution_solver.hpp"
+#include "module/fire_control/target_solver.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
@@ -52,10 +50,10 @@ struct FireControl::Impl {
         config.yaw_offset   = util::deg2rad(config.yaw_offset);
         config.pitch_offset = util::deg2rad(config.pitch_offset);
 
-        auto chooser_result = aim_point_chooser.configure_yaml(yaml["aim_point_chooser"]);
-        if (!chooser_result.has_value()) {
+        auto selector_result = armor_selector.configure_yaml(yaml["armor_target_selector"]);
+        if (!selector_result.has_value()) {
             return std::unexpected {
-                std::format("aim_point_chooser init failed: {}", chooser_result.error()),
+                std::format("armor_target_selector init failed: {}", selector_result.error()),
             };
         }
 
@@ -66,90 +64,113 @@ struct FireControl::Impl {
             };
         }
 
-        auto planner_result = mpc_trajectory_planner.configure_yaml(yaml["mpc"]);
+        auto planner_result = trajectory_planner.configure_yaml(yaml["mpc"]);
         if (!planner_result.has_value()) {
             return std::unexpected {
-                std::format("mpc_trajectory_planner init failed: {}", planner_result.error()),
+                std::format("trajectory_planner init failed: {}", planner_result.error()),
             };
         }
 
         return { };
     }
 
-    auto solve(predictor::Snapshot const& snapshot, double current_yaw) -> std::optional<Result> {
-        auto target_solution = target_solution_solver.solve(
-            snapshot, aim_point_chooser, config.initial_bullet_speed, config.shoot_delay);
-        if (!target_solution.has_value()) return std::nullopt;
+    auto solve(predictor::Snapshot const& snapshot, GimbalState const& gimbal_state)
+        -> std::optional<Result> {
 
-        auto center_position    = target_solution->center_position;
-        auto aim_point_position = target_solution->aim_point;
-        auto pitch              = target_solution->impact_pitch;
-        auto yaw                = target_solution->impact_yaw;
+        /// 1. 目标选择
+        auto selected_armor_id  = int {};
+        auto aim_point_position = Eigen::Vector3d {};
+        auto center_position    = Eigen::Vector3d {};
+        {
+            auto const target_motion = snapshot.motion();
+            auto const coarse_fly_time =
+                target_motion.center_position.norm() / config.initial_bullet_speed;
+            auto const selection_predict_time = config.shoot_delay + coarse_fly_time;
+            auto const selection_time         = snapshot.time_stamp()
+                + std::chrono::duration_cast<Duration>(
+                    std::chrono::duration<double>(selection_predict_time));
 
-        auto pitch_rate        = std::numeric_limits<double>::quiet_NaN();
-        auto yaw_rate          = std::numeric_limits<double>::quiet_NaN();
-        auto pitch_acc         = std::numeric_limits<double>::quiet_NaN();
-        auto yaw_acc           = std::numeric_limits<double>::quiet_NaN();
-        auto feedforward_valid = false;
+            auto target_candidates = target_solver.make_candidates(snapshot, selection_time);
+            auto selected_index = armor_selector.select(target_candidates, last_selected_armor_id);
 
-        if (config.mpc_enable && snapshot.device_id() != DeviceId::OUTPOST) {
-            auto sample_attitude = [&](TimePoint t) -> std::expected<AimAttitude, std::string> {
-                auto sample = AimPointSampler::sample_at(
-                    snapshot, aim_point_chooser, t, config.initial_bullet_speed);
-                if (!sample.has_value()) return std::unexpected { sample.error() };
-                return sample->attitude;
-            };
+            if (!selected_index.has_value()) {
+                last_selected_armor_id.reset();
+                return std::nullopt;
+            }
 
-            auto reference =
-                reference_trajectory_builder.build(target_solution->impact_time, sample_attitude);
-            if (reference.has_value()) {
-                auto planned = mpc_trajectory_planner.plan(*reference);
-                if (planned.has_value()) {
-                    pitch             = planned->pitch;
-                    yaw               = planned->yaw;
-                    pitch_rate        = planned->pitch_rate;
-                    yaw_rate          = planned->yaw_rate;
-                    pitch_acc         = planned->pitch_acc;
-                    yaw_acc           = planned->yaw_acc;
-                    feedforward_valid = true;
-                } else {
-                    constexpr int kYawRow    = 0;
-                    constexpr int kPitchRow  = 2;
-                    constexpr int kCenterCol = kMpcAxisHorizon / 2;
-                    pitch                    = (*reference)(kPitchRow, kCenterCol);
-                    yaw = util::normalize_angle((*reference)(kYawRow, kCenterCol));
-                }
+            auto const& selected = target_candidates[*selected_index];
+            selected_armor_id    = selected.armor.id;
+            center_position      = target_motion.center_position;
+            selected.armor.translation.copy_to(aim_point_position);
+        }
+
+        /// 2. 弹道解算
+        auto target_solution = TargetSolution {};
+        {
+            auto solution = target_solver.solve(snapshot, selected_armor_id, gimbal_state.timestamp,
+                config.initial_bullet_speed, config.shoot_delay);
+
+            if (!solution.has_value()) {
+                last_selected_armor_id.reset();
+                return std::nullopt;
+            }
+
+            last_selected_armor_id = solution->candidate.armor.id;
+            target_solution        = std::move(*solution);
+        }
+
+        /// 3. 轨迹规划
+        auto feedforward = std::optional<Feedforward> {};
+        if (config.mpc_enable) {
+            auto planned = trajectory_planner.plan(snapshot, target_solution,
+                gimbal_state.timestamp, config.initial_bullet_speed, config.shoot_delay);
+
+            if (planned.has_value()) {
+                feedforward = Feedforward {
+                    .yaw        = planned->yaw,
+                    .pitch      = planned->pitch,
+                    .pitch_rate = planned->pitch_rate,
+                    .yaw_rate   = planned->yaw_rate,
+                    .pitch_acc  = planned->pitch_acc,
+                    .yaw_acc    = planned->yaw_acc,
+                };
             }
         }
 
-        yaw   = util::normalize_angle(yaw + config.yaw_offset);
-        pitch = pitch + config.pitch_offset;
+        /// 4. 偏移校正
+        auto yaw   = feedforward.has_value() ? feedforward->yaw : target_solution.attitude.yaw;
+        auto pitch = feedforward.has_value() ? feedforward->pitch : target_solution.attitude.pitch;
+        yaw        = util::normalize_angle(yaw + config.yaw_offset);
+        pitch      = pitch + config.pitch_offset;
 
-        auto shoot_command = ShootEvaluator::Command {
-            .yaw                = yaw,
-            .center_position    = center_position,
-            .aim_point_position = aim_point_position,
-        };
-        auto shoot_permitted = shoot_evaluator.evaluate(shoot_command, current_yaw);
+        /// 5. 射击评估
+        auto shoot_permitted = bool {};
+        {
+            auto shoot_command = ShootEvaluator::Command {
+                .yaw                = yaw,
+                .pitch              = pitch,
+                .center_position    = center_position,
+                .aim_point_position = aim_point_position,
+            };
+            shoot_permitted = shoot_evaluator.evaluate(shoot_command, gimbal_state);
+        }
 
+        // 6. 组装结果
         return Result {
-            .pitch             = pitch,
-            .yaw               = yaw,
-            .pitch_rate        = pitch_rate,
-            .yaw_rate          = yaw_rate,
-            .pitch_acc         = pitch_acc,
-            .yaw_acc           = yaw_acc,
-            .feedforward_valid = feedforward_valid,
-            .shoot_permitted   = shoot_permitted,
-            .center_position   = Point3d { center_position },
+            .pitch           = pitch,
+            .yaw             = yaw,
+            .feedforward     = feedforward,
+            .shoot_permitted = shoot_permitted,
+            .center_position = Point3d { center_position },
+            .impact_time     = target_solution.impact_time,
         };
     }
 
-    MpcTrajectoryPlanner mpc_trajectory_planner { };
-    ReferenceTrajectoryBuilder reference_trajectory_builder { };
-    TargetSolutionSolver target_solution_solver { };
+    TrajectoryPlanner trajectory_planner { };
+    TargetSolver target_solver { };
     ShootEvaluator shoot_evaluator { };
-    AimPointChooser aim_point_chooser { };
+    ArmorSelector armor_selector { };
+    std::optional<int> last_selected_armor_id { };
 };
 
 FireControl::FireControl() noexcept
@@ -161,7 +182,7 @@ auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<v
     return pimpl->initialize(yaml);
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot, double current_yaw)
+auto FireControl::solve(const predictor::Snapshot& snapshot, GimbalState const& gimbal_state)
     -> std::optional<Result> {
-    return pimpl->solve(snapshot, current_yaw);
+    return pimpl->solve(snapshot, gimbal_state);
 }

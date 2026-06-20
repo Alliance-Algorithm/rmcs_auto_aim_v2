@@ -10,7 +10,6 @@ namespace rmcs {
 class AutoAimComponent final : public rmcs_executor::Component {
     static inline const auto kNaN  = std::numeric_limits<double>::quiet_NaN();
     static inline const auto kTNaN = Eigen::Vector3d { kNaN, kNaN, kNaN };
-    static inline const auto kQNaN = Eigen::Quaterniond { kNaN, kNaN, kNaN, kNaN };
 
 private:
     AutoAim auto_aim { };
@@ -27,7 +26,6 @@ private:
     OutputInterface<double> pitch_rate;
     OutputInterface<double> yaw_acc;
     OutputInterface<double> pitch_acc;
-    OutputInterface<bool> feedforward_valid;
 
     std::chrono::steady_clock::time_point last_command_timestamp;
 
@@ -45,7 +43,6 @@ public:
         register_output("/auto_aim/pitch_rate", pitch_rate, kNaN);
         register_output("/auto_aim/yaw_acc", yaw_acc, kNaN);
         register_output("/auto_aim/pitch_acc", pitch_acc, kNaN);
-        register_output("/auto_aim/feedforward_valid", feedforward_valid, false);
     }
 
     auto before_updating() -> void override {
@@ -66,12 +63,10 @@ public:
             ctx.timestamp = Clock::now();
 
             const auto& dir = *barrel_direction;
-
-            ctx.yaw   = std::atan2(dir.y(), dir.x());
-            ctx.pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
+            ctx.yaw         = std::atan2(dir.y(), dir.x());
+            ctx.pitch       = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
             const auto& iso = *camera_transform;
-
             ctx.camera_transform.translation = Translation { iso.translation() };
             ctx.camera_transform.orientation = Orientation { Eigen::Quaterniond(iso.rotation()) };
 
@@ -84,14 +79,13 @@ public:
                 using namespace std::chrono_literals;
                 if (Clock::now() - cmd.timestamp > 100ms) return;
 
-                *should_control    = cmd.should_control;
-                *should_shoot      = cmd.should_shoot;
-                *yaw_rate          = cmd.yaw_rate;
-                *pitch_rate        = cmd.pitch_rate;
-                *yaw_acc           = cmd.yaw_acc;
-                *pitch_acc         = cmd.pitch_acc;
-                *feedforward_valid = cmd.feedforward_valid;
-                *robot_center      = {
+                *should_control = cmd.should_control;
+                *should_shoot   = cmd.should_shoot;
+                *yaw_rate       = cmd.yaw_rate;
+                *pitch_rate     = cmd.pitch_rate;
+                *yaw_acc        = cmd.yaw_acc;
+                *pitch_acc      = cmd.pitch_acc;
+                *robot_center   = {
                     cmd.robot_center.x,
                     cmd.robot_center.y,
                     cmd.robot_center.z,
@@ -104,7 +98,7 @@ public:
                 *target_direction = Eigen::Vector3d {
                     std::cos(pitch) * std::cos(yaw),
                     std::cos(pitch) * std::sin(yaw),
-                    std::sin(pitch),
+                    -std::sin(pitch),
                 };
             });
             last_command_timestamp = now;

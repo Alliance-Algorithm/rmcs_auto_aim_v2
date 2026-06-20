@@ -1,17 +1,22 @@
 #include "module/predictor/regular/snapshot.hpp"
 
-#include <utility>
-
-#include "module/predictor/backend/snapshot_backend.hpp"
-#include "module/predictor/regular/ekf_parameter.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/time.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace rmcs::predictor {
 
-namespace {
+struct RegularSnapshot::Impl {
+    explicit Impl(EKF::XVec x, DeviceId device, CampColor color, int armor_num, TimePoint stamp)
+        : x { std::move(x) }
+        , device { device }
+        , color { color }
+        , armor_num { armor_num }
+        , stamp { stamp } { }
 
-    auto make_armor(DeviceId device, CampColor color, int id) -> Armor3d {
+    static auto make_armor(DeviceId device, CampColor color, int id) -> Armor3d {
         auto armor  = Armor3d { };
         armor.genre = device;
         armor.color = camp_color2armor_color(color);
@@ -19,55 +24,60 @@ namespace {
         return armor;
     }
 
-    struct RegularSnapshotBackend final : ISnapshotBackend {
-        explicit RegularSnapshotBackend(detail::NormalEKF::XVec x, DeviceId device, CampColor color,
-            int armor_num, TimePoint stamp) noexcept
-            : ISnapshotBackend { device, color, armor_num, stamp }
-            , x { std::move(x) } { }
+    static auto motion_of(EKF::XVec const& x) -> TargetMotion {
+        return { Eigen::Vector3d { x[0], x[2], x[4] }, x[7] };
+    }
 
-        [[nodiscard]] auto kinematics_at(TimePoint t) const -> Snapshot::Kinematics override {
-            return kinematics_of(predict_state_at(t));
+    auto predict_state_at(TimePoint t) const -> EKF::XVec {
+        auto const dt = util::delta_time(t, stamp).count();
+        return EKFParameters::f(dt)(x);
+    }
+
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
+        auto const predicted_x = predict_state_at(t);
+
+        auto armors = std::vector<Armor3d> { };
+        armors.reserve(armor_num);
+
+        for (int id = 0; id < armor_num; ++id) {
+            auto armor          = make_armor(device, color, id);
+            auto const angle    = EKFParameters::armor_yaw(device, predicted_x, id);
+            auto const position = EKFParameters::h_armor_xyz(device, predicted_x, id, armor_num);
+
+            armor.translation = position;
+            armor.orientation = util::euler_to_quaternion(angle, kPredictedOtherArmorPitch, 0);
+            armors.emplace_back(armor);
         }
 
-        [[nodiscard]] auto predicted_armors(TimePoint t) const -> std::vector<Armor3d> override {
-            auto const predicted_x = predict_state_at(t);
+        return armors;
+    }
 
-            auto armors = std::vector<Armor3d> { };
-            armors.reserve(armor_num);
+    EKF::XVec x;
+    DeviceId device;
+    CampColor color;
+    int armor_num;
+    TimePoint stamp;
+};
 
-            for (int id = 0; id < armor_num; ++id) {
-                auto armor       = make_armor(device, color, id);
-                auto const angle = EKFParameters::armor_yaw(device, predicted_x, id);
-                auto const position =
-                    EKFParameters::h_armor_xyz(device, predicted_x, id, armor_num);
+RegularSnapshot::RegularSnapshot(
+    EKF::XVec x, DeviceId device, CampColor color, int armor_num, TimePoint stamp)
+    : pimpl { std::make_unique<Impl>(std::move(x), device, color, armor_num, stamp) } { }
 
-                armor.translation = position;
-                armor.orientation = util::euler_to_quaternion(angle, kPredictedOtherArmorPitch, 0);
-                armors.emplace_back(armor);
-            }
+RegularSnapshot::RegularSnapshot(RegularSnapshot&&) noexcept                    = default;
+auto RegularSnapshot::operator=(RegularSnapshot&&) noexcept -> RegularSnapshot& = default;
 
-            return armors;
-        }
+RegularSnapshot::~RegularSnapshot() noexcept = default;
 
-    private:
-        static auto kinematics_of(detail::NormalEKF::XVec const& x) -> Snapshot::Kinematics {
-            return { Point3d { x[0], x[2], x[4] }, x[7] };
-        }
+auto RegularSnapshot::time_stamp() const -> TimePoint { return pimpl->stamp; }
 
-        auto predict_state_at(TimePoint t) const -> detail::NormalEKF::XVec {
-            auto const dt = util::delta_time(t, stamp).count();
-            return EKFParameters::f(dt)(x);
-        }
+auto RegularSnapshot::device_id() const -> DeviceId { return pimpl->device; }
 
-        detail::NormalEKF::XVec x;
-    };
+auto RegularSnapshot::motion_at(TimePoint t) const -> TargetMotion {
+    return Impl::motion_of(pimpl->predict_state_at(t));
+}
 
-} // namespace
-
-auto detail::make_regular_snapshot(NormalEKF::XVec ekf_x, DeviceId device, CampColor color,
-    int armor_num, TimePoint stamp) noexcept -> Snapshot {
-    return detail::make_snapshot(std::make_unique<RegularSnapshotBackend>(
-        std::move(ekf_x), device, color, armor_num, stamp));
+auto RegularSnapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
+    return pimpl->predicted_armors(t);
 }
 
 } // namespace rmcs::predictor

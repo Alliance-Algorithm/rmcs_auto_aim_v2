@@ -68,20 +68,20 @@ public:
             config.setup.Q, config.setup.R, config.setup.rho, kStateDim, kInputDim, kHorizonSteps,
             config.setup.verbose);
         if (status != 0 || raw_solver == nullptr) {
-            TinySolverDeleter { }(raw_solver);
+            TinySolverDeleter {}(raw_solver);
             return std::unexpected {
-                std::format("tiny_setup failed with status {}", status),
+                std::format("tiny_setup failed: dimension mismatch (status={})", status),
             };
         }
 
         auto solver             = TinyMpcSolver { TinySolverPtr { raw_solver } };
         const auto bound_status = tiny_set_bound_constraints(solver.solver_.get(),
             config.bounds.x_min, config.bounds.x_max, config.bounds.u_min, config.bounds.u_max);
-        if (bound_status != 0) {
+        if (bound_status != 0)
             return std::unexpected {
-                std::format("tiny_set_bound_constraints failed with status {}", bound_status),
+                std::format("tiny_set_bound_constraints failed: dimension mismatch (status={})",
+                    bound_status),
             };
-        }
 
         solver.solver_->settings->max_iter = config.max_iter;
         return solver;
@@ -89,46 +89,44 @@ public:
 
     auto set_x0(StateVector const& x0) -> std::expected<void, std::string> {
         const auto status = tiny_set_x0(solver_.get(), x0);
-        if (status != 0) {
+        if (status != 0)
             return std::unexpected {
-                std::format("tiny_set_x0 failed with status {}", status),
+                std::format("tiny_set_x0 failed: solver is null"),
             };
-        }
 
-        return { };
+        return {};
     }
 
     auto set_x_ref(StateTrajectory const& x_ref) -> std::expected<void, std::string> {
         const auto status = tiny_set_x_ref(solver_.get(), x_ref);
-        if (status != 0) {
+        if (status != 0)
             return std::unexpected {
-                std::format("tiny_set_x_ref failed with status {}", status),
+                std::format("tiny_set_x_ref failed: solver is null"),
             };
-        }
 
-        return { };
+        return {};
     }
 
     auto set_u_ref(InputTrajectory const& u_ref) -> std::expected<void, std::string> {
         const auto status = tiny_set_u_ref(solver_.get(), u_ref);
-        if (status != 0) {
+        if (status != 0)
             return std::unexpected {
-                std::format("tiny_set_u_ref failed with status {}", status),
+                std::format("tiny_set_u_ref failed: solver is null"),
             };
-        }
 
-        return { };
+        return {};
     }
 
     auto solve() -> std::expected<void, std::string> {
         const auto status = tiny_solve(solver_.get());
-        if (status != 0) {
+        if (status != 0 && status != 1)
             return std::unexpected {
-                std::format("tiny_solve failed with status {}", status),
+                std::format("tiny_solve failed with status {} (expected 0=converged or "
+                            "1=max_iter_reached)",
+                    status),
             };
-        }
 
-        return { };
+        return {};
     }
 
     template <std::size_t row, std::size_t step>
@@ -165,7 +163,7 @@ private:
     explicit TinyMpcSolver(TinySolverPtr solver) noexcept
         : solver_ { std::move(solver) } { }
 
-    TinySolverPtr solver_ { };
+    TinySolverPtr solver_ {};
 };
 
 } // namespace rmcs::util

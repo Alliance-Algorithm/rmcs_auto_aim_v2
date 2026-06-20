@@ -117,11 +117,11 @@ struct PoseEstimator::Impl {
 
         auto transformed = armor;
 
-        auto position = Eigen::Vector3d { };
+        auto position = Eigen::Vector3d {};
         transformed.translation.copy_to(position);
         transformed.translation = camera_orientation.inverse() * (position - camera_translation);
 
-        auto quat = Eigen::Quaterniond { };
+        auto quat = Eigen::Quaterniond {};
         transformed.orientation.copy_to(quat);
         transformed.orientation = camera_orientation.inverse() * quat;
 

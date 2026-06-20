@@ -1,55 +1,54 @@
 #include "snapshot.hpp"
 
+#include "module/predictor/outpost/snapshot.hpp"
+#include "module/predictor/regular/snapshot.hpp"
+
 #include <memory>
 #include <utility>
-
-#include "module/predictor/backend/snapshot_backend.hpp"
+#include <variant>
 
 namespace rmcs::predictor {
 
-namespace {
+struct Snapshot::Impl {
+    using SnapshotVariant = std::variant<RegularSnapshot, OutpostSnapshot>;
 
-    struct EmptySnapshotBackend final : ISnapshotBackend {
-        explicit EmptySnapshotBackend(TimePoint stamp) noexcept
-            : ISnapshotBackend { DeviceId::UNKNOWN, CampColor::UNKNOWN, 0, stamp } { }
+    explicit Impl(RegularSnapshot snapshot)
+        : snapshot { std::move(snapshot) } { }
 
-        [[nodiscard]] auto kinematics_at(TimePoint) const -> Snapshot::Kinematics override {
-            return { Point3d::kZero(), 0.0 };
-        }
+    explicit Impl(OutpostSnapshot snapshot)
+        : snapshot { std::move(snapshot) } { }
 
-        [[nodiscard]] auto predicted_armors(TimePoint) const -> std::vector<Armor3d> override {
-            return { };
-        }
-    };
+    SnapshotVariant snapshot;
+};
 
-} // namespace
+Snapshot::Snapshot(RegularSnapshot snapshot)
+    : pimpl { std::make_unique<Impl>(std::move(snapshot)) } { }
 
-auto detail::make_snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept -> Snapshot {
-    return Snapshot { std::move(backend) };
-}
-
-auto Snapshot::empty(TimePoint stamp) noexcept -> Snapshot {
-    return detail::make_snapshot(std::make_unique<EmptySnapshotBackend>(stamp));
-}
-
-Snapshot::Snapshot(std::unique_ptr<ISnapshotBackend> backend) noexcept
-    : backend { std::move(backend) } { }
+Snapshot::Snapshot(OutpostSnapshot snapshot)
+    : pimpl { std::make_unique<Impl>(std::move(snapshot)) } { }
 
 Snapshot::Snapshot(Snapshot&&) noexcept                    = default;
 auto Snapshot::operator=(Snapshot&&) noexcept -> Snapshot& = default;
 
 Snapshot::~Snapshot() noexcept = default;
 
-auto Snapshot::time_stamp() const -> TimePoint { return backend->time_stamp(); }
+auto Snapshot::time_stamp() const -> TimePoint {
+    return std::visit([](auto const& snapshot) { return snapshot.time_stamp(); }, pimpl->snapshot);
+}
 
-auto Snapshot::device_id() const -> DeviceId { return backend->device; }
+auto Snapshot::device_id() const -> DeviceId {
+    return std::visit([](auto const& snapshot) { return snapshot.device_id(); }, pimpl->snapshot);
+}
 
-auto Snapshot::kinematics() const -> Kinematics { return backend->kinematics_at(time_stamp()); }
+auto Snapshot::motion() const -> TargetMotion { return motion_at(time_stamp()); }
 
-auto Snapshot::kinematics_at(TimePoint t) const -> Kinematics { return backend->kinematics_at(t); }
+auto Snapshot::motion_at(TimePoint t) const -> TargetMotion {
+    return std::visit([t](auto const& snapshot) { return snapshot.motion_at(t); }, pimpl->snapshot);
+}
 
 auto Snapshot::predicted_armors(TimePoint t) const -> std::vector<Armor3d> {
-    return backend->predicted_armors(t);
+    return std::visit(
+        [t](auto const& snapshot) { return snapshot.predicted_armors(t); }, pimpl->snapshot);
 }
 
 } // namespace rmcs::predictor

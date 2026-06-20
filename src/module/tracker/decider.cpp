@@ -31,19 +31,31 @@ struct Decider::Impl {
 
         if (priority_mode.empty()) priority_mode = mode2;
 
-        return { };
+        return {};
     }
 
     auto set_priority_mode(PriorityMode const& mode) -> void { priority_mode = mode; }
 
     auto update(std::span<Armor3d const> armors, TimePoint t) -> Output {
+        std::erase_if(trackers, [&](const auto& item) {
+            auto last_seen_it     = last_seen_times.find(item.first);
+            auto cleanup_interval = get_cleanup_interval(item.first);
+            bool expired          = last_seen_it == last_seen_times.end()
+                || util::delta_time(t, last_seen_it->second) > cleanup_interval;
+            if (expired) {
+                last_seen_times.erase(item.first);
+            }
+
+            return expired;
+        });
+
         // 推进所有现有追踪器的时间轴
         for (auto& [id, tracker] : trackers) {
             tracker->predict(t);
         }
 
-        auto observed_ids   = std::unordered_set<DeviceId> { };
-        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3d>> { };
+        auto observed_ids   = std::unordered_set<DeviceId> {};
+        auto grouped_armors = std::unordered_map<DeviceId, std::vector<Armor3d>> {};
 
         for (const auto& armor : armors) {
             grouped_armors[armor.genre].emplace_back(armor);
@@ -64,18 +76,6 @@ struct Decider::Impl {
                 last_seen_times[id] = t;
             }
         }
-
-        std::erase_if(trackers, [&](const auto& item) {
-            auto last_seen_it     = last_seen_times.find(item.first);
-            auto cleanup_interval = get_cleanup_interval(item.first);
-            bool expired          = last_seen_it == last_seen_times.end()
-                || util::delta_time(t, last_seen_it->second) > cleanup_interval;
-            if (expired) {
-                last_seen_times.erase(item.first);
-            }
-
-            return expired;
-        });
 
         auto fresh_target_id = arbitrate(observed_ids);
         if (fresh_target_id != DeviceId::UNKNOWN) {
@@ -128,9 +128,9 @@ struct Decider::Impl {
 
             // 比较顺序：优先级 -> 收敛状态 -> 距离 -> 固定 ID 兜底。
             return std::tuple {
-                priority_of(device_id),    // 数值越小，优先级越高。
-                !tracker.is_converged(),   // 收敛目标映射为 0，未收敛目标映射为 1。
-                safe_distance,             // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
+                priority_of(device_id), // 数值越小，优先级越高。
+                !tracker.is_converged(), // 收敛目标映射为 0，未收敛目标映射为 1。
+                safe_distance, // 非有限距离按无穷远处理，避免 NaN/Inf 干扰排序。
                 rmcs::to_index(device_id), // 完全相同时按固定顺序兜底，避免容器遍历顺序抖动。
             };
         };

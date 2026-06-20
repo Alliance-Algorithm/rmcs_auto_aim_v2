@@ -51,7 +51,7 @@ struct Visualization::Impl {
         };
     };
 
-    Config config { };
+    Config config {};
     RclcppNode rclcpp { "visual" };
 
     debug::StreamSession session;
@@ -99,7 +99,7 @@ struct Visualization::Impl {
         });
 
         is_initialized = true;
-        return { };
+        return {};
     }
 
     auto initialized() const noexcept { return is_initialized; }

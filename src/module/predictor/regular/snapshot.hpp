@@ -1,16 +1,33 @@
 #pragma once
 
+#include "module/predictor/regular/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
-#include "utility/math/kalman_filter/ekf.hpp"
-#include "utility/robot/color.hpp"
-#include "utility/robot/id.hpp"
 
-namespace rmcs::predictor::detail {
+#include <memory>
+#include <vector>
 
-using NormalEKF  = util::EKF<11, 4>;
-using OutpostEKF = util::EKF<6, 4>;
+namespace rmcs::predictor {
 
-auto make_regular_snapshot(NormalEKF::XVec ekf_x, DeviceId device, CampColor color, int armor_num,
-    TimePoint stamp) noexcept -> Snapshot;
+class RegularSnapshot {
+public:
+    using EKF = EKFParameters::EKF;
 
-} // namespace rmcs::predictor::detail
+    explicit RegularSnapshot(EKF::XVec x, DeviceId device, CampColor color, int armor_num,
+        TimePoint stamp);
+    RegularSnapshot(RegularSnapshot const&) = delete;
+    RegularSnapshot(RegularSnapshot&&) noexcept;
+    RegularSnapshot& operator=(RegularSnapshot const&) = delete;
+    RegularSnapshot& operator=(RegularSnapshot&&) noexcept;
+    ~RegularSnapshot() noexcept;
+
+    auto time_stamp() const -> TimePoint;
+    auto device_id() const -> DeviceId;
+    auto motion_at(TimePoint t) const -> TargetMotion;
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d>;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
+};
+
+} // namespace rmcs::predictor

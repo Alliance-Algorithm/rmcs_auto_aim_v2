@@ -1,15 +1,34 @@
 #pragma once
 
 #include "module/predictor/outpost/armor_layout.hpp"
+#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
-#include "utility/math/kalman_filter/ekf.hpp"
-#include "utility/robot/color.hpp"
 
-namespace rmcs::predictor::detail {
+#include <memory>
+#include <vector>
 
-using OutpostEKF = util::EKF<6, 4>;
+namespace rmcs::predictor {
 
-auto make_outpost_snapshot(OutpostEKF::XVec ekf_x, CampColor color, int armor_num, TimePoint stamp,
-    int outpost_spin_sign, OutpostArmorLayout outpost_layout) noexcept -> Snapshot;
+class OutpostSnapshot {
+public:
+    using EKF = OutpostEKFParameters::EKF;
 
-} // namespace rmcs::predictor::detail
+    explicit OutpostSnapshot(EKF::XVec x, CampColor color, TimePoint stamp,
+        OutpostArmorLayout layout, double angular_velocity);
+    OutpostSnapshot(OutpostSnapshot const&) = delete;
+    OutpostSnapshot(OutpostSnapshot&&) noexcept;
+    OutpostSnapshot& operator=(OutpostSnapshot const&) = delete;
+    OutpostSnapshot& operator=(OutpostSnapshot&&) noexcept;
+    ~OutpostSnapshot() noexcept;
+
+    auto time_stamp() const -> TimePoint;
+    auto device_id() const -> DeviceId;
+    auto motion_at(TimePoint t) const -> TargetMotion;
+    auto predicted_armors(TimePoint t) const -> std::vector<Armor3d>;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> pimpl;
+};
+
+} // namespace rmcs::predictor
