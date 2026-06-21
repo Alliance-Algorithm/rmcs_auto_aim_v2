@@ -3,6 +3,32 @@
 
 namespace rmcs::util {
 
+class OutpostSolution {
+public:
+    enum class ArmorLevel { UPPER, MIDDLE, LOWER };
+
+    /// Level 按照下面的顺序排列，其旋向确定
+    /// [ UPPER ]
+    ///             [ MIDDLE ]
+    ///                          [ LOWER ]
+    struct Input {
+        Translation translation;
+        Orientation orientation;
+        ArmorLevel source;
+        ArmorLevel target;
+
+        double armor_thickness = 0;
+    } input;
+
+    struct Result {
+        Point3d center;
+        Translation translation;
+        Orientation orientation;
+    } result;
+
+    auto solve() -> void;
+};
+
 class NeighborBarSolution {
 public:
     struct Input {

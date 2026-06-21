@@ -68,6 +68,21 @@ target_link_libraries(
 )
 
 add_executable(
+    test_outpost_ekf
+    ${TOOL_DIR}/test_outpost_ekf.cpp
+    ${RMCS_SRC_DIR}/module/predictor/model/outpost.cpp
+    ${RMCS_SRC_DIR}/utility/math/outpost.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    test_outpost_ekf
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+)
+
+add_executable(
     ov-model-status
     ${TOOL_DIR}/ov_model_status.cpp
 )
@@ -99,6 +114,7 @@ if(HIKCAMERA_AVAILABLE)
         hikcamera
         ${TOOL_DIR}/hikcamera.cpp
         ${RMCS_SRC_DIR}/utility/image/recorder.cpp
+        ${RMCS_SRC_DIR}/utility/singleton/running.cpp
         ${RMCS_SRC_DIR}/module/debug/visualization/stream_session.cpp
         ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp
     )
@@ -107,6 +123,7 @@ if(HIKCAMERA_AVAILABLE)
         tool_terminal
         ${OpenCV_LIBS}
         ${hikcamera_LIBRARIES}
+        rclcpp::rclcpp
     )
 
     # Hikcamera Test

@@ -129,7 +129,11 @@ namespace {
 
 }
 
+/// @FIXME: 角点优化的实现存在问题，等待后续修复再开启
+
 auto optimize_corners(const Image& image, Lightbar2d& lightbar) -> void {
+    return; // @FIXME:
+
     const auto& mat = image.details().mat;
 
     if (mat.empty()) return;
@@ -188,6 +192,8 @@ auto optimize_corners(const Image& image, Lightbar2d& lightbar) -> void {
 }
 
 auto optimize_corners(const Image& image, Armor2ds& armors) -> void {
+    return; // @FIXME:
+
     for (auto& armor : armors) {
         auto left = Lightbar2d {
             .color = armor.color,

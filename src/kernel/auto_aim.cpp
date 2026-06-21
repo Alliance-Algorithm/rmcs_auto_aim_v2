@@ -142,11 +142,11 @@ struct AutoAim::Impl {
                     cmd.pitch          = result->pitch;
                     cmd.robot_center   = result->center_position;
 
-                    if (result->feedforward.has_value()) {
-                        cmd.yaw_rate   = result->feedforward->yaw_rate;
-                        cmd.pitch_rate = result->feedforward->pitch_rate;
-                        cmd.yaw_acc    = result->feedforward->yaw_acc;
-                        cmd.pitch_acc  = result->feedforward->pitch_acc;
+                    if (auto feedforward = result->feedforward) {
+                        cmd.yaw_rate   = feedforward->yaw_rate;
+                        cmd.pitch_rate = feedforward->pitch_rate;
+                        cmd.yaw_acc    = feedforward->yaw_acc;
+                        cmd.pitch_acc  = feedforward->pitch_acc;
                     }
 
                     auto impact_armors = snapshot->predicted_armors(result->impact_time);
@@ -154,6 +154,14 @@ struct AutoAim::Impl {
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
                     visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
                         cmd.yaw_acc, cmd.pitch_acc);
+
+                    if (auto aim_2d = estimator.make_point2d(result->aim_point)) {
+                        visual.draw_later(Canvas::Point {
+                            .origin = aim_2d->make<cv::Point2i>(),
+                            .radius = 5,
+                            .color  = result->shoot_permitted ? kRed : kGreen,
+                        });
+                    }
                 }
             }
             visual.draw_later(
