@@ -2,8 +2,6 @@
 
 #include <opencv2/calib3d.hpp>
 
-#include <vector>
-
 namespace rmcs::details {
 
 auto project_points::impl(std::span<const cv::Point3f> object_points, const cv::Mat& intrinsic,
@@ -25,19 +23,23 @@ namespace rmcs::util {
 auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
     -> std::optional<Point2d> {
 
-    auto object_points = std::vector<cv::Point3f> {
-        cv::Point3f {
-            static_cast<float>(point_camera.x),
-            static_cast<float>(point_camera.y),
-            static_cast<float>(point_camera.z),
-        },
-    };
     auto projected = std::vector<cv::Point2f> { };
+    {
+        const auto object_points = std::vector {
+            cv::Point3f {
+                static_cast<float>(point_camera.x),
+                static_cast<float>(point_camera.y),
+                static_cast<float>(point_camera.z),
+            },
+        };
+        const auto zero = cv::Vec3d { 0, 0, 0 };
+        cv::projectPoints(
+            object_points, zero, zero, camera.intrinsic(), camera.distortion(), projected);
+    }
 
-    cv::projectPoints(object_points, cv::Vec3d { 0.0, 0.0, 0.0 }, cv::Vec3d { 0.0, 0.0, 0.0 },
-        camera.intrinsic(), camera.distortion(), projected);
-
-    if (projected.empty()) return std::nullopt;
+    if (projected.empty()) {
+        return std::nullopt;
+    }
     return Point2d { projected[0] };
 }
 
