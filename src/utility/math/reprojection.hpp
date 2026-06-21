@@ -63,7 +63,8 @@ struct ReprojectionSolution {
     }
 };
 
-auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
-    -> std::optional<Point2d>;
-
+namespace util {
+    auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
+        -> std::optional<Point2d>;
+}
 }

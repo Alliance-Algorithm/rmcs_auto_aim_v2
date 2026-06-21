@@ -20,7 +20,7 @@ auto project_points::impl(std::span<const cv::Point3f> object_points, const cv::
 
 }
 
-namespace rmcs {
+namespace rmcs::util {
 
 auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
     -> std::optional<Point2d> {

@@ -273,13 +273,18 @@ struct PoseEstimator::Impl {
     }
 
     auto make_point2d(const Point3d& point_odom) const -> std::optional<Point2d> {
+        const auto t = camera_feature.translation.make<Eigen::Vector3d>();
+        const auto q = camera_feature.orientation.make<Eigen::Quaterniond>();
+
         // odom (ROS) -> camera (OpenCV)
-        const auto point_ros    = point_odom.make<Eigen::Vector3d>();
-        const auto point_opencv = ros2opencv_position(point_ros);
+        const auto point_ros_odom   = point_odom.make<Eigen::Vector3d>();
+        const auto point_ros_camera = Eigen::Vector3d { q.inverse() * (point_ros_odom - t) };
+
+        const auto point_opencv = ros2opencv_position(point_ros_camera);
         const auto point_cv     = Point3d { point_opencv };
 
         // reproject
-        return reproject_point(point_cv, camera_feature);
+        return util::reproject_point(point_cv, camera_feature);
     }
 };
 
