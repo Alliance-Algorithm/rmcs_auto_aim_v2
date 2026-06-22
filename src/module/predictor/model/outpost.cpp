@@ -1,6 +1,7 @@
 #include "outpost.hpp"
 
 #include "utility/math/angle.hpp"
+#include "utility/math/outpost.hpp"
 #include "utility/robot/constant.hpp"
 
 #include <eigen3/Eigen/Geometry>
@@ -23,9 +24,20 @@ struct OutpostModel::Impl {
         ProcessNoise noise_process         = ProcessNoise::Zero();
         ObservationNoise noise_observation = ObservationNoise::Zero();
 
-        Context() noexcept {
-            noise_process.diagonal() << 1e-6, 1e-6, 1e-6, 1e-3, 1e-3;
-            noise_observation.diagonal() << 0.09, 0.09, 0.09, 5e-3;
+        Context() noexcept = default;
+
+        auto set_noise(const Config& config) noexcept {
+            noise_process.diagonal() << config.process_noise_xy, config.process_noise_xy,
+                config.process_noise_z, config.process_noise_speed, config.process_noise_angle;
+            noise_observation.diagonal() << config.observation_noise_xy,
+                config.observation_noise_xy, config.observation_noise_z,
+                config.observation_noise_yaw;
+        }
+
+        auto reset_covariance() noexcept {
+            auto diag = Eigen::Matrix<double, 5, 1> { };
+            diag << 1.0, 1.0, 1.0, 64.0, 0.4;
+            posteriors_covariance = diag.asDiagonal();
         }
 
         auto get_state() const noexcept {
@@ -46,16 +58,113 @@ struct OutpostModel::Impl {
         }
     };
 
-    static constexpr auto kOffsetTable = std::array {
-        std::tuple { 0 * std::numbers::pi * 2 / 3, -0 * kOutpostArmorHeightStep }, // 高
-        std::tuple { 1 * std::numbers::pi * 2 / 3, -1 * kOutpostArmorHeightStep }, // 中
-        std::tuple { 2 * std::numbers::pi * 2 / 3, -2 * kOutpostArmorHeightStep }, // 低
+    struct HeightBuffer {
+        double factor = 0.1;
+
+        std::array<double, 3> data;
+        int last_sign = 0;
+
+        std::size_t index = 0;
+
+        HeightBuffer() noexcept { std::ranges::fill(data, kNaN); }
+
+        auto go_next(int sign) noexcept {
+            last_sign = sign;
+            index     = (index + sign + data.size()) % data.size();
+        }
+
+        auto update(double height) noexcept {
+            data[index] = std::isnan(data[index]) //
+                ? height
+                : data[index] * (1. - factor) + height * factor;
+        }
+        auto clean_oldest() noexcept {
+            data[(index - 2 * last_sign + data.size()) % data.size()] = kNaN;
+        }
+
+        auto all_observed() const noexcept -> bool {
+            return !std::isnan(data[0]) && !std::isnan(data[1]) && !std::isnan(data[2]);
+        }
+
+        auto level_at(std::size_t pos) const noexcept {
+            const auto height = data[pos];
+
+            const auto l_height = data[(pos - 1 + data.size()) % data.size()];
+            const auto r_height = data[(pos + 1 + data.size()) % data.size()];
+
+            /// @NOTE: is_lower / is_upper 在遇到 NaN 时返回 true 的设计
+            ///
+            ///  data 中尚未观测的装甲板对应的高度值为 NaN。当参与比较的任一
+            ///  值为 NaN 时，比较结果被认定为真——该条件自动满足，不参与判定。
+            ///  因此当前板的 level 仅由已知邻居的真实比较确定。
+            ///
+            ///  - 三块装甲板都被观测到后：无 NaN，所有比较均为真实比较，
+            ///    level() 自然给出当前板正确的序号。
+            ///
+            ///  - 只观测到两块装甲板时：当前板与已知邻居的真实比较仍成立，
+            ///    level() 能保证已观测两块板间的相对高度正确，足以支持 EKF
+            ///    的观测更新。但整组序号可能存在歧义：例如仅观测到两块板且
+            ///    高度差为 1 step 时，无法区分是 UP→MID 还是 MID→LOW（两者
+            ///    相对高度差一致），当前板的绝对序号可能错误，但不影响 EKF
+            ///    迭代；待第三块板被观测到后，整组序号即被完全确定。
+            constexpr auto is_lower = [](double z, double other) {
+                return (std::isnan(z) || std::isnan(other)) ? true : z < other;
+            };
+            constexpr auto is_upper = [](double z, double other) {
+                return (std::isnan(z) || std::isnan(other)) ? true : z > other;
+            };
+
+            // 带 '*' 的即为观测到的装甲板
+            /*--*/ if (is_upper(height, l_height) && is_upper(height, r_height)) {
+                ///     [*]
+                ///         [ ]
+                /// [ ]
+                return 0;
+            } else if (is_lower(height, l_height) && is_upper(height, r_height)) {
+                /// [ ]
+                ///     [*]
+                ///         [ ]
+                return 1; // 中
+            } else if (is_lower(height, l_height) && is_lower(height, r_height)) {
+                ///         [ ]
+                /// [ ]
+                ///     [*]
+                return 2; // 低
+            }
+            return 0;
+        }
+
+        auto level() const noexcept { return level_at(index); }
     };
-    std::uint8_t ref_index = 0; // 参考板的序号
-    std::uint8_t obs_index = 0; // 当前板的序号
+    HeightBuffer height_buff { };
+
+    int abs_ref_index = 0; // 参考板绝对序号 0/1/2（第一块观测板，三块板齐后纠正）
+    int rel_see_index = 0; // 当前板相对 ref_index 的位置 -1/0/+1
+
+    ArmorGenre armor_genre { DeviceId::OUTPOST };
+    ArmorColor armor_color { ArmorColor::DARK };
+
+    // 切板检测：存储上一帧观测向量（xyz + yaw）
+    // 构造时初始化，合法帧每帧更新；噪声帧跳过不更新
+    ObservationVector last_observation { };
+
+    static constexpr int kSignConfirmCount = 2;
+
+    // 旋转方向确认：连续 2 次同方向切板后锁定
+    int rotation_sign       = 0; // +1/-1，0=未确定
+    int pending_sign        = 0; // 候选方向
+    int sign_evidence_count = 0; // 候选方向连续命中计数
 
     Context context;
+    Config config { };
 
+    auto configure(const Config& cfg) noexcept {
+        config = cfg;
+        context.set_noise(config);
+        context.reset_covariance();
+    }
+
+private:
     static auto make_observation_jacobian() {
         auto jacobian = ObservationJacobian { };
         // clang-format off
@@ -66,30 +175,6 @@ struct OutpostModel::Impl {
             0, 0, 0, 0, 1;
         // clang-format on
         return jacobian;
-    }
-
-    auto initialize_from(const Armor3d& armor) noexcept -> void {
-        constexpr auto pitch  = kPredictedOutpostArmorPitch;
-        constexpr auto radius = kOutpostRadius;
-
-        const auto translation = armor.translation.make<Eigen::Vector3d>();
-        const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
-
-        const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
-        const auto armor_to_center = Eigen::Vector3d {
-            Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() } * backward
-        };
-        const auto center = Eigen::Vector3d { translation + radius * armor_to_center };
-
-        context.update_center(center);
-        context.posteriors_state[3] = 0.0;
-        context.posteriors_state[4] =
-            util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
-
-        auto initial_covariance_diagonal = Eigen::Matrix<double, 5, 1> { };
-        initial_covariance_diagonal << 1.0, 1.0, 1.0, 64.0, 0.4;
-
-        context.posteriors_covariance = initial_covariance_diagonal.asDiagonal();
     }
 
     static auto predict_state(double dt, const StateVector& last) -> StateVector {
@@ -144,6 +229,41 @@ struct OutpostModel::Impl {
         return { posterior_state, posterior_covariance };
     }
 
+public:
+    explicit Impl(const Armor3d& armor) noexcept {
+        constexpr auto pitch  = kPredictedOutpostArmorPitch;
+        constexpr auto radius = kOutpostRadius;
+
+        // 装甲板元信息
+        armor_genre = armor.genre;
+        armor_color = armor.color;
+
+        const auto translation = armor.translation.make<Eigen::Vector3d>();
+        const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
+
+        const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
+        const auto armor_to_center = Eigen::Vector3d {
+            Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() } * backward
+        };
+        const auto center = Eigen::Vector3d { translation + radius * armor_to_center };
+
+        context.update_center(center);
+        context.posteriors_state[3] = 0.0;
+        context.posteriors_state[4] =
+            util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
+
+        context.set_noise(config);
+        context.reset_covariance();
+
+        // 初始化 last_observation：从 EKF 后验 state 取（与 correct() 末尾更新方式一致）
+        // state[4] = atan2(-atc.y, -atc.x) = center→armor 方向角度
+        last_observation << context.posteriors_state[0], context.posteriors_state[1],
+            context.posteriors_state[2], context.posteriors_state[4];
+
+        // 初始化 HeightBuff：第一块板存入 data[0]（index 初始为 0）
+        height_buff.update(center.z());
+    }
+
     auto predict(double dt) noexcept -> void {
         const auto prior_state      = predict_state(dt, context.posteriors_state);
         const auto prior_covariance = predict_covariance(dt, context.posteriors_covariance);
@@ -153,26 +273,97 @@ struct OutpostModel::Impl {
     }
 
     auto correct(const Armor3d& armor) noexcept -> void {
-        { // 切板检测
+        constexpr auto kPitch = kPredictedOutpostArmorPitch;
+
+        // 装甲板元信息
+        armor_genre = armor.genre;
+        armor_color = armor.color;
+
+        // 观测向量构造
+        auto observation = ObservationVector { };
+        {
+            const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
+            const auto translation = armor.translation.make<Eigen::Vector3d>();
+
+            const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
+            const auto armor_to_center = Eigen::Vector3d {
+                Eigen::AngleAxisd { -kPitch, orientation * Eigen::Vector3d::UnitY() } * backward
+            };
+
+            const auto center = Eigen::Vector3d { translation + kOutpostRadius * armor_to_center };
+
+            const auto armor_yaw =
+                util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
+
+            observation << center.x(), center.y(), center.z(), armor_yaw;
         }
 
-        constexpr auto pitch = kPredictedOutpostArmorPitch;
+        // 切板检测：判定是否发生真实切板
+        // 判定依据：yaw 跳变大于配置阈值，且 center.xy 偏移落在 10cm 内
+        {
+            constexpr auto kPlateSwitchXYTol = 0.10; // 10cm
 
-        const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
-        const auto translation = armor.translation.make<Eigen::Vector3d>();
+            const auto delta_yaw_obs = util::normalize_angle(observation[3] - last_observation[3]);
+            const auto abs_delta     = std::abs(delta_yaw_obs);
 
-        const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
-        const auto armor_to_center = Eigen::Vector3d {
-            Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() } * backward
-        };
+            if (abs_delta > util::deg2rad(config.plate_switch_yaw_min)) {
+                // 候选切板：用 center.xy 偏移做位置验证
+                const double xy_error = std::hypot(
+                    observation[0] - last_observation[0], observation[1] - last_observation[1]);
 
-        const auto center = Eigen::Vector3d { translation + kOutpostRadius * armor_to_center };
+                if (xy_error > kPlateSwitchXYTol) {
+                    // 位置验证不通过：噪声，丢弃
+                    return;
+                }
 
-        const auto top_armor_yaw =
-            util::normalize_angle(std::atan2(armor_to_center.y(), armor_to_center.x()));
+                // 真实切板：从观测符号判断方向，直接取装配标准值
+                const auto in_right = delta_yaw_obs > 0.0;
 
-        auto observation = ObservationVector { };
-        observation << center.x(), center.y(), center.z(), top_armor_yaw;
+                // 旋转方向确认：连续 2 次同方向切板后锁定
+                const auto sign = in_right ? +1 : -1;
+                if (rotation_sign == 0) {
+                    if (sign == pending_sign) {
+                        ++sign_evidence_count;
+                    } else {
+                        pending_sign        = sign;
+                        sign_evidence_count = 1;
+                    }
+                    if (sign_evidence_count >= kSignConfirmCount) {
+                        rotation_sign = pending_sign;
+                    }
+                }
+                const auto go_sign = rotation_sign != 0 ? rotation_sign : sign;
+
+                // 更新 HeightBuff
+                height_buff.go_next(go_sign);
+                height_buff.update(observation[2]);
+
+                // obs_index：相对 ref_index 的位置 -1/0/+1
+                rel_see_index += sign;
+                if (rel_see_index > +1) rel_see_index -= 3;
+                if (rel_see_index < -1) rel_see_index += 3;
+
+                // 三块板齐后纠正 abs_ref_index（绝对序号确定）
+                if (height_buff.all_observed()) {
+                    abs_ref_index = (height_buff.level() - rel_see_index + 3) % 3;
+
+                    height_buff.clean_oldest();
+                }
+            }
+        }
+
+        // 补偿观测：将当前板观测变换回参考板坐标系
+        // obs_index = 0 无需补偿；否则用 outpost_relative_height 从高度符号判断
+        auto delta_yaw    = 0.0;
+        auto delta_height = 0.0;
+        if (rel_see_index != 0) {
+            const auto in_right = rel_see_index > 0;
+            const auto in_upper = observation[2] > context.posteriors_state[2];
+            delta_yaw    = in_right ? +std::numbers::pi * 2.0 / 3.0 : -std::numbers::pi * 2.0 / 3.0;
+            delta_height = outpost_relative_height(in_right, in_upper);
+        }
+        observation[2] -= delta_height;
+        observation[3] = util::normalize_angle(observation[3] - delta_yaw);
 
         const auto prior_state      = context.posteriors_state;
         const auto prior_covariance = context.posteriors_covariance;
@@ -186,18 +377,77 @@ struct OutpostModel::Impl {
 
         context.posteriors_state      = posterior_state;
         context.posteriors_covariance = posterior_covariance;
+
+        // 用 EKF 后验 state 作为 last_observation（低噪声平滑值）
+        // state 跟踪参考板，需反补偿回当前板坐标系，使下一帧切板检测正确
+        last_observation << context.posteriors_state[0], context.posteriors_state[1],
+            context.posteriors_state[2] + delta_height,
+            util::normalize_angle(context.posteriors_state[4] + delta_yaw);
+    }
+
+    auto at(std::uint8_t index) const noexcept -> Armor3d {
+        constexpr auto kOffsetTable = std::array {
+            std::tuple { 0 * std::numbers::pi * 2 / 3, -0 * kOutpostArmorHeightStep }, // 高
+            std::tuple { 1 * std::numbers::pi * 2 / 3, -1 * kOutpostArmorHeightStep }, // 中
+            std::tuple { 2 * std::numbers::pi * 2 / 3, -2 * kOutpostArmorHeightStep }, // 低
+        };
+        constexpr auto kPitch  = kPredictedOutpostArmorPitch;
+        constexpr auto kRadius = kOutpostRadius;
+
+        // EKF state 跟踪参考板（ref_index），求 index 相对 ref_index 的偏移
+        const auto delta_yaw = util::normalize_angle(
+            std::get<0>(kOffsetTable[index]) - std::get<0>(kOffsetTable[abs_ref_index]));
+        const auto delta_height =
+            std::get<1>(kOffsetTable[index]) - std::get<1>(kOffsetTable[abs_ref_index]);
+
+        // center→armor 方向的 yaw（state[4] 的约定）
+        const auto center_to_armor_yaw =
+            util::normalize_angle(context.posteriors_state[4] + delta_yaw);
+
+        // 装甲板位置 = 旋转中心 + radius * center→armor 方向
+        const auto armor_pos = Eigen::Vector3d {
+            context.posteriors_state[0] + kRadius * std::cos(center_to_armor_yaw),
+            context.posteriors_state[1] + kRadius * std::sin(center_to_armor_yaw),
+            context.posteriors_state[2] + delta_height,
+        };
+
+        // PnP 约定：orientation 的 X 轴 = armor→center = center→armor + π
+        const auto orientation = Eigen::Quaterniond {
+            Eigen::AngleAxisd { center_to_armor_yaw + std::numbers::pi, Eigen::Vector3d::UnitZ() }
+            * Eigen::AngleAxisd { kPitch, Eigen::Vector3d::UnitY() }
+        };
+
+        return Armor3d {
+            .genre = armor_genre,
+            .color = armor_color,
+            .id    = index,
+
+            .translation = Translation { armor_pos },
+            .orientation = Orientation { orientation },
+        };
     }
 };
 
 OutpostModel::OutpostModel(const Armor3d& armor) noexcept
-    : pimpl { std::make_unique<Impl>() } {
-    pimpl->initialize_from(armor);
-}
+    : pimpl { std::make_unique<Impl>(armor) } { }
 
 OutpostModel::~OutpostModel() noexcept = default;
 
 auto OutpostModel::state() noexcept -> State { return pimpl->context.get_state(); }
 
+auto OutpostModel::configure(const Config& cfg) noexcept -> void { pimpl->configure(cfg); }
+
 auto OutpostModel::predict(double dt) noexcept -> void { pimpl->predict(dt); }
 
 auto OutpostModel::correct(const Armor3d& armor) noexcept -> void { pimpl->correct(armor); }
+
+auto OutpostModel::full() const -> std::array<Armor3d, 3> {
+    return std::array {
+        pimpl->at(0),
+        pimpl->at(1),
+        pimpl->at(2),
+    };
+}
+auto OutpostModel::current() const -> Armor3d {
+    return pimpl->at((pimpl->abs_ref_index + pimpl->rel_see_index + 3) % 3);
+}

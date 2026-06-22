@@ -6,6 +6,7 @@
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
+#include "module/predictor/model/outpost.hpp"
 
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
@@ -14,10 +15,12 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
+#include "utility/time.hpp"
 
 #include <csignal>
 #include <experimental/scope>
 #include <filesystem>
+#include <memory>
 #include <thread>
 
 using namespace rmcs;
@@ -33,6 +36,9 @@ struct AutoAim::Impl {
     PoseEstimator estimator { };
     FireControl fire { };
     Visualization visual { };
+
+    std::unique_ptr<OutpostModel> outpost_model;
+    TimePoint outpost_model_stamp { };
 
     std::jthread worker;
 
@@ -119,6 +125,25 @@ struct AutoAim::Impl {
                 if (armors_3d.empty()) continue;
 
                 visual.publish(armors_3d, "visible_armors");
+            }
+
+            {
+                const auto outpost = std::ranges::find_if(armors_3d,
+                    [](const Armor3d& armor) { return armor.genre == DeviceId::OUTPOST; });
+
+                if (outpost != armors_3d.end()) {
+                    const auto stamp = image->get_timestamp();
+                    if (!outpost_model) {
+                        outpost_model       = std::make_unique<OutpostModel>(*outpost);
+                        outpost_model_stamp = stamp;
+                    } else {
+                        outpost_model->predict(
+                            util::delta_time(stamp, outpost_model_stamp).count());
+                        outpost_model->correct(*outpost);
+                        outpost_model_stamp = stamp;
+                    }
+                    visual.publish(outpost_model->full(), "outpost_model_full");
+                }
             }
 
             /// 3. Apply Tracker
