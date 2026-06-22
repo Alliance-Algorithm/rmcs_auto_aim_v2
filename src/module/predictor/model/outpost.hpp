@@ -20,11 +20,20 @@ public:
         double rotation_angle;
     };
 
+    struct Config {
+        // TODO:
+    };
+
     explicit OutpostModel(const Armor3d& armor) noexcept;
+
+    auto state() noexcept -> State;
+
+    auto configure(const Config&) noexcept -> void;
 
     auto predict(double dt) noexcept -> void;
     auto correct(const Armor3d& armor) noexcept -> void;
-    auto state() noexcept -> State;
+
+    auto current() const -> Armor3d;
 };
 
 }
