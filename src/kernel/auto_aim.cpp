@@ -127,6 +127,9 @@ struct AutoAim::Impl {
                 visual.publish(armors_3d, "visible_armors");
             }
 
+            /// @TODO:
+            ///  OutpostModel 的临时可视化，等待 @heyeuu 替换掉原先的前哨站 EKF ʕ•ᴥ•ʔ
+            ///  实现文件在这里 -> `../module/predictor/model/outpost.hpp`
             {
                 const auto outpost = std::ranges::find_if(armors_3d,
                     [](const Armor3d& armor) { return armor.genre == DeviceId::OUTPOST; });

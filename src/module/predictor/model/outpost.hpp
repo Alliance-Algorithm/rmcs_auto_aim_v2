@@ -51,7 +51,7 @@ public:
         double observation_noise_yaw = 0.01;
 
         /// @brief 切板检测判定阈值
-        /// @note 三块装甲板夹角 120°，考虑到电控延迟和低帧率，建议设在 50.0 ~ 70.0 度之间
+        /// @note 三块装甲板夹角 120°，考虑到观测的局限，建议设在 50.0 ~ 80.0 度之间
 
         // 触发切板判定的最小 Yaw 角跳变（度）
         double plate_switch_yaw_min = 50.0;
@@ -59,14 +59,21 @@ public:
 
     explicit OutpostModel(const Armor3d& armor) noexcept;
 
-    auto state() noexcept -> State;
-
     auto configure(const Config&) noexcept -> void;
 
     auto predict(double dt) noexcept -> void;
     auto correct(const Armor3d& armor) noexcept -> void;
 
+    // 前哨站的状态向量内容喵，参考点为构造时从传入的那块
+    auto state() noexcept -> State;
+
+    // 所有前哨站的装甲板，按照从高到低的顺序排列
+    // 也就是说，0 是最高的那块
     auto full() const -> std::array<Armor3d, 3>;
+
+    // 当前正在观测的那块装甲板（即上一个 correct 的装甲板）
+    // 注意纯预测不会改变 current 返回的装甲板，即使预测后准
+    // 备返回的装甲板在前哨站背面
     auto current() const -> Armor3d;
 };
 

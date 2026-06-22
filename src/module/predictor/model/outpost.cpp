@@ -391,8 +391,8 @@ public:
             std::tuple { 1 * std::numbers::pi * 2 / 3, -1 * kOutpostArmorHeightStep }, // 中
             std::tuple { 2 * std::numbers::pi * 2 / 3, -2 * kOutpostArmorHeightStep }, // 低
         };
-        constexpr auto kPitch  = kPredictedOutpostArmorPitch;
         constexpr auto kRadius = kOutpostRadius;
+        constexpr auto kPitch  = kPredictedOutpostArmorPitch;
 
         // EKF state 跟踪参考板（ref_index），求 index 相对 ref_index 的偏移
         const auto delta_yaw = util::normalize_angle(
@@ -411,7 +411,7 @@ public:
             context.posteriors_state[2] + delta_height,
         };
 
-        // PnP 约定：orientation 的 X 轴 = armor→center = center→armor + π
+        // 装甲板朝向约定：orientation 的 X 轴 = armor→center
         const auto orientation = Eigen::Quaterniond {
             Eigen::AngleAxisd { center_to_armor_yaw + std::numbers::pi, Eigen::Vector3d::UnitZ() }
             * Eigen::AngleAxisd { kPitch, Eigen::Vector3d::UnitY() }

@@ -225,8 +225,7 @@ auto main() -> int {
             marker_array.markers.emplace_back(std::move(marker));
         }
 
-        for (std::size_t index = 0; index < estimated_armors.size(); ++index) {
-            const auto& armor      = estimated_armors[index];
+        for (const auto& armor : estimated_armors) {
             const auto position    = armor.translation.make<Eigen::Vector3d>();
             const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
 
