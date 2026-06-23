@@ -2,8 +2,6 @@
 
 #include "module/predictor/model/outpost.hpp"
 #include "module/predictor/outpost/snapshot.hpp"
-#include "utility/math/angle.hpp"
-#include "utility/robot/constant.hpp"
 
 #include <cmath>
 #include <limits>
