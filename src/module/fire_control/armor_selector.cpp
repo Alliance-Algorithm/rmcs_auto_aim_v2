@@ -85,8 +85,8 @@ struct ArmorSelector::Impl {
             auto orientation = Eigen::Quaterniond {};
             candidate.armor.orientation.copy_to(orientation);
             const auto armor_yaw  = util::eulers(orientation)[0];
-            const auto center_yaw = std::atan2(
-                candidate.motion.center_position.y(), candidate.motion.center_position.x());
+            const auto& center    = candidate.motion.center_position;
+            const auto center_yaw = std::atan2(center.y, center.x);
             return util::normalize_angle(armor_yaw - center_yaw);
         };
 

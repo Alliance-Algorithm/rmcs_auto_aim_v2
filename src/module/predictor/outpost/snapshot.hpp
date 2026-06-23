@@ -1,7 +1,6 @@
 #pragma once
 
-#include "module/predictor/outpost/armor_layout.hpp"
-#include "module/predictor/outpost/ekf_parameter.hpp"
+#include "module/predictor/model/outpost.hpp"
 #include "module/predictor/snapshot.hpp"
 
 #include <memory>
@@ -11,10 +10,8 @@ namespace rmcs::predictor {
 
 class OutpostSnapshot {
 public:
-    using EKF = OutpostEKFParameters::EKF;
-
-    explicit OutpostSnapshot(EKF::XVec x, CampColor color, TimePoint stamp,
-        OutpostArmorLayout layout, double angular_velocity);
+    explicit OutpostSnapshot(
+        OutpostModel::State state, std::vector<Armor3d> armors, TimePoint stamp);
     OutpostSnapshot(OutpostSnapshot const&) = delete;
     OutpostSnapshot(OutpostSnapshot&&) noexcept;
     OutpostSnapshot& operator=(OutpostSnapshot const&) = delete;

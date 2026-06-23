@@ -40,7 +40,7 @@ struct TargetSolver::Impl {
     static auto solve(predictor::Snapshot const& snapshot, int armor_id, TimePoint command_time,
         double bullet_speed, double shoot_delay) -> std::expected<TargetSolution, std::string> {
         auto target_motion    = snapshot.motion_at(command_time);
-        auto target_position  = target_motion.center_position;
+        auto target_position  = target_motion.center_position.make<Eigen::Vector3d>();
         auto current_fly_time = target_position.norm() / bullet_speed;
 
         auto result = std::optional<TargetSolution> {};

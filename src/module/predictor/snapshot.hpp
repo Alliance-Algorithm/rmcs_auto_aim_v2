@@ -4,8 +4,6 @@
 #include "utility/robot/armor.hpp"
 #include "utility/robot/id.hpp"
 
-#include <eigen3/Eigen/Core>
-
 #include <memory>
 #include <vector>
 
@@ -16,7 +14,7 @@ class OutpostSnapshot;
 class Snapshot;
 
 struct TargetMotion {
-    Eigen::Vector3d center_position;
+    Point3d center_position;
     double angular_velocity;
 };
 

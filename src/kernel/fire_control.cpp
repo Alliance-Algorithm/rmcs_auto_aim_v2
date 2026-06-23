@@ -71,7 +71,7 @@ struct FireControl::Impl {
             };
         }
 
-        return { };
+        return {};
     }
 
     auto solve(predictor::Snapshot const& snapshot, GimbalState const& gimbal_state)
@@ -82,9 +82,9 @@ struct FireControl::Impl {
         auto aim_point_position = Eigen::Vector3d {};
         auto center_position    = Eigen::Vector3d {};
         {
-            auto const target_motion = snapshot.motion();
-            auto const coarse_fly_time =
-                target_motion.center_position.norm() / config.initial_bullet_speed;
+            auto const target_motion   = snapshot.motion();
+            auto target_center         = target_motion.center_position.make<Eigen::Vector3d>();
+            auto const coarse_fly_time = target_center.norm() / config.initial_bullet_speed;
             auto const selection_predict_time = config.shoot_delay + coarse_fly_time;
             auto const selection_time         = snapshot.time_stamp()
                 + std::chrono::duration_cast<Duration>(
@@ -100,7 +100,7 @@ struct FireControl::Impl {
 
             auto const& selected = target_candidates[*selected_index];
             selected_armor_id    = selected.armor.id;
-            center_position      = target_motion.center_position;
+            center_position      = target_center;
             selected.armor.translation.copy_to(aim_point_position);
         }
 
@@ -116,7 +116,7 @@ struct FireControl::Impl {
             }
 
             last_selected_armor_id = solution->candidate.armor.id;
-            target_solution        = std::move(*solution);
+            target_solution        = *solution;
         }
 
         /// 3. 轨迹规划
@@ -167,11 +167,11 @@ struct FireControl::Impl {
         };
     }
 
-    TrajectoryPlanner trajectory_planner { };
-    TargetSolver target_solver { };
-    ShootEvaluator shoot_evaluator { };
-    ArmorSelector armor_selector { };
-    std::optional<int> last_selected_armor_id { };
+    TrajectoryPlanner trajectory_planner {};
+    TargetSolver target_solver {};
+    ShootEvaluator shoot_evaluator {};
+    ArmorSelector armor_selector {};
+    std::optional<int> last_selected_armor_id {};
 };
 
 FireControl::FireControl() noexcept

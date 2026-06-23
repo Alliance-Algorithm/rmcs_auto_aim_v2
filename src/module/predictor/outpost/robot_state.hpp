@@ -1,6 +1,5 @@
 #pragma once
 
-#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
 #include "utility/pimpl.hpp"
 
@@ -13,8 +12,6 @@ class OutpostRobotState {
     RMCS_PIMPL_DEFINITION(OutpostRobotState)
 
 public:
-    using EKF = OutpostEKFParameters::EKF;
-
     auto predict(double dt) -> void;
 
     auto update(std::span<Armor3d const> armors) -> bool;
