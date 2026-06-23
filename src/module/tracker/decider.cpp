@@ -64,8 +64,7 @@ struct Decider::Impl {
         for (auto& [id, grouped] : grouped_armors) {
             if (!trackers.contains(id)) {
                 trackers[id] = std::make_unique<RobotState>();
-                trackers[id]->initialize(grouped.front(), t);
-                last_seen_times[id] = t;
+                trackers[id]->predict(t);
             }
 
             auto grouped_span = std::span<Armor3d const> { grouped.data(), grouped.size() };

@@ -2,6 +2,7 @@
 
 #include "module/predictor/outpost/robot_state.hpp"
 #include "module/predictor/regular/robot_state.hpp"
+#include "utility/time.hpp"
 
 #include <limits>
 #include <optional>
@@ -13,33 +14,33 @@ struct RobotState::Impl {
     using State = std::variant<RegularRobotState, OutpostRobotState>;
 
     std::optional<State> state;
-    TimePoint pending_time_stamp { Clock::now() };
+    std::optional<TimePoint> time_stamp;
 
-    auto emplace_state(DeviceId device, TimePoint stamp) -> State& {
+    auto emplace_state(DeviceId device) -> State& {
         switch (device) {
         case DeviceId::OUTPOST:
-            return state.emplace(std::in_place_type<OutpostRobotState>, stamp);
+            return state.emplace(std::in_place_type<OutpostRobotState>);
         default:
-            return state.emplace(std::in_place_type<RegularRobotState>, stamp);
+            return state.emplace(std::in_place_type<RegularRobotState>);
         }
     }
 
-    auto initialize(Armor3d const& armor, TimePoint t) -> void {
-        pending_time_stamp = t;
-        auto& target_state = emplace_state(armor.genre, t);
-        std::visit([&](auto& model) { model.initialize(armor, t); }, target_state);
-    }
-
     auto predict(TimePoint t) -> void {
-        pending_time_stamp = t;
+        if (!time_stamp.has_value()) {
+            time_stamp = t;
+            return;
+        }
+
+        const auto dt = util::delta_time(t, *time_stamp).count();
+        time_stamp    = t;
+
         if (!state) return;
-        std::visit([t](auto& model) { model.predict(t); }, *state);
+        std::visit([dt](auto& model) { model.predict(dt); }, *state);
     }
 
     auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
-        auto& target_state =
-            state ? *state : emplace_state(armors.front().genre, pending_time_stamp);
+        auto& target_state = state ? *state : emplace_state(armors.front().genre);
         return std::visit([armors](auto& model) { return model.update(armors); }, target_state);
     }
 
@@ -49,8 +50,9 @@ struct RobotState::Impl {
     }
 
     auto get_snapshot() const -> std::optional<Snapshot> {
-        if (!state) return std::nullopt;
-        return std::visit([](auto const& model) { return model.get_snapshot(); }, *state);
+        if (!state || !time_stamp.has_value()) return std::nullopt;
+        return std::visit(
+            [this](auto const& model) { return model.get_snapshot(*time_stamp); }, *state);
     }
 
     auto distance() const -> double {
@@ -62,10 +64,6 @@ struct RobotState::Impl {
 RobotState::RobotState() noexcept
     : pimpl { std::make_unique<Impl>() } { }
 RobotState::~RobotState() noexcept = default;
-
-auto RobotState::initialize(rmcs::Armor3d const& armor, TimePoint t) -> void {
-    return pimpl->initialize(armor, t);
-}
 
 auto RobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
 

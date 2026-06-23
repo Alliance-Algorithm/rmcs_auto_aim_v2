@@ -2,7 +2,6 @@
 
 #include "module/predictor/outpost/snapshot.hpp"
 #include "utility/math/angle.hpp"
-#include "utility/time.hpp"
 
 #include <algorithm>
 #include <array>
@@ -46,47 +45,36 @@ struct OutpostRobotState::Impl {
         int count { 0 };
     };
 
-    explicit Impl(TimePoint stamp) noexcept
-        : time_stamp { stamp } { }
-
-    auto initialize(Armor3d const& armor, TimePoint t) -> void {
-        color             = armor_color2camp_color(armor.color);
-        time_stamp        = t;
-        update_count      = 0;
-        motion_mode       = std::nullopt;
-        rotation_evidence = {};
-
-        layout = OutpostArmorLayout {};
-        assign_slot(0, 0.0, 0.0);
-
-        ekf = EKF { Params::x(Params::observe(armor)), Params::P_initial_dig().asDiagonal() };
-        initialized = true;
-
-        auto const observation = Params::observe(armor);
-        mode_reference_yaw     = observation.ypr[0];
-        mode_reference_stamp   = t;
-    }
-
-    auto predict(TimePoint t) -> void {
-        if (t <= time_stamp) return;
+    auto predict(double dt) -> void {
+        if (!(dt > 0.0)) return;
 
         if (initialized) {
-            auto const dt   = util::delta_time(t, time_stamp);
-            auto const dt_s = dt.count();
             ekf.predict(
-                Params::f(dt_s, angular_velocity()),
-                [dt_s](EKF::XVec const&) { return Params::F(dt_s); }, Params::Q(dt_s));
+                Params::f(dt, angular_velocity()), [dt](EKF::XVec const&) { return Params::F(dt); },
+                Params::Q(dt));
+            mode_reference_elapsed += std::chrono::duration<double> { dt };
         }
-
-        time_stamp = t;
     }
 
     auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
 
         if (!initialized) {
-            initialize(armors.front(), time_stamp);
-            ++update_count;
+            auto const& armor = armors.front();
+            color             = armor_color2camp_color(armor.color);
+            update_count      = 1;
+            motion_mode       = std::nullopt;
+            rotation_evidence = {};
+
+            layout = OutpostArmorLayout {};
+            assign_slot(0, 0.0, 0.0);
+
+            ekf = EKF { Params::x(Params::observe(armor)), Params::P_initial_dig().asDiagonal() };
+            initialized = true;
+
+            auto const observation = Params::observe(armor);
+            mode_reference_yaw     = observation.ypr[0];
+            mode_reference_elapsed = {};
             return true;
         }
 
@@ -108,10 +96,9 @@ struct OutpostRobotState::Impl {
         return layout.slots[0].assigned && update_count >= min_updates;
     }
 
-    auto get_snapshot() const -> std::optional<Snapshot> {
+    auto get_snapshot(TimePoint stamp) const -> std::optional<Snapshot> {
         if (!initialized) return std::nullopt;
-        return Snapshot { OutpostSnapshot {
-            ekf.x, color, time_stamp, layout, angular_velocity() } };
+        return Snapshot { OutpostSnapshot { ekf.x, color, stamp, layout, angular_velocity() } };
     }
 
     auto distance() const -> double {
@@ -335,8 +322,7 @@ private:
         }
 
         //  按时间窗口判断 yaw 变化
-        auto const elapsed = util::delta_time(time_stamp, mode_reference_stamp);
-        if (elapsed < kModeConfirmWindow) return;
+        if (mode_reference_elapsed < kModeConfirmWindow) return;
 
         auto const mode_delta = util::normalize_angle(match.reference_yaw - mode_reference_yaw);
         auto const abs_delta  = std::abs(mode_delta);
@@ -358,14 +344,13 @@ private:
             }
         }
 
-        mode_reference_yaw   = match.reference_yaw;
-        mode_reference_stamp = time_stamp;
+        mode_reference_yaw     = match.reference_yaw;
+        mode_reference_elapsed = {};
     }
 
     CampColor color { CampColor::UNKNOWN };
     OutpostArmorLayout layout {};
     EKF ekf { EKF {} };
-    TimePoint time_stamp;
 
     bool initialized { false };
     int update_count { 0 };
@@ -373,22 +358,15 @@ private:
     std::optional<MotionMode> motion_mode;
     RotationEvidence rotation_evidence;
     double mode_reference_yaw { 0.0 };
-    TimePoint mode_reference_stamp;
+    std::chrono::duration<double> mode_reference_elapsed { 0.0 };
 };
 
 OutpostRobotState::OutpostRobotState() noexcept
-    : OutpostRobotState(Clock::now()) { }
-
-OutpostRobotState::OutpostRobotState(TimePoint stamp) noexcept
-    : pimpl { std::make_unique<Impl>(stamp) } { }
+    : pimpl { std::make_unique<Impl>() } { }
 
 OutpostRobotState::~OutpostRobotState() noexcept = default;
 
-auto OutpostRobotState::initialize(Armor3d const& armor, TimePoint t) -> void {
-    return pimpl->initialize(armor, t);
-}
-
-auto OutpostRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
+auto OutpostRobotState::predict(double dt) -> void { return pimpl->predict(dt); }
 
 auto OutpostRobotState::update(std::span<Armor3d const> armors) -> bool {
     return pimpl->update(armors);
@@ -396,8 +374,8 @@ auto OutpostRobotState::update(std::span<Armor3d const> armors) -> bool {
 
 auto OutpostRobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
-auto OutpostRobotState::get_snapshot() const -> std::optional<Snapshot> {
-    return pimpl->get_snapshot();
+auto OutpostRobotState::get_snapshot(TimePoint stamp) const -> std::optional<Snapshot> {
+    return pimpl->get_snapshot(stamp);
 }
 
 auto OutpostRobotState::distance() const -> double { return pimpl->distance(); }

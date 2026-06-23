@@ -1,7 +1,6 @@
 #include "robot_state.hpp"
 
 #include "module/predictor/regular/snapshot.hpp"
-#include "utility/time.hpp"
 
 #include <cmath>
 #include <limits>
@@ -28,7 +27,6 @@ struct RegularRobotState::Impl {
     int armor_num { 0 };
 
     EKF ekf { EKF {} };
-    TimePoint time_stamp;
 
     bool initialized { false };
     int update_count { 0 };
@@ -40,48 +38,36 @@ struct RegularRobotState::Impl {
     const double angle_error_threshold { 0.65 };
     const double visible_angle_threshold { std::numbers::pi / 2.0 };
 
-    explicit Impl(TimePoint stamp) noexcept
-        : time_stamp { stamp } { }
-
-    auto initialize(Armor3d const& armor, TimePoint t) -> void {
-        device                = armor.genre;
-        color                 = armor_color2camp_color(armor.color);
-        armor_num             = EKFParameters::armor_num(armor.genre);
-        time_stamp            = t;
-        update_count          = 0;
-        last_matched_armor_id = 0;
-        ekf = EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
-        initialized = true;
-    }
-
-    auto predict(TimePoint t) -> void {
-        if (t <= time_stamp) return;
+    auto predict(double dt) -> void {
+        if (!(dt > 0.0)) return;
 
         if (initialized) {
-            auto dt = util::delta_time(t, time_stamp);
-            if (dt > reset_interval) {
+            if (std::chrono::duration<double> { dt } > reset_interval) {
                 initialized           = false;
                 update_count          = 0;
                 last_matched_armor_id = kUnknownMatchedArmorId;
-                time_stamp            = t;
                 return;
             }
 
-            auto dt_s = dt.count();
             ekf.predict(
-                EKFParameters::f(dt_s), [dt_s](EKF::XVec const&) { return EKFParameters::F(dt_s); },
-                EKFParameters::Q(dt_s));
+                EKFParameters::f(dt), [dt](EKF::XVec const&) { return EKFParameters::F(dt); },
+                EKFParameters::Q(dt));
         }
-
-        time_stamp = t;
     }
 
     auto update(std::span<Armor3d const> armors) -> bool {
         if (armors.empty()) return false;
 
         if (!initialized) {
-            initialize(armors.front(), time_stamp);
-            ++update_count;
+            auto const& armor     = armors.front();
+            device                = armor.genre;
+            color                 = armor_color2camp_color(armor.color);
+            armor_num             = EKFParameters::armor_num(armor.genre);
+            update_count          = 1;
+            last_matched_armor_id = 0;
+            ekf =
+                EKF { EKFParameters::x(armor), EKFParameters::P_initial_dig(device).asDiagonal() };
+            initialized = true;
             return true;
         }
 
@@ -107,9 +93,9 @@ struct RegularRobotState::Impl {
         return r_ok && l_ok && update_count >= min_updates;
     }
 
-    auto get_snapshot() const -> std::optional<Snapshot> {
+    auto get_snapshot(TimePoint stamp) const -> std::optional<Snapshot> {
         if (!initialized) return std::nullopt;
-        return Snapshot { RegularSnapshot { ekf.x, device, color, armor_num, time_stamp } };
+        return Snapshot { RegularSnapshot { ekf.x, device, color, armor_num, stamp } };
     }
 
     auto distance() const -> double {
@@ -220,20 +206,13 @@ private:
 };
 
 RegularRobotState::RegularRobotState() noexcept
-    : RegularRobotState(Clock::now()) { }
-
-RegularRobotState::RegularRobotState(TimePoint stamp) noexcept
-    : pimpl { std::make_unique<Impl>(stamp) } { }
+    : pimpl { std::make_unique<Impl>() } { }
 
 RegularRobotState::~RegularRobotState() noexcept                                      = default;
 RegularRobotState::RegularRobotState(RegularRobotState&&) noexcept                    = default;
 auto RegularRobotState::operator=(RegularRobotState&&) noexcept -> RegularRobotState& = default;
 
-auto RegularRobotState::initialize(Armor3d const& armor, TimePoint t) -> void {
-    return pimpl->initialize(armor, t);
-}
-
-auto RegularRobotState::predict(TimePoint t) -> void { return pimpl->predict(t); }
+auto RegularRobotState::predict(double dt) -> void { return pimpl->predict(dt); }
 
 auto RegularRobotState::update(std::span<Armor3d const> armors) -> bool {
     return pimpl->update(armors);
@@ -241,8 +220,8 @@ auto RegularRobotState::update(std::span<Armor3d const> armors) -> bool {
 
 auto RegularRobotState::is_converged() const -> bool { return pimpl->is_converged(); }
 
-auto RegularRobotState::get_snapshot() const -> std::optional<Snapshot> {
-    return pimpl->get_snapshot();
+auto RegularRobotState::get_snapshot(TimePoint stamp) const -> std::optional<Snapshot> {
+    return pimpl->get_snapshot(stamp);
 }
 
 auto RegularRobotState::distance() const -> double { return pimpl->distance(); }
