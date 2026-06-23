@@ -93,13 +93,13 @@ fire_control:
   initial_bullet_speed: 23.5 # m/s
   shoot_delay: 0.04 # s
   mpc_enable: true
-  yaw_offset: -0.4 # degree
-  pitch_offset: +0.8 # degree
+  yaw_offset: -0.0 # degree
+  pitch_offset: +0.0 # degree
 
   armor_target_selector:
     coming_angle: 60.0 # degree
     leaving_angle: 20.0 # degree
-    outpost_coming_angle: 60.0 # degree
+    outpost_coming_angle: 40.0 # degree
     outpost_leaving_angle: 30.0 # degree
     switch_threshold: 8.0 # degree
 

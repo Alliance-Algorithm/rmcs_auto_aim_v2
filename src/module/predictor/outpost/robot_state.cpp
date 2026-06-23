@@ -35,18 +35,7 @@ struct OutpostRobotState::Impl {
     auto is_converged() const noexcept -> bool {
         if (!model) return false;
 
-        constexpr auto kMinDistance            = 0.0;
-        constexpr auto kMaxDistance            = 19.0;
-        constexpr auto kStaticSpeedTolerance   = util::deg2rad(8.0);
-        constexpr auto kRotationSpeedTolerance = util::deg2rad(15.0);
-
-        const auto state = model->state();
-        const auto dist  = distance();
-        if (!(dist > kMinDistance) || !(dist < kMaxDistance)) return false;
-
-        const auto speed = std::abs(state.rotation_speed);
-        return speed < kStaticSpeedTolerance
-            || std::abs(speed - kOutpostAngularSpeed) < kRotationSpeedTolerance;
+        return true;
     }
 
     auto get_snapshot(TimePoint stamp) const -> std::optional<Snapshot> {
