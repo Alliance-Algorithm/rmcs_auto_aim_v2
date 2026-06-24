@@ -1,8 +1,6 @@
 #pragma once
 
-#include "module/predictor/outpost/ekf_parameter.hpp"
 #include "module/predictor/snapshot.hpp"
-#include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 
 #include <optional>
@@ -14,17 +12,12 @@ class OutpostRobotState {
     RMCS_PIMPL_DEFINITION(OutpostRobotState)
 
 public:
-    using EKF = OutpostEKFParameters::EKF;
-
-    explicit OutpostRobotState(TimePoint stamp) noexcept;
-
-    auto initialize(Armor3d const& armor, TimePoint t) -> void;
-    auto predict(TimePoint t) -> void;
+    auto predict(double dt) -> void;
 
     auto update(std::span<Armor3d const> armors) -> bool;
 
     auto is_converged() const -> bool;
-    auto get_snapshot() const -> std::optional<Snapshot>;
+    auto get_snapshot(TimePoint stamp) const -> std::optional<Snapshot>;
     auto distance() const -> double;
 };
 

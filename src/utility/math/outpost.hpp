@@ -1,16 +1,18 @@
 #pragma once
 #include "utility/robot/armor.hpp"
 
+/// 前哨站按照下面的顺序排列，其旋向确定
+/// [ UPPER ]
+///             [ MIDDLE ]
+///                          [ LOWER ]
 namespace rmcs::util {
+
+auto outpost_relative_height(bool in_right, bool in_upper) noexcept -> double;
 
 class OutpostSolution {
 public:
     enum class ArmorLevel { UPPER, MIDDLE, LOWER };
 
-    /// Level 按照下面的顺序排列，其旋向确定
-    /// [ UPPER ]
-    ///             [ MIDDLE ]
-    ///                          [ LOWER ]
     struct Input {
         Translation translation;
         Orientation orientation;

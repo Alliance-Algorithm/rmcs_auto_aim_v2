@@ -35,6 +35,18 @@ namespace details {
 
 }
 
+auto outpost_relative_height(bool in_right, bool in_upper) noexcept -> double {
+    /*^^*/ if (in_right && in_upper) {
+        return +2 * kOutpostArmorHeightStep;
+    } else if (in_right && !in_upper) {
+        return -1 * kOutpostArmorHeightStep;
+    } else if (!in_right && in_upper) {
+        return +1 * kOutpostArmorHeightStep;
+    } else {
+        return -2 * kOutpostArmorHeightStep;
+    }
+}
+
 auto OutpostSolution::solve() -> void {
     const auto radius = kOutpostRadius + input.armor_thickness;
     const auto pitch  = kPredictedOutpostArmorPitch;

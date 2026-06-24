@@ -18,6 +18,7 @@
 #include <csignal>
 #include <experimental/scope>
 #include <filesystem>
+#include <memory>
 #include <thread>
 
 using namespace rmcs;

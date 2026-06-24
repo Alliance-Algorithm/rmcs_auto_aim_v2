@@ -108,7 +108,6 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
 | `/auto_aim/pitch_rate` | `double` | pitch 角速度 |
 | `/auto_aim/yaw_acc` | `double` | yaw 角加速度 |
 | `/auto_aim/pitch_acc` | `double` | pitch 角加速度 |
-| `/auto_aim/feedforward_valid` | `bool` | 前馈数据是否有效 |
 
 ## 项目架构
 
