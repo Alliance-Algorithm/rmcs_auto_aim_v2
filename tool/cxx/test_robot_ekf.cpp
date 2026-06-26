@@ -1,4 +1,5 @@
 #include "module/predictor/model/robot.hpp"
+#include "utility/math/angle.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/math/reprojection.hpp"
 #include "utility/math/robot.hpp"
@@ -23,7 +24,7 @@ using namespace rmcs::util;
 namespace {
 
 struct MockMotion {
-    static constexpr auto kRotationSpeed    = 0.3 * std::numbers::pi;
+    static constexpr auto kRotationSpeed    = 1 * std::numbers::pi;
     static constexpr auto kAmplitude        = 2.0;
     static constexpr auto kPeriod           = 20.0;
     static constexpr auto kCycleDuration    = 15.0;
@@ -132,14 +133,10 @@ struct Projector {
         const auto vis = compute_visibility(scene);
         for (int id = 0; id < 4; ++id) {
             if (vis[id][0] == '-') continue;
-            const auto orientation =
-                scene.armors[id].orientation.make<Eigen::Quaterniond>();
-            const auto position =
-                scene.armors[id].translation.make<Eigen::Vector3d>();
-            if (vis[id][0] == 'f')
-                draw_full_armor(img, id, scene, position, orientation);
-            else
-                draw_partial_lightbar(img, id, scene, position, orientation);
+            const auto orientation = scene.armors[id].orientation.make<Eigen::Quaterniond>();
+            const auto position    = scene.armors[id].translation.make<Eigen::Vector3d>();
+            if (vis[id][0] == 'f') draw_full_armor(img, id, scene, position, orientation);
+            else draw_partial_lightbar(img, id, scene, position, orientation);
         }
     }
 
@@ -191,11 +188,11 @@ private:
 
     void draw_partial_lightbar(cv::Mat& img, int id, const MockScene& scene,
         const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
-        const auto& bar_l    = scene.lightbars[id * 2];
-        const auto& bar_r    = scene.lightbars[id * 2 + 1];
-        const auto dist_l    = std::hypot(bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
-        const auto dist_r    = std::hypot(bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
-        const auto bar       = dist_l < dist_r ? bar_l : bar_r;
+        const auto& bar_l = scene.lightbars[id * 2];
+        const auto& bar_r = scene.lightbars[id * 2 + 1];
+        const auto dist_l = std::hypot(bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
+        const auto dist_r = std::hypot(bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
+        const auto bar    = dist_l < dist_r ? bar_l : bar_r;
 
         const auto up = project(bar.upper);
         const auto lo = project(bar.lower);
@@ -313,6 +310,8 @@ auto main() -> int {
         "/rmcs/auto_aim/robot_test/ekf", qos::debug);
     auto image_pub = node.details->make_pub<sensor_msgs::msg::Image>(
         "/rmcs/auto_aim/robot_test/projection", qos::debug);
+    auto predicted_pub = node.details->make_pub<visualization_msgs::msg::MarkerArray>(
+        "/rmcs/auto_aim/robot_test/predicted", qos::debug);
 
     constexpr auto kDt = 0.01;
 
@@ -324,8 +323,8 @@ auto main() -> int {
 
     auto model = std::unique_ptr<RobotModel> { };
 
-    auto elapsed          = 0.0;
-    auto frame_index      = 0;
+    auto elapsed     = 0.0;
+    auto frame_index = 0;
 
     constexpr auto kArmorNames = std::array { "px", "py", "nx", "ny" };
 
@@ -360,8 +359,8 @@ auto main() -> int {
         // RobotModel 配准验证
         {
             // 构造假观测：full→Armor2d, part→Lightbar2d（选离原点更近的灯条）
-            auto fake_armor2ds   = std::vector<Armor2d> {};
-            auto fake_lightbars  = std::vector<Lightbar2d> {};
+            auto fake_armor2ds  = std::vector<Armor2d> { };
+            auto fake_lightbars = std::vector<Lightbar2d> { };
             {
                 const auto vis    = projector.compute_visibility(scene);
                 const auto ros2cv = [](const Point3d& p) -> Point3d {
@@ -374,14 +373,10 @@ auto main() -> int {
                     const auto& bar_l = scene.lightbars[aid * 2];
                     const auto& bar_r = scene.lightbars[aid * 2 + 1];
 
-                    const auto tl = reproject_point(
-                        ros2cv(bar_l.upper), projector.camera);
-                    const auto bl = reproject_point(
-                        ros2cv(bar_l.lower), projector.camera);
-                    const auto tr = reproject_point(
-                        ros2cv(bar_r.upper), projector.camera);
-                    const auto br = reproject_point(
-                        ros2cv(bar_r.lower), projector.camera);
+                    const auto tl = reproject_point(ros2cv(bar_l.upper), projector.camera);
+                    const auto bl = reproject_point(ros2cv(bar_l.lower), projector.camera);
+                    const auto tr = reproject_point(ros2cv(bar_r.upper), projector.camera);
+                    const auto br = reproject_point(ros2cv(bar_r.lower), projector.camera);
 
                     if (vis[aid][0] == 'f') {
                         if (tl && bl && tr && br)
@@ -397,36 +392,31 @@ auto main() -> int {
                             });
                     } else {
                         // 单灯条：选离原点更近的那条
-                        const auto dist_l = std::hypot(
-                            bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
-                        const auto dist_r = std::hypot(
-                            bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
-                        const auto& bar  = dist_l < dist_r ? bar_l : bar_r;
-                        const auto up    = dist_l < dist_r ? tl : tr;
-                        const auto lo    = dist_l < dist_r ? bl : br;
+                        const auto dist_l = std::hypot(bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
+                        const auto dist_r = std::hypot(bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
+                        const auto& bar   = dist_l < dist_r ? bar_l : bar_r;
+                        const auto up     = dist_l < dist_r ? tl : tr;
+                        const auto lo     = dist_l < dist_r ? bl : br;
                         if (up && lo)
                             fake_lightbars.push_back(Lightbar2d {
                                 .color = ArmorColor::BLUE,
                                 .upper = Point2d { up->make<cv::Point2f>().x,
-                                                   up->make<cv::Point2f>().y },
+                                    up->make<cv::Point2f>().y },
                                 .lower = Point2d { lo->make<cv::Point2f>().x,
-                                                   lo->make<cv::Point2f>().y },
+                                    lo->make<cv::Point2f>().y },
                             });
                     }
                 }
             }
 
             if (!model && !fake_armor2ds.empty()) {
-                auto rcfg           = RobotModel::Config {};
+                auto rcfg           = RobotModel::Config { };
                 rcfg.camera_feature = projector.camera;
-                model = std::make_unique<RobotModel>(
-                    std::span { fake_armor2ds }, rcfg);
+                model = std::make_unique<RobotModel>(std::span { fake_armor2ds }, rcfg);
             }
 
             if (model) {
-                model->set_state(Point3d { center.x(), center.y(), center.z() }, theta,
-                    MockScene::kRadiusForward, MockScene::kRadiusLateral,
-                    MockScene::kHeightLateral);
+                model->predict(kDt);
                 model->correct(fake_armor2ds, fake_lightbars);
 
                 // 打印真值可见灯条（成对放 []）+ yaw
@@ -436,15 +426,12 @@ auto main() -> int {
                     if (vis[aid][0] == '-') continue;
                     const auto l = aid * 2;
                     const auto r = aid * 2 + 1;
-                    if (vis[aid][0] == 'f')
-                        std::print("[{} {}] ", l, r);
+                    if (vis[aid][0] == 'f') std::print("[{} {}] ", l, r);
                     else {
                         const auto& bar_l = scene.lightbars[l];
                         const auto& bar_r = scene.lightbars[r];
-                        const auto dist_l = std::hypot(
-                            bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
-                        const auto dist_r = std::hypot(
-                            bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
+                        const auto dist_l = std::hypot(bar_l.upper.x, bar_l.upper.y, bar_l.upper.z);
+                        const auto dist_r = std::hypot(bar_r.upper.x, bar_r.upper.y, bar_r.upper.z);
                         std::print("{} ", dist_l < dist_r ? l : r);
                     }
                 }
@@ -452,18 +439,25 @@ auto main() -> int {
                 for (int aid = 0; aid < 4; ++aid) {
                     const auto orientation =
                         scene.armors[aid].orientation.make<Eigen::Quaterniond>();
-                    const auto position =
-                        scene.armors[aid].translation.make<Eigen::Vector3d>();
-                    const auto armor_to_center =
-                        orientation * Eigen::Vector3d::UnitX();
-                    const auto armor_face = -armor_to_center;
-                    const auto armor_to_cam = (-position).normalized();
-                    const auto yaw = std::acos(
-                        std::clamp(armor_face.dot(armor_to_cam), -1.0, 1.0));
-                    std::print("p{}={:.0f}° ", aid,
-                        yaw * 180.0 / std::numbers::pi);
+                    const auto position = scene.armors[aid].translation.make<Eigen::Vector3d>();
+                    const auto armor_to_center = orientation * Eigen::Vector3d::UnitX();
+                    const auto armor_face      = -armor_to_center;
+                    const auto armor_to_cam    = (-position).normalized();
+                    const auto yaw = std::acos(std::clamp(armor_face.dot(armor_to_cam), -1.0, 1.0));
+                    std::print("p{}={:.0f}° ", aid, yaw * 180.0 / std::numbers::pi);
                 }
                 std::println("");
+            }
+
+            if (frame_index > 0 && frame_index % 10 == 0) {
+                const auto st = model->state();
+                const auto err_center =
+                    std::hypot(st.x - center.x(), st.y - center.y(), st.z - center.z());
+                const auto err_angle = util::normalize_angle(st.rotation_angle - theta);
+                std::println("    [conv] center_err={:.3f} angle_err={:.3f}° rf={:.3f}/{:.3f} "
+                             "rl={:.3f}/{:.3f}",
+                    err_center, err_angle * 180.0 / std::numbers::pi, st.radius_forward,
+                    MockScene::kRadiusForward, st.radius_lateral, MockScene::kRadiusLateral);
             }
         }
 
@@ -481,10 +475,8 @@ auto main() -> int {
                         static_cast<int>(tr.point.x),
                         static_cast<int>(tr.point.y),
                     };
-                    cv::putText(img, std::to_string(tr.lightbar_id),
-                        pt + cv::Point { 8, -8 },
-                        cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                        cv::Scalar { 255, 255, 255 }, 1);
+                    cv::putText(img, std::to_string(tr.lightbar_id), pt + cv::Point { 8, -8 },
+                        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar { 255, 255, 255 }, 1);
                 }
             }
 
@@ -523,6 +515,20 @@ auto main() -> int {
             m.add_line_strip("true_circle", circle_pts, 0.005, cv::Scalar { 255, 0, 0, 128 });
 
             marker_pub->publish(m.array);
+        }
+
+        // 预测装甲板 3D 可视化
+        if (model) {
+            auto m               = MarkerHelper { };
+            m.stamp              = stamp;
+            const auto predicted = model->full();
+            for (std::size_t idx = 0; idx < 4; ++idx) {
+                const auto pos = predicted[idx].translation.make<Eigen::Vector3d>();
+                const auto orn = predicted[idx].orientation.make<Eigen::Quaterniond>();
+                m.add_cube("predicted_armor", pos, orn, 0.004, 0.140, 0.060,
+                    cv::Scalar { 0, 0, 255, 128 });
+            }
+            predicted_pub->publish(m.array);
         }
 
         ++frame_index;

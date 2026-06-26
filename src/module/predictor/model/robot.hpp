@@ -1,8 +1,8 @@
 #pragma once
 
+#include "utility/math/camera.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
-#include "utility/math/camera.hpp"
 
 namespace rmcs {
 
@@ -55,9 +55,6 @@ public:
 
     explicit RobotModel(std::span<const Armor2d>, const Config&) noexcept;
 
-    auto set_state(const Point3d& center, double theta,
-        double rf = 0.2, double rl = 0.2, double hl = 0.0) noexcept -> void;
-
     auto configure(const Config&) noexcept -> void;
 
     auto predict(double dt) noexcept -> void;
@@ -67,15 +64,10 @@ public:
 
     auto full() const -> std::array<Armor3d, 4>;
 
-    auto current() const -> Armor3d;
-
     struct Addition {
-        std::array<cv::Point2f, 8> upper;
-        std::array<cv::Point2f, 8> lower;
-
         struct Tracked {
             int lightbar_id;
-            cv::Point2f point;
+            Point2d point;
         };
         std::vector<Tracked> tracked;
     };

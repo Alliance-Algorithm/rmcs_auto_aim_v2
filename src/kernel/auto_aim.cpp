@@ -39,6 +39,8 @@ struct AutoAim::Impl {
     FireControl fire { };
     Visualization visual { };
 
+    util::CameraFeature camera_feature;
+
     std::jthread worker;
 
     std::unique_ptr<RobotModel> robot_model;
@@ -130,21 +132,32 @@ struct AutoAim::Impl {
             }
 
             { // @NOTE: 临时 RobotModel 可视化
+                const auto now = image->get_timestamp();
 
-                // const auto now = image->get_timestamp();
-                //
-                // if (!robot_model) {
-                //     robot_model = std::make_unique<RobotModel>(armors_3d.front());
-                // } else if (last_model_time.has_value()) {
-                //     const auto dt = delta_time(now, *last_model_time).count();
-                //     robot_model->predict(dt);
-                // }
-                //
-                // robot_model->correct(armors_3d.front());
-                // last_model_time = now;
-                //
-                // const auto estimated = robot_model->full();
-                // visual.publish(std::span { estimated }, "robot_model");
+                if (!robot_model) {
+                    RobotModel::Config cfg;
+                    cfg.camera_feature = camera_feature;
+                    robot_model        = std::make_unique<RobotModel>(std::span { armors_2d }, cfg);
+                } else if (last_model_time.has_value()) {
+                    const auto dt = delta_time(now, *last_model_time).count();
+                    robot_model->predict(dt);
+                }
+
+                robot_model->correct(armors_2d, std::span<const Lightbar2d> { });
+                last_model_time = now;
+
+                // 绘制配准灯条 ID（上顶点）
+                for (const auto& tr : robot_model->addition().tracked) {
+                    visual.draw_later(Canvas::Text {
+                        .content  = std::to_string(tr.lightbar_id),
+                        .top_left = cv::Point2i { static_cast<int>(tr.point.x) + 8,
+                                                  static_cast<int>(tr.point.y) - 8 },
+                        .color    = kYellow,
+                    });
+                }
+
+                const auto predicted = robot_model->full();
+                visual.publish(std::span { predicted }, "robot_model");
             }
 
             /// 3. Apply Tracker
@@ -208,6 +221,9 @@ struct AutoAim::Impl {
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();
         const auto distort_coeff     = configs["distort_coeff"].as<std::array<double, 5>>();
         const auto use_visualization = configs["use_visualization"].as<bool>();
+
+        camera_feature.from(camera_matrix);
+        camera_feature.from(distort_coeff);
 
         const auto handle_result = [&](auto runtime_name, const auto& result) {
             if (!result.has_value()) {
