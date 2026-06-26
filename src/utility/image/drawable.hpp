@@ -35,12 +35,17 @@ struct Canvas {
 
         cv::Scalar color = kWhite;
     };
+    struct ArmorShape {
+        Armor2d shape;
+        cv::Scalar color = kWhite;
+    };
 
     Image& canvas;
 
     std::uint8_t transparency   = 255;
     std::uint8_t line_thickness = 1;
 
+    auto draw(const ArmorShape&) -> void;
     auto draw(const Armor2d&) -> void;
     auto draw(const Lightbar2d&) -> void;
     auto draw(const cv::Rect2i&) -> void;

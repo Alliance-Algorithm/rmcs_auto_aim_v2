@@ -1,13 +1,15 @@
 #include "robot.hpp"
 
 #include "utility/math/angle.hpp"
+#include "utility/math/camera.hpp"
+#include "utility/math/conversion.hpp"
 #include "utility/math/reprojection.hpp"
 #include "utility/math/robot.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/robot/constant.hpp"
 
 #include <eigen3/Eigen/Geometry>
-#include <print>
+#include <ranges>
 
 using namespace rmcs;
 
@@ -46,11 +48,14 @@ struct RobotModel::Impl {
             posteriors_covariance = diag.asDiagonal();
         }
 
-        auto set_noise(const Config& config) noexcept {
-            std::ignore = config;
-            noise_process.diagonal() << 1e-4, 1e-4, 1e-4, 5e-3, 5e-3, 5e-3, 5e-4, 1e-2, 1e-8, 1e-8,
-                1e-8;
-            noise_observation.diagonal() << 2.0, 2.0, 2.0, 2.0;
+        auto set_noise(const Config& cfg) noexcept {
+            noise_process.diagonal() << cfg.noise_x, cfg.noise_y, cfg.noise_z, //
+                cfg.noise_vx, cfg.noise_vy, cfg.noise_vz, //
+                cfg.noise_rotation_angle, cfg.noise_rotation_speed, //
+                cfg.noise_radius_forward, cfg.noise_radius_lateral, cfg.noise_height_lateral;
+
+            noise_observation.diagonal() << cfg.noise_observation, cfg.noise_observation,
+                cfg.noise_observation, cfg.noise_observation;
         }
 
         auto get_state() const noexcept {
@@ -74,34 +79,31 @@ struct RobotModel::Impl {
     };
 
     struct Observable {
-        std::array<Eigen::Vector2d, 8> upper;
-        std::array<Eigen::Vector2d, 8> lower;
-        std::array<Eigen::Vector3d, 8> upper_3d;
-        std::array<Eigen::Vector3d, 8> lower_3d;
+        util::CameraFeature feature;
+
+        std::array<Eigen::Vector2d, 8> upper2d;
+        std::array<Eigen::Vector2d, 8> lower2d;
+        std::array<Eigen::Vector3d, 8> upper3d;
+        std::array<Eigen::Vector3d, 8> lower3d;
         std::array<bool, 8> visible;
 
-        util::CameraFeature cam;
         double yaw_full_max = 60.0 * std::numbers::pi / 180.0;
         double yaw_part_max = 90.0 * std::numbers::pi / 180.0;
 
-        auto update(const Point3d& center, double theta, double rf, double rl, double hl) noexcept
-            -> void {
+        auto update(const Eigen::Vector3d& center, double theta, double rf, double rl, double hl) {
 
-            upper.fill(Eigen::Vector2d::Zero());
-            lower.fill(Eigen::Vector2d::Zero());
-            upper_3d.fill(Eigen::Vector3d::Zero());
-            lower_3d.fill(Eigen::Vector3d::Zero());
-            visible.fill(false);
-
-            const auto ros2cv = [](const Point3d& p) -> Point3d {
-                return Point3d { -p.y, -p.z, p.x };
-            };
+            std::ranges::fill(upper2d, Eigen::Vector2d::Zero());
+            std::ranges::fill(lower2d, Eigen::Vector2d::Zero());
+            std::ranges::fill(upper3d, Eigen::Vector3d::Zero());
+            std::ranges::fill(lower3d, Eigen::Vector3d::Zero());
+            std::ranges::fill(visible, false);
 
             auto solution = RobotSolution { };
-            solution.input.center =
-                Translation { Eigen::Vector3d { center.x, center.y, center.z } };
-            solution.input.toward         = Orientation { Eigen::Quaterniond {
-                Eigen::AngleAxisd { theta, Eigen::Vector3d::UnitZ() } } };
+
+            solution.input.center = center;
+            solution.input.toward =
+                Eigen::Quaterniond { Eigen::AngleAxisd { theta, Eigen::Vector3d::UnitZ() } };
+
             solution.input.radius_forward = rf;
             solution.input.radius_lateral = rl;
             solution.input.height_lateral = hl;
@@ -110,25 +112,32 @@ struct RobotModel::Impl {
             const auto armors    = solution.solve_armors();
 
             for (int i = 0; i < 8; ++i) {
-                upper_3d[i] = Eigen::Vector3d {
+                upper3d[i] = Eigen::Vector3d {
                     lightbars[i].upper.x,
                     lightbars[i].upper.y,
                     lightbars[i].upper.z,
                 };
-                lower_3d[i] = Eigen::Vector3d {
+                lower3d[i] = Eigen::Vector3d {
                     lightbars[i].lower.x,
                     lightbars[i].lower.y,
                     lightbars[i].lower.z,
                 };
 
-                const auto up_opt = reproject_point(ros2cv(lightbars[i].upper), cam);
-                const auto lo_opt = reproject_point(ros2cv(lightbars[i].lower), cam);
-                if (up_opt && lo_opt) {
-                    upper[i] = up_opt->make<Eigen::Vector2d>();
-                    lower[i] = lo_opt->make<Eigen::Vector2d>();
+                const auto upper_opt = reproject_point(
+                    Point3d {
+                        util::ros2opencv_position(lightbars[i].upper.make<Eigen::Vector3d>()) },
+                    feature);
+                const auto lower_opt = reproject_point(
+                    Point3d {
+                        util::ros2opencv_position(lightbars[i].lower.make<Eigen::Vector3d>()) },
+                    feature);
+
+                if (upper_opt && lower_opt) {
+                    upper2d[i] = upper_opt->make<Eigen::Vector2d>();
+                    lower2d[i] = lower_opt->make<Eigen::Vector2d>();
                 } else {
-                    upper[i] = Eigen::Vector2d::Zero();
-                    lower[i] = Eigen::Vector2d::Zero();
+                    upper2d[i] = Eigen::Vector2d::Zero();
+                    lower2d[i] = Eigen::Vector2d::Zero();
                 }
             }
 
@@ -174,6 +183,8 @@ struct RobotModel::Impl {
 
     Config config { };
 
+    util::CameraFeature camera_feature;
+
     Context context;
     Observable observable;
 
@@ -190,143 +201,153 @@ private:
     }
 
     auto make_observation_jacobian(int lightbar_id) const noexcept -> Eigen::Matrix<double, 4, 11> {
-        const auto& s = context.posteriors_state;
-        if (s.hasNaN()) {
+        constexpr auto kEpsilon = 1e-4;
+
+        const auto& state = context.posteriors_state;
+        if (state.hasNaN()) {
             return Eigen::Matrix<double, 4, 11>::Zero();
         }
-        const auto theta = s[kStateA];
-        const auto fx    = config.camera_feature.camera_matrix[0][0];
-        const auto fy    = config.camera_feature.camera_matrix[1][1];
+        const auto theta = state[kStateA];
 
-        constexpr auto kEpsilon = 1e-4;
+        const auto fx = camera_feature.camera_matrix[0][0];
+        const auto fy = camera_feature.camera_matrix[1][1];
 
         auto jacobian = Eigen::Matrix<double, 4, 11> { };
         jacobian.setZero();
 
-        auto projection_jacobian =
-            [fx, fy](const Eigen::Vector3d& ros_pt) -> std::optional<Eigen::Matrix<double, 2, 3>> {
-            const auto cv_pt     = Eigen::Vector3d { -ros_pt.y(), -ros_pt.z(), ros_pt.x() };
-            const auto Z         = cv_pt.z();
+        const auto projection_jacobian =
+            [=](const Eigen::Vector3d& point) -> std::optional<Eigen::Matrix<double, 2, 3>> {
             constexpr auto kMinZ = 0.1;
-            if (Z < kMinZ) return std::nullopt;
-            // ∂pixel/∂cv
-            Eigen::Matrix<double, 2, 3> J_pixel_cv;
-            J_pixel_cv << fx / Z, 0, -fx * cv_pt.x() / (Z * Z), 0, fy / Z,
-                -fy * cv_pt.y() / (Z * Z);
-            // ∂cv/∂ros
-            Eigen::Matrix3d J_cv_ros;
-            J_cv_ros << 0, -1, 0, 0, 0, -1, 1, 0, 0;
-            return J_pixel_cv * J_cv_ros;
+
+            const auto point_camera = util::ros2opencv_position(point);
+            const auto depth        = point_camera.z();
+            if (depth < kMinZ) return std::nullopt;
+
+            auto jacobian_pixel_camera = Eigen::Matrix<double, 2, 3> { };
+            jacobian_pixel_camera << fx / depth, 0, -fx * point_camera.x() / (depth * depth), 0,
+                fy / depth, -fy * point_camera.y() / (depth * depth);
+            auto jacobian_camera_ros = Eigen::Matrix3d { };
+            jacobian_camera_ros << 0, -1, 0, 0, 0, -1, 1, 0, 0;
+            return jacobian_pixel_camera * jacobian_camera_ros;
         };
 
         auto theta_jacobian = [&](int id, bool is_upper) {
-            auto compute = [&](double t) -> Eigen::Vector3d {
-                auto sol = RobotSolution { };
-                sol.input.center =
-                    Translation { Eigen::Vector3d { s[kStateX], s[kStateY], s[kStateZ] } };
-                sol.input.toward         = Orientation { Eigen::Quaterniond {
-                    Eigen::AngleAxisd { t, Eigen::Vector3d::UnitZ() } } };
-                sol.input.radius_forward = s[kStateRF];
-                sol.input.radius_lateral = s[kStateRL];
-                sol.input.height_lateral = s[kStateHL];
-                const auto bars          = sol.solve_lightbars();
-                const auto& pt           = is_upper ? bars[id].upper : bars[id].lower;
-                return Eigen::Vector3d { pt.x, pt.y, pt.z };
+            auto compute = [&](double angle) -> Eigen::Vector3d {
+                auto solution                 = RobotSolution { };
+                solution.input.center         = Translation { Eigen::Vector3d {
+                    state[kStateX], state[kStateY], state[kStateZ] } };
+                solution.input.toward         = Orientation { Eigen::Quaterniond {
+                    Eigen::AngleAxisd { angle, Eigen::Vector3d::UnitZ() } } };
+                solution.input.radius_forward = state[kStateRF];
+                solution.input.radius_lateral = state[kStateRL];
+                solution.input.height_lateral = state[kStateHL];
+                const auto lightbars          = solution.solve_lightbars();
+                const auto& point = is_upper ? lightbars[id].upper : lightbars[id].lower;
+                return Eigen::Vector3d { point.x, point.y, point.z };
             };
-            const auto p_plus  = compute(theta + kEpsilon);
-            const auto p_minus = compute(theta - kEpsilon);
-            if (p_plus.hasNaN()) return Eigen::Vector3d { };
-            return ((p_plus - p_minus) / (2.0 * kEpsilon)).eval();
+            const auto position_plus  = compute(theta + kEpsilon);
+            const auto position_minus = compute(theta - kEpsilon);
+            if (position_plus.hasNaN()) return Eigen::Vector3d { };
+            return ((position_plus - position_minus) / (2.0 * kEpsilon)).eval();
         };
 
         for (int endpoint = 0; endpoint < 2; ++endpoint) {
-            const int row       = endpoint * 2;
-            const bool is_upper = (endpoint == 0);
-            const auto& pt_ros =
-                is_upper ? observable.upper_3d[lightbar_id] : observable.lower_3d[lightbar_id];
+            const auto row      = endpoint * 2;
+            const auto is_upper = (endpoint == 0);
+            const auto& point_ros =
+                is_upper ? observable.upper3d[lightbar_id] : observable.lower3d[lightbar_id];
 
-            const auto J_proj_opt = projection_jacobian(pt_ros);
-            if (!J_proj_opt) continue;
+            const auto jacobian_projection_opt = projection_jacobian(point_ros);
+            if (!jacobian_projection_opt) continue;
 
-            // ∂p3d/∂state (3×11)
-            auto J_p3d = Eigen::Matrix<double, 3, 11> { Eigen::Matrix<double, 3, 11>::Zero() };
-            J_p3d(0, kStateX)             = 1.0;
-            J_p3d(1, kStateY)             = 1.0;
-            J_p3d(2, kStateZ)             = 1.0;
-            J_p3d.block<3, 1>(0, kStateA) = theta_jacobian(lightbar_id, is_upper);
+            auto jacobian_position = Eigen::Matrix<double, 3, 11>::Zero().eval();
 
-            const int armor_id = lightbar_id / 2;
-            const auto px_dir  = Eigen::Vector3d {
-                std::cos(theta),
-                std::sin(theta),
-                0.0,
-            };
-            const auto py_dir = Eigen::Vector3d {
-                -std::sin(theta),
-                std::cos(theta),
-                0.0,
-            };
-            if (armor_id == 0) J_p3d.block<3, 1>(0, kStateRF) = px_dir;
-            else if (armor_id == 1) {
-                J_p3d.block<3, 1>(0, kStateRL) = py_dir;
-                J_p3d(2, kStateHL)             = 1.0;
-            } else if (armor_id == 2) J_p3d.block<3, 1>(0, kStateRF) = -px_dir;
-            else {
-                J_p3d.block<3, 1>(0, kStateRL) = -py_dir;
-                J_p3d(2, kStateHL)             = 1.0;
-            }
+            jacobian_position(0, kStateX)             = 1.0;
+            jacobian_position(1, kStateY)             = 1.0;
+            jacobian_position(2, kStateZ)             = 1.0;
+            jacobian_position.block<3, 1>(0, kStateA) = theta_jacobian(lightbar_id, is_upper);
 
-            // chain: J_proj(2×3) * J_p3d(3×11) → 2×11
-            jacobian.block<2, 11>(row, 0).noalias() = *J_proj_opt * J_p3d;
+            const auto armor_id = int { lightbar_id / 2 };
+            const auto direction_forward =
+                Eigen::Vector3d { +std::cos(theta), +std::sin(theta), 0.0 };
+            const auto direction_right =
+                Eigen::Vector3d { -std::sin(theta), +std::cos(theta), 0.0 };
+
+            auto jacobian_forward = jacobian_position.block<3, 1>(0, kStateRF);
+            auto jacobian_lateral = jacobian_position.block<3, 1>(0, kStateRL);
+
+            if (armor_id == 0) jacobian_forward = direction_forward;
+            if (armor_id == 2) jacobian_forward = -direction_forward;
+
+            if (armor_id == 1) jacobian_lateral = direction_right;
+            if (armor_id == 3) jacobian_lateral = -direction_right;
+
+            if (armor_id == 1 || armor_id == 3) jacobian_position(2, kStateHL) = 1.0;
+
+            jacobian.block<2, 11>(row, 0).noalias() = *jacobian_projection_opt * jacobian_position;
         }
 
         return jacobian;
     }
 
-
 public:
-    explicit Impl(std::span<const Armor2d> armors2d, const Config& cfg) noexcept {
-        config                  = cfg;
-        observable.cam          = cfg.camera_feature;
+    explicit Impl(const Config& cfg) noexcept {
+        config = cfg;
+
         observable.yaw_full_max = cfg.yaw_full_max;
         observable.yaw_part_max = cfg.yaw_part_max;
-        genre                   = DeviceId::UNKNOWN;
-        color                   = ArmorColor::DARK;
+
+        context.set_noise(config);
+        context.reset_covariance();
+    }
+
+    auto configure_camera(std::array<double, 9> matrix, std::array<double, 5> coeff) noexcept {
+        camera_feature.from(matrix);
+        camera_feature.from(coeff);
+        observable.feature = camera_feature;
+    }
+
+    auto start_with(std::span<const Armor2d> armors2d) noexcept {
+        constexpr auto kPitch = kPredictedOtherArmorPitch;
+
+        genre = DeviceId::UNKNOWN;
+        color = ArmorColor::DARK;
 
         if (armors2d.empty()) return;
         genre = armors2d[0].genre;
         color = armors2d[0].color;
 
-        auto best_width             = 0.0;
         const Armor2d* best_armor2d = nullptr;
-        for (const auto& armor2d : armors2d) {
-            const auto w = std::abs(armor2d.tr.x - armor2d.tl.x);
-            if (w <= best_width) continue;
-            best_width   = w;
-            best_armor2d = &armor2d;
+        {
+            auto best_width = 0.0;
+            for (const auto& armor2d : armors2d) {
+                const auto w = std::abs(armor2d.tr.x - armor2d.tl.x);
+                if (w <= best_width) continue;
+                best_width   = w;
+                best_armor2d = &armor2d;
+            }
+            if (!best_armor2d) return;
         }
-        if (!best_armor2d) return;
 
-        auto pnp                      = util::RobustPnpSolution { };
-        pnp.input.feature             = cfg.camera_feature;
-        pnp.input.feature.orientation = Orientation::kIdentity();
-        pnp.input.feature.translation = Translation::kZero();
-        pnp.input.armor2d             = *best_armor2d;
+        auto pnp = util::RobustPnpSolution { };
+
+        pnp.input.feature = camera_feature;
+        pnp.input.armor2d = *best_armor2d;
         if (!pnp.solve()) return;
 
         const auto best_armor3d = pnp.result.armor3d;
 
-        constexpr auto pitch = kPredictedOtherArmorPitch;
-        const auto q         = best_armor3d.orientation.make<Eigen::Quaterniond>();
-        const auto t         = best_armor3d.translation.make<Eigen::Vector3d>();
-        const auto armor_to_center =
-            Eigen::Vector3d { Eigen::AngleAxisd { -pitch, q * Eigen::Vector3d::UnitY() }
-                * (q * Eigen::Vector3d::UnitX()) };
+        const auto orientation = best_armor3d.orientation.make<Eigen::Quaterniond>();
+        const auto translation = best_armor3d.translation.make<Eigen::Vector3d>();
+
+        const auto armor_to_center = Eigen::Vector3d {
+            Eigen::AngleAxisd { -kPitch, orientation * Eigen::Vector3d::UnitY() }
+                * (orientation * Eigen::Vector3d::UnitX()),
+        };
         const auto obs_yaw =
             util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
-        auto center    = Eigen::Vector3d { t + 0.2 * armor_to_center };
-        auto yaw       = obs_yaw;
-        auto center_pt = Point3d { center.x(), center.y(), center.z() };
+        auto center = Eigen::Vector3d { translation + 0.2 * armor_to_center };
+        auto yaw    = obs_yaw;
 
         context.posteriors_state           = StateVector::Zero();
         context.posteriors_state[kStateX]  = center.x();
@@ -336,21 +357,18 @@ public:
         context.posteriors_state[kStateRL] = 0.2;
         context.posteriors_state[kStateHL] = 0.0;
 
-        context.set_noise(config);
-        context.reset_covariance();
-
         // 验证 PnP yaw：选可见装甲板数更多的朝向
-        observable.update(center_pt, yaw, 0.2, 0.2, 0.0);
+        observable.update(center, yaw, 0.2, 0.2, 0.0);
         const auto orig_count = observable.visible_armors().size();
 
         const auto alt_yaw = util::normalize_angle(yaw + std::numbers::pi);
-        observable.update(center_pt, alt_yaw, 0.2, 0.2, 0.0);
+        observable.update(center, alt_yaw, 0.2, 0.2, 0.0);
         const auto alt_count = observable.visible_armors().size();
 
         if (alt_count > orig_count) yaw = alt_yaw;
 
         context.posteriors_state[kStateA] = yaw;
-        observable.update(center_pt, yaw, 0.2, 0.2, 0.0);
+        observable.update(center, yaw, 0.2, 0.2, 0.0);
     }
 
     auto predict(double dt) noexcept -> void {
@@ -370,24 +388,30 @@ public:
         context.posteriors_covariance =
             jacobian * context.posteriors_covariance * jacobian.transpose() + context.noise_process;
 
-        observable.update(Point3d { next[kStateX], next[kStateY], next[kStateZ] }, next[kStateA],
-            next[kStateRF], next[kStateRL], next[kStateHL]);
+        observable.update(
+            {
+                next[kStateX],
+                next[kStateY],
+                next[kStateZ],
+            },
+            next[kStateA], next[kStateRF], next[kStateRL], next[kStateHL]);
     }
 
-    auto update(
-        const Eigen::Vector2d& upper, const Eigen::Vector2d& lower, int lightbar_id) noexcept {
+    auto update(const Eigen::Vector2d& upper, const Eigen::Vector2d& lower, int id) noexcept {
+
         const auto prior_state      = context.posteriors_state;
         const auto prior_covariance = context.posteriors_covariance;
 
-        const auto pred_upper = observable.upper[lightbar_id];
-        const auto pred_lower = observable.lower[lightbar_id];
+        const auto pred_upper = observable.upper2d[id];
+        const auto pred_lower = observable.lower2d[id];
 
         // innovation (4D)
-        Eigen::Vector4d innovation;
+        auto innovation = Eigen::Vector4d { };
         innovation << upper.x() - pred_upper.x(), upper.y() - pred_upper.y(),
             lower.x() - pred_lower.x(), lower.y() - pred_lower.y();
+
         // H (4×11): geometry Jacobian
-        const auto jacobian = make_observation_jacobian(lightbar_id);
+        const auto jacobian = make_observation_jacobian(id);
         if (jacobian.hasNaN()) {
             return;
         }
@@ -424,23 +448,27 @@ public:
         context.posteriors_covariance = posterior_covariance;
 
         // 刷新 observable，下个灯条用最新状态预测
-        observable.update(Point3d { posterior_state[kStateX], posterior_state[kStateY],
-                              posterior_state[kStateZ] },
+        observable.update(
+            {
+                posterior_state[kStateX],
+                posterior_state[kStateY],
+                posterior_state[kStateZ],
+            },
             posterior_state[kStateA], posterior_state[kStateRF], posterior_state[kStateRL],
             posterior_state[kStateHL]);
     }
 
-    auto full() const -> std::array<Armor3d, 4> {
-        const auto s = context.posteriors_state;
-
+    auto full() const {
         auto solution = RobotSolution { };
-        solution.input.center =
-            Translation { Eigen::Vector3d { s[kStateX], s[kStateY], s[kStateZ] } };
-        solution.input.toward         = Orientation { Eigen::Quaterniond {
-            Eigen::AngleAxisd { s[kStateA], Eigen::Vector3d::UnitZ() } } };
-        solution.input.radius_forward = s[kStateRF];
-        solution.input.radius_lateral = s[kStateRL];
-        solution.input.height_lateral = s[kStateHL];
+
+        const auto state = context.posteriors_state;
+
+        solution.input.center = Eigen::Vector3d { state[kStateX], state[kStateY], state[kStateZ] };
+        solution.input.toward =
+            Eigen::Quaterniond { Eigen::AngleAxisd { state[kStateA], Eigen::Vector3d::UnitZ() } };
+        solution.input.radius_forward = state[kStateRF];
+        solution.input.radius_lateral = state[kStateRL];
+        solution.input.height_lateral = state[kStateHL];
         solution.input.genre          = genre;
         solution.input.color          = color;
 
@@ -448,14 +476,14 @@ public:
     }
 
     auto correct(std::span<const Armor2d> armors, std::span<const Lightbar2d> lightbars) noexcept {
+        const auto& state = context.posteriors_state;
         observable.update(
-            Point3d {
-                context.posteriors_state[kStateX],
-                context.posteriors_state[kStateY],
-                context.posteriors_state[kStateZ],
+            {
+                state[kStateX],
+                state[kStateY],
+                state[kStateZ],
             },
-            context.posteriors_state[kStateA], context.posteriors_state[kStateRF],
-            context.posteriors_state[kStateRL], context.posteriors_state[kStateHL]);
+            state[kStateA], state[kStateRF], state[kStateRL], state[kStateHL]);
 
         struct SortedEntry {
             int assigned_id;
@@ -476,13 +504,13 @@ public:
                 if (!observable.visible[left_id] || !observable.visible[right_id]) continue;
 
                 const auto error_0 = squared_distance(
-                    Eigen::Vector2d { armor.tl.x, armor.tl.y }, observable.upper[left_id]);
+                    Eigen::Vector2d { armor.tl.x, armor.tl.y }, observable.upper2d[left_id]);
                 const auto error_1 = squared_distance(
-                    Eigen::Vector2d { armor.bl.x, armor.bl.y }, observable.lower[left_id]);
+                    Eigen::Vector2d { armor.bl.x, armor.bl.y }, observable.lower2d[left_id]);
                 const auto error_2 = squared_distance(
-                    Eigen::Vector2d { armor.tr.x, armor.tr.y }, observable.upper[right_id]);
+                    Eigen::Vector2d { armor.tr.x, armor.tr.y }, observable.upper2d[right_id]);
                 const auto error_3 = squared_distance(
-                    Eigen::Vector2d { armor.br.x, armor.br.y }, observable.lower[right_id]);
+                    Eigen::Vector2d { armor.br.x, armor.br.y }, observable.lower2d[right_id]);
                 const auto sum = error_0 + error_1 + error_2 + error_3;
 
                 if (sum >= best_error_sum) continue;
@@ -504,10 +532,8 @@ public:
         for (const auto& lightbar : lightbars) {
             sorted.push_back({
                 -1,
-                Eigen::Vector2d {
-                    static_cast<double>(lightbar.upper.x), static_cast<double>(lightbar.upper.y) },
-                Eigen::Vector2d {
-                    static_cast<double>(lightbar.lower.x), static_cast<double>(lightbar.lower.y) },
+                Eigen::Vector2d { lightbar.upper.x, lightbar.upper.y },
+                Eigen::Vector2d { lightbar.lower.x, lightbar.lower.y },
             });
         }
 
@@ -516,20 +542,20 @@ public:
 
         // Step 3: 锚定位 → 向两侧递推
         {
-            auto anchor_left  = std::size_t { 0 };
-            auto anchor_right = std::size_t { 0 };
-            auto min_dist_l   = std::numeric_limits<double>::max();
-            auto min_dist_r   = std::numeric_limits<double>::max();
+            auto anchor_left    = std::size_t { 0 };
+            auto anchor_right   = std::size_t { 0 };
+            auto min_distance_l = std::numeric_limits<double>::max();
+            auto min_distance_r = std::numeric_limits<double>::max();
             for (std::size_t i = 0; i < sorted.size(); ++i) {
-                const auto dx_l = std::abs(sorted[i].upper.x() - anchor_armor->tl.x);
-                const auto dx_r = std::abs(sorted[i].upper.x() - anchor_armor->tr.x);
-                if (dx_l < min_dist_l) {
-                    min_dist_l  = dx_l;
-                    anchor_left = i;
+                const auto distance_l = std::abs(sorted[i].upper.x() - anchor_armor->tl.x);
+                const auto distance_r = std::abs(sorted[i].upper.x() - anchor_armor->tr.x);
+                if (distance_l < min_distance_l) {
+                    min_distance_l = distance_l;
+                    anchor_left    = i;
                 }
-                if (dx_r < min_dist_r) {
-                    min_dist_r   = dx_r;
-                    anchor_right = i;
+                if (distance_r < min_distance_r) {
+                    min_distance_r = distance_r;
+                    anchor_right   = i;
                 }
             }
 
@@ -543,30 +569,53 @@ public:
                 sorted[i - 1].assigned_id = (sorted[i].assigned_id - 1 + 8) % 8;
         }
 
-        // Step 4: EKF update + println + 填 tracked
+        // Step 4: EKF update + 填 tracked
         addition.tracked.clear();
-        std::print("[match] ");
         for (const auto& entry : sorted) {
             update(entry.upper, entry.lower, entry.assigned_id);
-            std::print("{}@{:.0f} ", entry.assigned_id, entry.upper.x());
             addition.tracked.push_back(
                 { entry.assigned_id, Point2d { entry.upper.x(), entry.upper.y() } });
+        }
+
+        for (auto&& [index, armor] : std::views::enumerate(addition.armors)) {
+            const auto l = static_cast<int>(index) * 2;
+            const auto r = l + 1;
+
+            armor.genre = genre;
+            armor.color = color;
+
+            const auto& upper = observable.upper2d;
+            const auto& lower = observable.lower2d;
+
+            armor.tl = { static_cast<float>(upper[l].x()), static_cast<float>(upper[l].y()) };
+            armor.tr = { static_cast<float>(upper[r].x()), static_cast<float>(upper[r].y()) };
+            armor.br = { static_cast<float>(lower[r].x()), static_cast<float>(lower[r].y()) };
+            armor.bl = { static_cast<float>(lower[l].x()), static_cast<float>(lower[l].y()) };
         }
     }
 };
 
-RobotModel::RobotModel(std::span<const Armor2d> armors, const Config& cfg) noexcept
-    : pimpl { std::make_unique<Impl>(armors, cfg) } { }
+RobotModel::RobotModel(const Config& cfg) noexcept
+    : pimpl { std::make_unique<Impl>(cfg) } { }
 
 RobotModel::~RobotModel() noexcept = default;
 
 auto RobotModel::configure(const Config& cfg) noexcept -> void { pimpl->config = cfg; }
 
+auto RobotModel::configure_camera(
+    std::array<double, 9> matrix, std::array<double, 5> coeff) noexcept -> void {
+    pimpl->configure_camera(matrix, coeff);
+}
+
+auto RobotModel::start_with(std::span<const Armor2d> armors) noexcept -> void {
+    pimpl->start_with(armors);
+}
+
 auto RobotModel::predict(double dt) noexcept -> void { pimpl->predict(dt); }
 
-auto RobotModel::correct(std::span<const Armor2d> a, std::span<const Lightbar2d> l) noexcept
-    -> void {
-    pimpl->correct(a, l);
+auto RobotModel::correct(
+    std::span<const Armor2d> armors, std::span<const Lightbar2d> lightbars) noexcept -> void {
+    pimpl->correct(armors, lightbars);
 }
 
 auto RobotModel::state() noexcept -> State { return pimpl->context.get_state(); }

@@ -410,13 +410,23 @@ auto main() -> int {
             }
 
             if (!model && !fake_armor2ds.empty()) {
-                auto rcfg           = RobotModel::Config { };
-                rcfg.camera_feature = projector.camera;
-                model = std::make_unique<RobotModel>(std::span { fake_armor2ds }, rcfg);
+                auto rcfg = RobotModel::Config { };
+                model     = std::make_unique<RobotModel>(rcfg);
+
+                const auto& cm = projector.camera.camera_matrix;
+                model->configure_camera(
+                    { cm[0][0], cm[0][1], cm[0][2],
+                      cm[1][0], cm[1][1], cm[1][2],
+                      cm[2][0], cm[2][1], cm[2][2] },
+                    projector.camera.distort_coeff);
             }
 
             if (model) {
-                model->predict(kDt);
+                if (frame_index == 0) {
+                    model->start_with(fake_armor2ds);
+                } else {
+                    model->predict(kDt);
+                }
                 model->correct(fake_armor2ds, fake_lightbars);
 
                 // 打印真值可见灯条（成对放 []）+ yaw

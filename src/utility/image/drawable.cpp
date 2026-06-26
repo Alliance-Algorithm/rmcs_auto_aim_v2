@@ -23,6 +23,23 @@ namespace details {
 
 }
 
+auto Canvas::draw(const ArmorShape& armor) -> void {
+    auto& mat = canvas.details().mat;
+
+    const auto& color = armor.color;
+    const auto& shape = armor.shape;
+
+    cv::circle(mat, shape.tl, 2, color, -1);
+    cv::circle(mat, shape.tr, 2, color, -1);
+    cv::circle(mat, shape.br, 2, color, -1);
+    cv::circle(mat, shape.bl, 2, color, -1);
+
+    cv::line(mat, shape.tl, shape.tr, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.tr, shape.br, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.br, shape.bl, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.bl, shape.tl, color, line_thickness, cv::LINE_AA);
+}
+
 auto Canvas::draw(const Armor2d& armor) -> void {
     auto& mat = canvas.details().mat;
 
