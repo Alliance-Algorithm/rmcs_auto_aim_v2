@@ -323,7 +323,7 @@ public:
                 const auto sign = in_right ? +1 : -1;
                 if (rotation_sign == 0) {
                     if (sign == pending_sign) {
-                        ++sign_evidence_count;
+                        sign_evidence_count++;
                     } else {
                         pending_sign        = sign;
                         sign_evidence_count = 1;

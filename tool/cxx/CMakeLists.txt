@@ -10,6 +10,7 @@ set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(OpenVINO REQUIRED)
 
 find_package(OpenCV 4 REQUIRED)
@@ -80,6 +81,26 @@ target_link_libraries(
     rclcpp::rclcpp
     ${visualization_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
+)
+
+add_executable(
+    test_robot_ekf
+    ${TOOL_DIR}/test_robot_ekf.cpp
+    ${RMCS_SRC_DIR}/module/predictor/model/robot.cpp
+    ${RMCS_SRC_DIR}/utility/math/robot.cpp
+    ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
+    ${RMCS_SRC_DIR}/utility/math/camera.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+    ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
+)
+target_link_libraries(
+    test_robot_ekf
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+    ${sensor_msgs_LIBRARIES}
+    ${OpenCV_LIBS}
 )
 
 add_executable(

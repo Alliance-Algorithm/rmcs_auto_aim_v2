@@ -7,6 +7,8 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/predictor/model/robot.hpp"
+
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -14,11 +16,13 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
+#include "utility/time.hpp"
 
 #include <csignal>
 #include <experimental/scope>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <thread>
 
 using namespace rmcs;
@@ -36,6 +40,9 @@ struct AutoAim::Impl {
     Visualization visual { };
 
     std::jthread worker;
+
+    std::unique_ptr<RobotModel> robot_model;
+    std::optional<TimePoint> last_model_time;
 
     auto run(AutoAim& self, const std::stop_token& stop) -> void {
         using namespace std::chrono_literals;
@@ -120,6 +127,24 @@ struct AutoAim::Impl {
                 if (armors_3d.empty()) continue;
 
                 visual.publish(armors_3d, "visible_armors");
+            }
+
+            { // @NOTE: 临时 RobotModel 可视化
+
+                // const auto now = image->get_timestamp();
+                //
+                // if (!robot_model) {
+                //     robot_model = std::make_unique<RobotModel>(armors_3d.front());
+                // } else if (last_model_time.has_value()) {
+                //     const auto dt = delta_time(now, *last_model_time).count();
+                //     robot_model->predict(dt);
+                // }
+                //
+                // robot_model->correct(armors_3d.front());
+                // last_model_time = now;
+                //
+                // const auto estimated = robot_model->full();
+                // visual.publish(std::span { estimated }, "robot_model");
             }
 
             /// 3. Apply Tracker

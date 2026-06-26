@@ -26,7 +26,7 @@ struct RegularRobotState::Impl {
     CampColor color { CampColor::UNKNOWN };
     int armor_num { 0 };
 
-    EKF ekf { EKF {} };
+    EKF ekf { EKF { } };
 
     bool initialized { false };
     int update_count { 0 };
@@ -105,7 +105,7 @@ struct RegularRobotState::Impl {
 
 private:
     auto decide_match(Armor3d const& armor) const -> MatchDecision {
-        if (!initialized || armor.genre != device) return {};
+        if (!initialized || armor.genre != device) return { };
 
         auto armors_xyza = calculate_armors(ekf.x);
 
@@ -142,7 +142,7 @@ private:
             min_error             = error;
         }
 
-        if (best_matched_armor_id == kUnknownMatchedArmorId) return {};
+        if (best_matched_armor_id == kUnknownMatchedArmorId) return { };
 
         return {
             .matched_armor_id = best_matched_armor_id,
@@ -152,7 +152,7 @@ private:
     }
 
     auto select_best_match(std::span<Armor3d const> armors) const -> std::optional<BestMatch> {
-        auto best_match = std::optional<BestMatch> {};
+        auto best_match = std::optional<BestMatch> { };
         for (std::size_t observation_index = 0; observation_index < armors.size();
             ++observation_index) {
             auto decision = decide_match(armors[observation_index]);
@@ -179,7 +179,7 @@ private:
         auto const orientation = Eigen::Quaterniond { quat_w, quat_x, quat_y, quat_z };
         auto const ypr         = util::eulers(orientation);
 
-        auto z = EKF::ZVec {};
+        auto z = EKF::ZVec { };
         z << ypd[0], ypd[1], ypd[2], ypr[0];
 
         ekf.update(
@@ -194,7 +194,7 @@ private:
     }
 
     auto calculate_armors(EKF::XVec const& x) const -> std::vector<Eigen::Vector4d> {
-        auto armors = std::vector<Eigen::Vector4d> {};
+        auto armors = std::vector<Eigen::Vector4d> { };
         armors.reserve(armor_num);
         for (int i = 0; i < armor_num; ++i) {
             auto angle = EKFParameters::armor_yaw(device, x, i);

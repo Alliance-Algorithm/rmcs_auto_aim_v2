@@ -4,6 +4,10 @@
 #include "module/tracker/decider.hpp"
 #include "utility/serializable.hpp"
 
+#include <unordered_map>
+
+using std::move;
+
 using namespace rmcs::kernel;
 using namespace rmcs::tracker;
 
@@ -17,6 +21,36 @@ struct Tracker::Impl {
     };
 
     Config config;
+
+    static auto remove_duplicate_armors(const std::vector<Armor2d>& armors) {
+
+        auto best_armors = std::unordered_map<ArmorGenre, Armor2d> { };
+
+        for (const auto& armor : armors) {
+            auto left_center  = 0.5f * (armor.tl + armor.bl);
+            auto right_center = 0.5f * (armor.tr + armor.br);
+            auto distance     = cv::norm(right_center - left_center);
+
+            auto it = best_armors.find(armor.genre);
+            if (it == best_armors.end()) {
+                best_armors[armor.genre] = armor;
+            } else {
+                auto existing_left  = 0.5f * (it->second.tl + it->second.bl);
+                auto existing_right = 0.5f * (it->second.tr + it->second.br);
+                auto existing_dist  = cv::norm(existing_right - existing_left);
+                if (distance > existing_dist) {
+                    it->second = armor;
+                }
+            }
+        }
+
+        auto result = std::vector<Armor2d> { };
+        result.reserve(best_armors.size());
+        for (auto& [genre, armor] : best_armors) {
+            result.push_back(armor);
+        }
+        return result;
+    }
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
         auto result = config.serialize(yaml);
