@@ -1,12 +1,5 @@
 #pragma once
 
-// TODO: 旋转轴从相机系变换到 odom 系（当前假设 camera≡odom，旋转轴垂水平面）
-//       方案 A: correct() 入口用 camera_transform 把观测变到 odom 系
-//       方案 B: State 增加旋转轴方向（3维），扩展 Jacobian ∂p3d/∂axis
-//
-// TODO: 接入邻侧灯条识别（参考前哨站 pose_estimator 的邻侧灯条算法）
-//       提取 Lightbar2d 列表，喂给 correct(armors_2d, lightbars_2d)
-
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
@@ -36,6 +29,11 @@ public:
         double radius_lateral = 0.2;
 
         double height_lateral = 0.0;
+
+        auto transition(double seconds) -> void;
+
+        auto aimpoints() const -> std::vector<Point3d>;
+        auto direction() const -> Point3d;
     };
     struct Config {
         static constexpr double kRadiusMin = 0.1;
@@ -92,8 +90,9 @@ public:
 
     auto configure_camera(std::array<double, 9>, std::array<double, 5>) noexcept -> void;
 
-    auto start_with(std::span<const Armor2d>) noexcept -> void;
+    auto update_transform(const Transform&) noexcept -> void;
 
+    auto start_with(std::span<const Armor2d>) noexcept -> bool;
     auto predict(double dt) noexcept -> void;
     auto correct(std::span<const Armor2d>, std::span<const Lightbar2d>) noexcept -> void;
 

@@ -80,9 +80,6 @@ auto RobotSolution::solve_lightbars() -> std::array<Lightbar3d, 8> {
         const auto y_axis = Eigen::Vector3d { poses[i].orientation * Eigen::Vector3d::UnitY() };
         const auto z_axis = Eigen::Vector3d { poses[i].orientation * Eigen::Vector3d::UnitZ() };
 
-        const auto neg_y_center = poses[i].translation - y_axis * half_w;
-        const auto pos_y_center = poses[i].translation + y_axis * half_w;
-
         // 逆时针: px=0(−Y)/1(+Y), py=2(+X)/3(−X), nx=4(+Y)/5(−Y), ny=6(−X)/7(+X)
         const auto center = Eigen::Vector3d { poses[i].translation };
         const auto ev_pt  = Eigen::Vector3d { center + y_axis * half_w };

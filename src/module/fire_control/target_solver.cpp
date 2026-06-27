@@ -22,37 +22,39 @@ struct TargetSolver::Impl {
 
     static auto make_candidates(predictor::Snapshot const& snapshot, TimePoint sample_time)
         -> std::vector<ArmorCandidate> {
-        auto candidates       = std::vector<ArmorCandidate> {};
+        auto candidates       = std::vector<ArmorCandidate> { };
         auto predicted_armors = snapshot.predicted_armors(sample_time);
         auto predicted_motion = snapshot.motion_at(sample_time);
         candidates.reserve(predicted_armors.size());
 
         for (auto const& armor : predicted_armors) {
-            candidates.emplace_back(ArmorCandidate {
-                .armor  = armor,
-                .motion = predicted_motion,
-            });
+            candidates.emplace_back(
+                ArmorCandidate {
+                    .armor  = armor,
+                    .motion = predicted_motion,
+                });
         }
 
         return candidates;
     }
 
-    static auto solve(predictor::Snapshot const& snapshot, int armor_id, TimePoint command_time,
+    static auto solve(
+        predictor::Snapshot const& snapshot, int armor_id, TimePoint command_time,
         double bullet_speed, double shoot_delay) -> std::expected<TargetSolution, std::string> {
         auto target_motion    = snapshot.motion_at(command_time);
         auto target_position  = target_motion.center_position.make<Eigen::Vector3d>();
         auto current_fly_time = target_position.norm() / bullet_speed;
 
-        auto result = std::optional<TargetSolution> {};
+        auto result = std::optional<TargetSolution> { };
 
         for (int i = 0; i < kMaxIterateCount; ++i) {
-            auto const elapsed_command_time =
-                std::chrono::duration<double>(command_time - snapshot.time_stamp()).count();
+            auto const elapsed_command_time
+                = std::chrono::duration<double>(command_time - snapshot.time_stamp()).count();
             auto const remaining_shoot_delay = std::max(0.0, shoot_delay - elapsed_command_time);
             auto const total_predict_time    = remaining_shoot_delay + current_fly_time;
             auto const t_target              = command_time
                 + std::chrono::duration_cast<Duration>(
-                    std::chrono::duration<double>(total_predict_time));
+                                      std::chrono::duration<double>(total_predict_time));
 
             auto predicted_motion = snapshot.motion_at(t_target);
             auto sample           = sample_at(snapshot, armor_id, t_target, bullet_speed);
@@ -85,7 +87,7 @@ private:
             return std::unexpected { "invalid target distance" };
         }
 
-        auto solution                  = TrajectorySolution {};
+        auto solution                  = TrajectorySolution { };
         solution.input.v0              = bullet_speed;
         solution.input.target_position = aim_point;
 
@@ -101,10 +103,11 @@ private:
         };
     }
 
-    static auto sample_at(predictor::Snapshot const& snapshot, int armor_id, TimePoint t,
-        double bullet_speed) -> std::expected<AimSample, std::string> {
+    static auto
+    sample_at(predictor::Snapshot const& snapshot, int armor_id, TimePoint t, double bullet_speed)
+        -> std::expected<AimSample, std::string> {
         auto predicted_armors = snapshot.predicted_armors(t);
-        auto chosen_armor     = std::optional<Armor3d> {};
+        auto chosen_armor     = std::optional<Armor3d> { };
         for (auto const& armor : predicted_armors) {
             if (armor.id != armor_id) continue;
             chosen_armor = armor;
@@ -112,7 +115,7 @@ private:
         }
         if (!chosen_armor.has_value()) return std::unexpected { "locked armor id not found" };
 
-        auto aim_point = Eigen::Vector3d {};
+        auto aim_point = Eigen::Vector3d { };
         chosen_armor->translation.copy_to(aim_point);
 
         auto attitude = solve_aim_attitude(aim_point, bullet_speed);
@@ -135,7 +138,8 @@ auto TargetSolver::make_candidates(predictor::Snapshot const& snapshot, TimePoin
     return pimpl->make_candidates(snapshot, sample_time);
 }
 
-auto TargetSolver::solve(predictor::Snapshot const& snapshot, int armor_id, TimePoint command_time,
-    double bullet_speed, double shoot_delay) const -> std::expected<TargetSolution, std::string> {
+auto TargetSolver::solve(
+    predictor::Snapshot const& snapshot, int armor_id, TimePoint command_time, double bullet_speed,
+    double shoot_delay) const -> std::expected<TargetSolution, std::string> {
     return pimpl->solve(snapshot, armor_id, command_time, bullet_speed, shoot_delay);
 }

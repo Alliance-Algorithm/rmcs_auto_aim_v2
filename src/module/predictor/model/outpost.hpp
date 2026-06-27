@@ -18,6 +18,13 @@ public:
         // 以参考装甲板朝向为基准的角速度与 yaw 角
         double rotation_speed;
         double rotation_angle;
+
+        std::uint8_t index = 0;
+
+        auto transition(double seconds) -> void;
+
+        auto direction() const -> Point3d;
+        auto aimpoints() const -> std::vector<Point3d>;
     };
 
     struct Config {

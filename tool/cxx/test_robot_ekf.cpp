@@ -414,16 +414,18 @@ auto main() -> int {
                 model     = std::make_unique<RobotModel>(rcfg);
 
                 const auto& cm = projector.camera.camera_matrix;
-                model->configure_camera(
-                    { cm[0][0], cm[0][1], cm[0][2],
-                      cm[1][0], cm[1][1], cm[1][2],
-                      cm[2][0], cm[2][1], cm[2][2] },
+                model->configure_camera({ cm[0][0], cm[0][1], cm[0][2], cm[1][0], cm[1][1],
+                                            cm[1][2], cm[2][0], cm[2][1], cm[2][2] },
                     projector.camera.distort_coeff);
             }
 
             if (model) {
                 if (frame_index == 0) {
-                    model->start_with(fake_armor2ds);
+                    if (!model->start_with(fake_armor2ds)) {
+                        std::println("[test] start_with failed");
+                        frame_index = 0;
+                        continue;
+                    }
                 } else {
                     model->predict(kDt);
                 }

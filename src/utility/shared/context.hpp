@@ -41,7 +41,7 @@ struct SystemContext {
     double yaw { kNaN };
     double pitch { kNaN };
 
-    Transform camera_transform = Transform::kNaN();
+    Transform camera_transform = Transform::kIdentity();
 
     /// Lazy Context
     ///

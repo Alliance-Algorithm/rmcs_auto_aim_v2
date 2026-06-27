@@ -18,7 +18,10 @@ class Identifier {
 public:
     struct Result {
         Armor2ds armors;
+
+        Lightbar2ds lightbars;
         std::optional<cv::Rect2i> green_light;
+
         std::vector<cv::Rect2i> areas;
     };
 

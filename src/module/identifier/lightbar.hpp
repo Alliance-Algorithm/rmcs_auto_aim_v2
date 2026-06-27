@@ -4,14 +4,16 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 
+#include <optional>
+
 namespace rmcs {
 
 struct LightbarFinder {
     struct Input {
         cv::Mat source;
         CampColor color;
-        cv::Point2i predicted_upper;
-        cv::Point2i predicted_lower;
+        std::optional<cv::Point2i> predicted_upper;
+        std::optional<cv::Point2i> predicted_lower;
     } input;
 
     struct Result {

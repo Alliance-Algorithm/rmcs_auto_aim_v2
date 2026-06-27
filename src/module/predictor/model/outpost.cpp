@@ -9,6 +9,40 @@
 using namespace rmcs;
 using namespace rmcs::util;
 
+constexpr auto kRadius     = kOutpostRadius;
+constexpr auto kPitch      = kPredictedOutpostArmorPitch;
+constexpr auto kHeightStep = kOutpostArmorHeightStep;
+constexpr auto kAngleStep  = 2.0 * std::numbers::pi / 3.0;
+
+constexpr auto kOffsetTable = std::array {
+    std::tuple { 0.0 * kAngleStep, -0.0 * kHeightStep },
+    std::tuple { 1.0 * kAngleStep, -1.0 * kHeightStep },
+    std::tuple { 2.0 * kAngleStep, -2.0 * kHeightStep },
+};
+
+auto OutpostModel::State::transition(double seconds) -> void {
+    rotation_angle = util::normalize_angle(rotation_angle + rotation_speed * seconds);
+}
+
+auto OutpostModel::State::direction() const -> Point3d { return Point3d { x, y, z }; }
+
+auto OutpostModel::State::aimpoints() const -> std::vector<Point3d> {
+    const auto& [ref_yaw_off, ref_h_off] = kOffsetTable[index];
+
+    auto result = std::vector<Point3d> { };
+    for (int i = 0; i < 3; ++i) {
+        const auto& [yaw_off, h_off] = kOffsetTable[i];
+
+        const auto pa = util::normalize_angle(rotation_angle + (yaw_off - ref_yaw_off));
+        const auto px = x + kRadius * std::cos(pa);
+        const auto py = y + kRadius * std::sin(pa);
+        const auto pz = z + (h_off - ref_h_off);
+
+        result.emplace_back(px, py, pz);
+    }
+    return result;
+}
+
 struct OutpostModel::Impl {
     using StateVector         = Eigen::Matrix<double, 5, 1>;
     using Covariance          = Eigen::Matrix<double, 5, 5>;
@@ -190,8 +224,9 @@ private:
         return jacobian * covariance * jacobian.transpose() + context.noise_process;
     }
 
-    static auto measure_innovation(
-        const ObservationVector& observation, const StateVector& prior_state) -> ObservationVector {
+    static auto
+    measure_innovation(const ObservationVector& observation, const StateVector& prior_state)
+        -> ObservationVector {
 
         auto predicted_observation = ObservationVector { };
         predicted_observation << prior_state[0], prior_state[1], prior_state[2], prior_state[4];
@@ -204,14 +239,15 @@ private:
     auto calculate_kalman_gain(const Covariance& prior_covariance) const -> KalmanGain {
         const auto jacobian = make_observation_jacobian();
 
-        const auto innovation_covariance =
-            jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
+        const auto innovation_covariance
+            = jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
 
         return prior_covariance * jacobian.transpose()
             * innovation_covariance.ldlt().solve(ObservationNoise::Identity());
     }
 
-    auto a_posteriori_update(const StateVector& prior_state, const Covariance& prior_covariance,
+    auto a_posteriori_update(
+        const StateVector& prior_state, const Covariance& prior_covariance,
         const KalmanGain& kalman_gain, const ObservationVector& innovation,
         const ObservationJacobian& jacobian) const -> std::pair<StateVector, Covariance> {
 
@@ -222,8 +258,8 @@ private:
         const auto complement          = Covariance::Identity() - kalman_gain * jacobian;
         auto posterior_covariance      = Covariance { };
         posterior_covariance.noalias() = complement * prior_covariance * complement.transpose();
-        posterior_covariance +=
-            (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
+        posterior_covariance
+            += (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
         posterior_covariance = 0.5 * (posterior_covariance + posterior_covariance.transpose());
 
         return { posterior_state, posterior_covariance };
@@ -231,8 +267,7 @@ private:
 
 public:
     explicit Impl(const Armor3d& armor) noexcept {
-        constexpr auto pitch  = kPredictedOutpostArmorPitch;
-        constexpr auto radius = kOutpostRadius;
+        constexpr auto pitch = kPredictedOutpostArmorPitch;
 
         // 装甲板元信息
         armor_genre = armor.genre;
@@ -241,16 +276,16 @@ public:
         const auto translation = armor.translation.make<Eigen::Vector3d>();
         const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
 
-        const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
-        const auto armor_to_center = Eigen::Vector3d {
-            Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() } * backward
-        };
-        const auto center = Eigen::Vector3d { translation + radius * armor_to_center };
+        const auto backward = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
+        const auto armor2center
+            = Eigen::Vector3d { Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() }
+                                * backward };
+        const auto center = Eigen::Vector3d { translation + kRadius * armor2center };
 
         context.update_center(center);
         context.posteriors_state[3] = 0.0;
-        context.posteriors_state[4] =
-            util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
+        context.posteriors_state[4]
+            = util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
 
         context.set_noise(config);
         context.reset_covariance();
@@ -285,15 +320,15 @@ public:
             const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
             const auto translation = armor.translation.make<Eigen::Vector3d>();
 
-            const auto backward        = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
-            const auto armor_to_center = Eigen::Vector3d {
+            const auto backward     = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
+            const auto armor2center = Eigen::Vector3d {
                 Eigen::AngleAxisd { -kPitch, orientation * Eigen::Vector3d::UnitY() } * backward
             };
 
-            const auto center = Eigen::Vector3d { translation + kOutpostRadius * armor_to_center };
+            const auto center = Eigen::Vector3d { translation + kRadius * armor2center };
 
-            const auto armor_yaw =
-                util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
+            const auto armor_yaw
+                = util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
 
             observation << center.x(), center.y(), center.z(), armor_yaw;
         }
@@ -372,8 +407,8 @@ public:
         const auto kalman_gain = calculate_kalman_gain(prior_covariance);
         const auto jacobian    = make_observation_jacobian();
 
-        const auto [posterior_state, posterior_covariance] =
-            a_posteriori_update(prior_state, prior_covariance, kalman_gain, innovation, jacobian);
+        const auto [posterior_state, posterior_covariance]
+            = a_posteriori_update(prior_state, prior_covariance, kalman_gain, innovation, jacobian);
 
         context.posteriors_state      = posterior_state;
         context.posteriors_covariance = posterior_covariance;
@@ -386,35 +421,27 @@ public:
     }
 
     auto at(std::uint8_t index) const noexcept -> Armor3d {
-        constexpr auto kOffsetTable = std::array {
-            std::tuple { 0 * std::numbers::pi * 2 / 3, -0 * kOutpostArmorHeightStep }, // 高
-            std::tuple { 1 * std::numbers::pi * 2 / 3, -1 * kOutpostArmorHeightStep }, // 中
-            std::tuple { 2 * std::numbers::pi * 2 / 3, -2 * kOutpostArmorHeightStep }, // 低
-        };
-        constexpr auto kRadius = kOutpostRadius;
-        constexpr auto kPitch  = kPredictedOutpostArmorPitch;
-
         // EKF state 跟踪参考板（ref_index），求 index 相对 ref_index 的偏移
         const auto delta_yaw = util::normalize_angle(
             std::get<0>(kOffsetTable[index]) - std::get<0>(kOffsetTable[abs_ref_index]));
-        const auto delta_height =
-            std::get<1>(kOffsetTable[index]) - std::get<1>(kOffsetTable[abs_ref_index]);
+        const auto delta_height
+            = std::get<1>(kOffsetTable[index]) - std::get<1>(kOffsetTable[abs_ref_index]);
 
         // center→armor 方向的 yaw（state[4] 的约定）
-        const auto center_to_armor_yaw =
-            util::normalize_angle(context.posteriors_state[4] + delta_yaw);
+        const auto center2armor_yaw
+            = util::normalize_angle(context.posteriors_state[4] + delta_yaw);
 
         // 装甲板位置 = 旋转中心 + radius * center→armor 方向
         const auto armor_pos = Eigen::Vector3d {
-            context.posteriors_state[0] + kRadius * std::cos(center_to_armor_yaw),
-            context.posteriors_state[1] + kRadius * std::sin(center_to_armor_yaw),
+            context.posteriors_state[0] + kRadius * std::cos(center2armor_yaw),
+            context.posteriors_state[1] + kRadius * std::sin(center2armor_yaw),
             context.posteriors_state[2] + delta_height,
         };
 
         // 装甲板朝向约定：orientation 的 X 轴 = armor→center
         const auto orientation = Eigen::Quaterniond {
-            Eigen::AngleAxisd { center_to_armor_yaw + std::numbers::pi, Eigen::Vector3d::UnitZ() }
-            * Eigen::AngleAxisd { kPitch, Eigen::Vector3d::UnitY() }
+            Eigen::AngleAxisd { center2armor_yaw + std::numbers::pi, Eigen::Vector3d::UnitZ() }
+                * Eigen::AngleAxisd { kPitch, Eigen::Vector3d::UnitY() },
         };
 
         return Armor3d {
@@ -433,7 +460,11 @@ OutpostModel::OutpostModel(const Armor3d& armor) noexcept
 
 OutpostModel::~OutpostModel() noexcept = default;
 
-auto OutpostModel::state() noexcept -> State { return pimpl->context.get_state(); }
+auto OutpostModel::state() noexcept -> State {
+    auto s  = pimpl->context.get_state();
+    s.index = static_cast<std::uint8_t>(pimpl->abs_ref_index);
+    return s;
+}
 
 auto OutpostModel::configure(const Config& cfg) noexcept -> void { pimpl->configure(cfg); }
 

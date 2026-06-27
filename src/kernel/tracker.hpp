@@ -4,6 +4,7 @@
 #include <span>
 #include <yaml-cpp/yaml.h>
 
+#include "module/predictor/trackable.hpp"
 #include "module/tracker/decider.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
@@ -25,4 +26,27 @@ public:
 
     auto decide(std::span<Armor3d const> armors, TimePoint t) -> tracker::Decider::Output;
 };
+
+class TrackerV2 {
+    RMCS_PIMPL_DEFINITION(TrackerV2)
+
+public:
+    struct Addition {
+        std::vector<Armor2ds> tracked2d;
+        std::vector<Armor3ds> tracked3d;
+    };
+
+    explicit TrackerV2(const YAML::Node&);
+
+    auto clean(Timestamp) noexcept -> void;
+
+    auto store(std::span<const Armor2d>) -> void;
+    auto store(std::span<const Armor3d>) -> void;
+    auto store(std::span<const Lightbar2d>) -> void;
+
+    auto execute() -> Trackable::Unique;
+
+    auto addition() const -> const Addition&;
+};
+
 }

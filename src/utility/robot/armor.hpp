@@ -61,7 +61,7 @@ using Armor2ds = std::vector<Armor2d>;
 struct Armor3d {
     ArmorGenre genre;
     ArmorColor color;
-    int id;
+    int id = -1;
 
     Translation translation;
     Orientation orientation;
@@ -72,7 +72,9 @@ using Armor3ds = std::vector<Armor3d>;
 /// 用于前哨站的邻侧灯条识别，附加两个标志位用于标识
 /// 灯条相对于装甲板的方位
 struct Lightbar2d {
-    ArmorColor color;
+    ArmorGenre genre = ArmorGenre::UNKNOWN;
+    ArmorColor color = ArmorColor::DARK;
+
     Point2d upper;
     Point2d lower;
 

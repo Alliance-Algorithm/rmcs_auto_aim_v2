@@ -16,13 +16,11 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
-#include "utility/time.hpp"
 
 #include <csignal>
 #include <experimental/scope>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <thread>
 
 using namespace rmcs;
@@ -39,8 +37,10 @@ struct AutoAim::Impl {
     FireControl fire { };
     Visualization visual { };
 
+    std::unique_ptr<TrackerV2> tracker_v2;
+
     RobotModel robot_model { RobotModel::Config { } };
-    std::optional<TimePoint> last_model_time;
+    TimePoint last_model_time = TimePoint::min();
 
     std::jthread worker;
 
@@ -80,7 +80,8 @@ struct AutoAim::Impl {
             } };
 
             /// 1. Identify Armor
-            auto armors_2d = Armor2ds { };
+            auto armor2ds    = Armor2ds { };
+            auto lightbar2ds = Lightbar2ds { };
             {
                 auto result = identifier.sync_identify(*image);
                 if (!result.has_value()) continue;
@@ -101,17 +102,19 @@ struct AutoAim::Impl {
                 }
 
                 tracker.set_invincible_armors(context.invincible_devices);
-                armors_2d = tracker.filter_armors(result->armors);
+                armor2ds    = tracker.filter_armors(result->armors);
+                lightbar2ds = std::move(result->lightbars);
 
-                if (armors_2d.empty()) continue;
+                if (armor2ds.empty()) continue;
             }
 
             /// 2. Transform 2d to 3d
-            auto armors_3d = Armor3ds { };
+            /// @NOTE: 即将废弃，现在是 2d 观测直接输入 EKF 的时代了
+            auto armor3ds = Armor3ds { };
             {
                 estimator.update_camera_transform(context.camera_transform);
 
-                auto result = estimator.estimate_armor(armors_2d, *image);
+                auto result = estimator.estimate_armor(armor2ds, *image);
 
                 const auto& addition = estimator.addition();
                 visual.draw_later(addition.detected_2d);
@@ -123,48 +126,23 @@ struct AutoAim::Impl {
                 visual.publish(addition.detected_3d, "outpost_lightbars");
                 visual.publish({ addition.center_3d, Orientation::kIdentity() }, "outpost_center");
 
-                armors_3d = result;
-                if (armors_3d.empty()) continue;
-
-                visual.publish(armors_3d, "visible_armors");
+                armor3ds = std::move(result);
             }
+            visual.publish(armor3ds, "visible_armors");
 
-            { // @NOTE: 临时 RobotModel 可视化
-                const auto now = image->get_timestamp();
+            auto trackable = Trackable::Unique { };
+            {
+                tracker_v2->clean(image->get_timestamp());
 
-                if (last_model_time.has_value()) {
-                    const auto dt = delta_time(now, *last_model_time).count();
-                    robot_model.predict(dt);
-                } else {
-                    robot_model.start_with(armors_2d);
-                }
+                tracker_v2->store(armor2ds);
+                tracker_v2->store(armor3ds);
+                tracker_v2->store(lightbar2ds);
 
-                robot_model.correct(armors_2d, std::span<const Lightbar2d> { });
-                last_model_time = now;
-
-                const auto& addition = robot_model.addition();
-                for (const auto& tr : addition.tracked) {
-                    visual.draw_later(Canvas::Text {
-                        .content = std::to_string(tr.lightbar_id),
-                        .top_left =
-                            cv::Point2i {
-                                static_cast<int>(tr.point.x) + 8,
-                                static_cast<int>(tr.point.y) - 8,
-                            },
-                        .color = kYellow,
-                    });
-                }
-                for (const auto& armor : addition.armors) {
-                    visual.draw_later(Canvas::ArmorShape {
-                        .shape = armor,
-                        .color = cv::Scalar { 255, 255, 255, 64 },
-                    });
-                }
-                visual.publish(robot_model.full(), "robot_model");
+                trackable = tracker_v2->execute();
             }
 
             /// 3. Apply Tracker
-            auto target = tracker.decide(armors_3d, image->get_timestamp());
+            auto target = tracker.decide(armor3ds, image->get_timestamp());
             auto cmd    = AutoAimState::kInvalid();
             if (target.snapshot) {
                 auto& snapshot = target.snapshot;
@@ -263,6 +241,8 @@ struct AutoAim::Impl {
             auto config = configs["visualization"];
             handle_result("visualization", visual.initialize(config));
         }
+
+        tracker_v2 = std::make_unique<TrackerV2>(configs["tracker"]);
 
         worker = std::jthread([this, &self](const std::stop_token& stop) { run(self, stop); });
     }
