@@ -116,7 +116,7 @@ struct TrackerV2::Impl {
     Timestamp outpost_stamp;
     std::unique_ptr<OutpostModel> outpost;
 
-    /* 假装这里有一个大符的 Model */
+    /* @NOTE: 假装这里有一个大符的 Model */
 
     Printer logging { "TrackerV2" };
     Addition addition;
@@ -176,6 +176,8 @@ struct TrackerV2::Impl {
                 outpost = nullptr;
             }
         }
+        { // @NOTE: 假装这里有大符的超时处理
+        }
         // 机器人观测超时处理
         for (const auto [id, stamp] : robot_stamps) {
             const auto dt = std::chrono::duration<double> {
@@ -207,26 +209,36 @@ struct TrackerV2::Impl {
             constexpr auto kId = ArmorGenre::OUTPOST;
             if (seen.contains(kId)) {
                 const auto& armors = seen[kId].armor3ds;
+                /// @NOTE:
+                ///  前哨站为单装甲板输入(120 度，也只能看到一块)，邻侧灯条的信息
+                ///  已经在距离优化那个步骤消费掉了，所以这里不需要传入，有时间这
+                ///  里也会换成纯 2d 观测，到时候就完全不需要 Armor3d 了
                 if (!armors.empty()) {
                     if (outpost == nullptr) {
                         outpost = std::make_unique<OutpostModel>(armors.front());
                         outpost->configure(outpost_config);
-
-                        robot_stamps[kId] = timestamp;
                     } else {
-                        const auto dt = timestamp - robot_stamps[kId];
-                        const auto s  = std::chrono::duration<double> { dt };
+                        const auto dt = std::chrono::duration<double> {
+                            timestamp - outpost_stamp,
+                        };
+                        outpost->predict(dt.count());
+                        outpost->correct(armors.front());
+
+                        if (outpost->converge()) {
+                            std::ranges::copy(
+                                outpost->full(), std::back_inserter(addition.tracked3d));
+                        }
                     }
+                    outpost_stamp = timestamp;
                 }
                 seen.erase(kId);
             }
         }
-
+        { // @NOTE: 故作姿态地假装在迭代大符
+        }
         // 迭代机器人 Model
         for (const auto& [id, target] : seen) {
-            if (!robots.contains(id)) {
-                robot_stamps[id] = timestamp;
-
+            if (robots.contains(id) == false) {
                 robots.try_emplace(id, robot_config);
                 robots[id].configure_camera(
                     std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
@@ -242,7 +254,6 @@ struct TrackerV2::Impl {
                 const auto dt = std::chrono::duration<double> {
                     timestamp - robot_stamps[id],
                 };
-                robot_stamps[id] = timestamp;
 
                 auto& model = robots[id];
                 model.update_transform({
@@ -259,8 +270,12 @@ struct TrackerV2::Impl {
                         model.full(), std::back_inserter(addition.tracked3d));
                 }
             }
+            robot_stamps[id] = timestamp;
         }
-        return nullptr;
+
+        auto result = Trackable::Unique { };
+
+        return result;
     }
 };
 
