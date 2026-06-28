@@ -26,8 +26,8 @@ auto RobotModel::State::aimpoints() const -> std::vector<Point3d> {
     auto solution = RobotSolution { };
 
     solution.input.center = Eigen::Vector3d { x, y, z };
-    solution.input.toward
-        = Eigen::Quaterniond { Eigen::AngleAxisd { rotation_angle, Eigen::Vector3d::UnitZ() } };
+    solution.input.toward =
+        Eigen::Quaterniond { Eigen::AngleAxisd { rotation_angle, Eigen::Vector3d::UnitZ() } };
     solution.input.radius_forward = radius_forward;
     solution.input.radius_lateral = radius_lateral;
     solution.input.height_lateral = height_lateral;
@@ -132,8 +132,8 @@ struct RobotModel::Impl {
             auto solution = RobotSolution { };
 
             solution.input.center = center;
-            solution.input.toward
-                = Eigen::Quaterniond { Eigen::AngleAxisd { theta, Eigen::Vector3d::UnitZ() } };
+            solution.input.toward =
+                Eigen::Quaterniond { Eigen::AngleAxisd { theta, Eigen::Vector3d::UnitZ() } };
 
             solution.input.radius_forward = rf;
             solution.input.radius_lateral = rl;
@@ -152,10 +152,10 @@ struct RobotModel::Impl {
                 upper3d[i] = upper_camera;
                 lower3d[i] = lower_camera;
 
-                const auto upper_opt
-                    = reproject_point(Point3d { util::ros2opencv_position(upper_camera) }, feature);
-                const auto lower_opt
-                    = reproject_point(Point3d { util::ros2opencv_position(lower_camera) }, feature);
+                const auto upper_opt =
+                    reproject_point(Point3d { util::ros2opencv_position(upper_camera) }, feature);
+                const auto lower_opt =
+                    reproject_point(Point3d { util::ros2opencv_position(lower_camera) }, feature);
 
                 if (upper_opt && lower_opt) {
                     upper2d[i] = upper_opt->make<Eigen::Vector2d>();
@@ -240,8 +240,8 @@ private:
         auto jacobian = Eigen::Matrix<double, 4, 11> { };
         jacobian.setZero();
 
-        const auto projection_jacobian
-            = [=](const Eigen::Vector3d& point) -> std::optional<Eigen::Matrix<double, 2, 3>> {
+        const auto projection_jacobian =
+            [=](const Eigen::Vector3d& point) -> std::optional<Eigen::Matrix<double, 2, 3>> {
             constexpr auto kMinZ = 0.1;
 
             const auto point_camera = util::ros2opencv_position(point);
@@ -279,8 +279,8 @@ private:
         for (int endpoint = 0; endpoint < 2; ++endpoint) {
             const auto row      = endpoint * 2;
             const auto is_upper = (endpoint == 0);
-            const auto& point_ros
-                = is_upper ? observable.upper3d[lightbar_id] : observable.lower3d[lightbar_id];
+            const auto& point_ros =
+                is_upper ? observable.upper3d[lightbar_id] : observable.lower3d[lightbar_id];
 
             const auto jacobian_projection_opt = projection_jacobian(point_ros);
             if (!jacobian_projection_opt) continue;
@@ -293,10 +293,10 @@ private:
             jacobian_position.block<3, 1>(0, kStateA) = theta_jacobian(lightbar_id, is_upper);
 
             const auto armor_id = int { lightbar_id / 2 };
-            const auto direction_forward
-                = Eigen::Vector3d { +std::cos(theta), +std::sin(theta), 0.0 };
-            const auto direction_right
-                = Eigen::Vector3d { -std::sin(theta), +std::cos(theta), 0.0 };
+            const auto direction_forward =
+                Eigen::Vector3d { +std::cos(theta), +std::sin(theta), 0.0 };
+            const auto direction_right =
+                Eigen::Vector3d { -std::sin(theta), +std::cos(theta), 0.0 };
 
             auto jacobian_forward = jacobian_position.block<3, 1>(0, kStateRF);
             auto jacobian_lateral = jacobian_position.block<3, 1>(0, kStateRL);
@@ -376,8 +376,8 @@ public:
             Eigen::AngleAxisd { -kPitch, orientation * Eigen::Vector3d::UnitY() }
                 * (orientation * Eigen::Vector3d::UnitX()),
         };
-        const auto obs_yaw
-            = util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
+        const auto obs_yaw =
+            util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
         auto center = Eigen::Vector3d { translation + 0.2 * armor_to_center };
         auto yaw    = obs_yaw;
 
@@ -432,9 +432,8 @@ public:
         jacobian(kStateA, kStateW)  = dt;
 
         context.posteriors_state = next;
-        context.posteriors_covariance
-            = jacobian * context.posteriors_covariance * jacobian.transpose()
-            + context.noise_process;
+        context.posteriors_covariance =
+            jacobian * context.posteriors_covariance * jacobian.transpose() + context.noise_process;
 
         observable.update(
             {
@@ -465,12 +464,12 @@ public:
         }
 
         // Kalman gain
-        const auto innovation_covariance
-            = jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
+        const auto innovation_covariance =
+            jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
         const auto innovation_covariance_inv = innovation_covariance.inverse();
         if (innovation_covariance_inv.hasNaN()) return;
-        const auto kalman_gain
-            = prior_covariance * jacobian.transpose() * innovation_covariance_inv;
+        const auto kalman_gain =
+            prior_covariance * jacobian.transpose() * innovation_covariance_inv;
 
         // state update
         auto posterior_state = StateVector { prior_state };
@@ -488,8 +487,8 @@ public:
         const auto complement          = Covariance::Identity() - kalman_gain * jacobian;
         auto posterior_covariance      = Covariance { };
         posterior_covariance.noalias() = complement * prior_covariance * complement.transpose();
-        posterior_covariance
-            += (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
+        posterior_covariance +=
+            (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
         posterior_covariance = 0.5 * (posterior_covariance + posterior_covariance.transpose());
 
         context.posteriors_state      = posterior_state;
@@ -512,8 +511,8 @@ public:
         const auto state = context.posteriors_state;
 
         solution.input.center = Eigen::Vector3d { state[kStateX], state[kStateY], state[kStateZ] };
-        solution.input.toward
-            = Eigen::Quaterniond { Eigen::AngleAxisd { state[kStateA], Eigen::Vector3d::UnitZ() } };
+        solution.input.toward =
+            Eigen::Quaterniond { Eigen::AngleAxisd { state[kStateA], Eigen::Vector3d::UnitZ() } };
         solution.input.radius_forward = state[kStateRF];
         solution.input.radius_lateral = state[kStateRL];
         solution.input.height_lateral = state[kStateHL];
@@ -572,25 +571,21 @@ public:
 
         // Step 2: 收集全部观测灯条，按 upper.x 排序
         for (const auto& armor : armors) {
-            sorted.push_back(
-                { -1, Eigen::Vector2d { armor.tl.x, armor.tl.y },
-                  Eigen::Vector2d { armor.bl.x, armor.bl.y } });
-            sorted.push_back(
-                { -1, Eigen::Vector2d { armor.tr.x, armor.tr.y },
-                  Eigen::Vector2d { armor.br.x, armor.br.y } });
+            sorted.push_back({ -1, Eigen::Vector2d { armor.tl.x, armor.tl.y },
+                Eigen::Vector2d { armor.bl.x, armor.bl.y } });
+            sorted.push_back({ -1, Eigen::Vector2d { armor.tr.x, armor.tr.y },
+                Eigen::Vector2d { armor.br.x, armor.br.y } });
         }
         for (const auto& lightbar : lightbars) {
-            sorted.push_back(
-                {
-                    -1,
-                    Eigen::Vector2d { lightbar.upper.x, lightbar.upper.y },
-                    Eigen::Vector2d { lightbar.lower.x, lightbar.lower.y },
-                });
+            sorted.push_back({
+                -1,
+                Eigen::Vector2d { lightbar.upper.x, lightbar.upper.y },
+                Eigen::Vector2d { lightbar.lower.x, lightbar.lower.y },
+            });
         }
 
-        std::ranges::sort(sorted, [](const SortedEntry& a, const SortedEntry& b) {
-            return a.upper.x() < b.upper.x();
-        });
+        std::ranges::sort(sorted,
+            [](const SortedEntry& a, const SortedEntry& b) { return a.upper.x() < b.upper.x(); });
 
         // Step 3: 锚定位 → 向两侧递推
         {

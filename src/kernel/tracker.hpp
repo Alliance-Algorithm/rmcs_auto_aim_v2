@@ -32,19 +32,25 @@ class TrackerV2 {
 
 public:
     struct Addition {
-        std::vector<Armor2ds> tracked2d;
-        std::vector<Armor3ds> tracked3d;
+        Armor2ds tracked2d;
+        Armor3ds tracked3d;
     };
 
     explicit TrackerV2(const YAML::Node&);
 
-    auto clean(Timestamp) noexcept -> void;
+    auto update_track_color(CampColor) -> void;
+
+    auto update_camera(const Transform&) noexcept -> void;
+    auto update_camera(const std::array<double, 9>&) noexcept -> void;
+    auto update_camera(const std::array<double, 5>&) noexcept -> void;
+
+    auto clean() noexcept -> void;
 
     auto store(std::span<const Armor2d>) -> void;
     auto store(std::span<const Armor3d>) -> void;
     auto store(std::span<const Lightbar2d>) -> void;
 
-    auto execute() -> Trackable::Unique;
+    auto execute(Timestamp) -> Trackable::Unique;
 
     auto addition() const -> const Addition&;
 };

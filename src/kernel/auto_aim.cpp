@@ -7,8 +7,6 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
-#include "module/predictor/model/robot.hpp"
-
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -28,6 +26,7 @@ using namespace rmcs::util;
 using namespace rmcs::kernel;
 
 struct AutoAim::Impl {
+    AutoAim& self;
     RclcppNode node { "auto_aim" };
 
     Capturer cap { };
@@ -39,12 +38,9 @@ struct AutoAim::Impl {
 
     std::unique_ptr<TrackerV2> tracker_v2;
 
-    RobotModel robot_model { RobotModel::Config { } };
-    TimePoint last_model_time = TimePoint::min();
-
     std::jthread worker;
 
-    auto run(AutoAim& self, const std::stop_token& stop) -> void {
+    auto run(const std::stop_token& stop) -> void {
         using namespace std::chrono_literals;
 
         node.set_pub_topic_prefix("/rmcs/auto_aim/");
@@ -92,17 +88,7 @@ struct AutoAim::Impl {
                 visual.draw_later(result->armors);
                 visual.draw_later(result->green_light);
 
-                using namespace rmcs_msgs;
-                if (context.id != RobotId::UNKNOWN) {
-                    if (context.id.color() == RobotColor::RED) {
-                        tracker.set_enemy_color(CampColor::BLUE);
-                    } else {
-                        tracker.set_enemy_color(CampColor::RED);
-                    }
-                }
-
-                tracker.set_invincible_armors(context.invincible_devices);
-                armor2ds    = tracker.filter_armors(result->armors);
+                armor2ds    = std::move(result->armors);
                 lightbar2ds = std::move(result->lightbars);
 
                 if (armor2ds.empty()) continue;
@@ -132,14 +118,30 @@ struct AutoAim::Impl {
 
             auto trackable = Trackable::Unique { };
             {
-                tracker_v2->clean(image->get_timestamp());
+                using namespace rmcs_msgs;
+                if (context.id != RobotId::UNKNOWN) {
+                    tracker_v2->update_track_color(
+                        (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                }
+                tracker_v2->update_camera(context.camera_transform);
 
+                tracker_v2->clean();
                 tracker_v2->store(armor2ds);
                 tracker_v2->store(armor3ds);
                 tracker_v2->store(lightbar2ds);
 
-                trackable = tracker_v2->execute();
+                trackable = tracker_v2->execute(image->get_timestamp());
+
+                const auto& addition = tracker_v2->addition();
+                for (const auto& item : addition.tracked2d) {
+                    visual.draw_later(Canvas::ArmorShape {
+                        .shape = item,
+                        .color = { 127, 127, 127 },
+                    });
+                }
+                visual.publish(addition.tracked3d, "trackable");
             }
+            continue;
 
             /// 3. Apply Tracker
             auto target = tracker.decide(armor3ds, image->get_timestamp());
@@ -197,13 +199,13 @@ struct AutoAim::Impl {
         }
     }
 
-    explicit Impl(AutoAim& self) {
+    explicit Impl(AutoAim& self)
+        : self { self } {
+
         const auto configs           = util::configs();
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();
         const auto distort_coeff     = configs["distort_coeff"].as<std::array<double, 5>>();
         const auto use_visualization = configs["use_visualization"].as<bool>();
-
-        robot_model.configure_camera(camera_matrix, distort_coeff);
 
         const auto handle_result = [&](auto runtime_name, const auto& result) {
             if (!result.has_value()) {
@@ -218,8 +220,8 @@ struct AutoAim::Impl {
             handle_result("capturer", cap.initialize(config));
         }
         {
-            auto config               = configs["identifier"];
-            const auto model_location = std::filesystem::path { util::Parameters::share_location() }
+            auto config         = configs["identifier"];
+            auto model_location = std::filesystem::path { util::Parameters::share_location() }
                 / std::filesystem::path { config["model_location"].as<std::string>() };
             config["model_location"] = model_location.string();
             handle_result("identifier", identifier.initialize(config));
@@ -243,8 +245,10 @@ struct AutoAim::Impl {
         }
 
         tracker_v2 = std::make_unique<TrackerV2>(configs["tracker"]);
+        tracker_v2->update_camera(camera_matrix);
+        tracker_v2->update_camera(distort_coeff);
 
-        worker = std::jthread([this, &self](const std::stop_token& stop) { run(self, stop); });
+        worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }
     ~Impl() {
         worker.request_stop();

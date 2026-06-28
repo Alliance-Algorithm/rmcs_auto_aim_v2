@@ -46,15 +46,15 @@ struct Ins : public Trackable {
     auto timestamp() const -> TimePoint override { return stamp; }
     auto jump_into(double seconds) -> void override {
         constexpr auto kHasTransition = requires {
-            { state.transition() };
+            { state.transition(0.) };
         };
-        static_assert(kHasTransition, "State::transition()");
+        static_assert(kHasTransition, "State::transition(seconds)");
         state.transition(seconds);
         stamp += std::chrono::duration_cast<TimePoint::duration>(
             std::chrono::duration<double> { seconds });
     }
 
-    auto clone() const override { return std::make_unique<Ins>(stamp, state); }
+    auto clone() const -> Unique override { return std::make_unique<Ins>(stamp, state); }
 
 private:
     TimePoint stamp;

@@ -100,6 +100,11 @@ public:
 
     auto full() const -> std::array<Armor3d, 4>;
 
+    auto converge() const -> bool {
+        // TODO: 待实现，并不是我自信到认为该模型一定收敛
+        return true;
+    }
+
     auto addition() const -> const Addition&;
 };
 

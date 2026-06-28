@@ -82,6 +82,11 @@ public:
     // 注意纯预测不会改变 current 返回的装甲板，即使预测后准
     // 备返回的装甲板在前哨站背面
     auto current() const -> Armor3d;
+
+    auto converge() const -> bool {
+        // TODO: 待实现，并不是我自信到认为该模型一定收敛
+        return std::ignore = this, true;
+    }
 };
 
 }

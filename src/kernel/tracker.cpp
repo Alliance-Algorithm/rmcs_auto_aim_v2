@@ -5,12 +5,15 @@
 #include "module/tracker/armor_filter.hpp"
 #include "module/tracker/decider.hpp"
 #include "utility/logging/printer.hpp"
+#include "utility/math/camera.hpp"
 #include "utility/serializable.hpp"
 
+#include <ranges>
 #include <unordered_map>
 
 using namespace rmcs::kernel;
 using namespace rmcs::tracker;
+using namespace rmcs::util;
 
 struct Tracker::Impl {
     ArmorFilter filter;
@@ -97,14 +100,13 @@ struct TrackerV2::Impl {
     } config;
 
     ArmorColor track_color = ArmorColor::DARK;
+    CameraFeature camera;
 
     struct Stored {
         Armor2ds armor2ds;
         Armor3ds armor3ds;
         Lightbar2ds lightbar2ds;
     } stored;
-
-    Timestamp stored_stamp;
 
     RobotModel::Config robot_config;
     std::unordered_map<ArmorGenre, Timestamp> robot_stamps;
@@ -117,20 +119,27 @@ struct TrackerV2::Impl {
     /* 假装这里有一个大符的 Model */
 
     Printer logging { "TrackerV2" };
+    Addition addition;
 
     explicit Impl(const YAML::Node& yaml) {
         if (auto ret = config.serialize(yaml); !ret) {
             logging.error("TrackerV2 初始化错误: {}", ret.error());
             throw std::runtime_error { "无法构造 TrackerV2" };
         }
+
+        /*^^*/ if (config.fallback_color == "RED") {
+            track_color = ArmorColor::RED;
+        } else if (config.fallback_color == "BLUE") {
+            track_color = ArmorColor::BLUE;
+        } else {
+            logging.error("invalid color {}", config.fallback_color);
+        }
     }
 
-    auto clean(Timestamp stamp) noexcept {
+    auto clean() noexcept {
         stored.armor2ds.clear();
         stored.armor3ds.clear();
         stored.lightbar2ds.clear();
-
-        stored_stamp = stamp;
     }
 
     auto store(std::span<const Armor2d> items) {
@@ -155,19 +164,24 @@ struct TrackerV2::Impl {
         }
     }
 
-    auto execute() {
+    auto execute(Timestamp timestamp) {
+        addition.tracked2d.clear();
+        addition.tracked3d.clear();
+
         { // 前哨站观测超时
-            const auto dt = stored_stamp - outpost_stamp;
-            const auto s  = std::chrono::duration<double> { dt };
-            if (s.count() > config.timeout_seconds) {
+            const auto dt = std::chrono::duration<double> {
+                timestamp - outpost_stamp,
+            };
+            if (dt.count() > config.timeout_seconds) {
                 outpost = nullptr;
             }
         }
         // 机器人观测超时处理
         for (const auto [id, stamp] : robot_stamps) {
-            const auto dt = stored_stamp - stamp;
-            const auto s  = std::chrono::duration<double> { dt };
-            if (s.count() > config.timeout_seconds) {
+            const auto dt = std::chrono::duration<double> {
+                timestamp - stamp,
+            };
+            if (dt.count() > config.timeout_seconds) {
                 robots.erase(id);
             }
         }
@@ -189,7 +203,7 @@ struct TrackerV2::Impl {
             seen[bar.genre].bars.push_back(bar);
         }
 
-        {
+        { // 迭代前哨站 Model
             constexpr auto kId = ArmorGenre::OUTPOST;
             if (seen.contains(kId)) {
                 const auto& armors = seen[kId].armor3ds;
@@ -198,9 +212,9 @@ struct TrackerV2::Impl {
                         outpost = std::make_unique<OutpostModel>(armors.front());
                         outpost->configure(outpost_config);
 
-                        robot_stamps[kId] = stored_stamp;
+                        robot_stamps[kId] = timestamp;
                     } else {
-                        const auto dt = stored_stamp - robot_stamps[kId];
+                        const auto dt = timestamp - robot_stamps[kId];
                         const auto s  = std::chrono::duration<double> { dt };
                     }
                 }
@@ -208,14 +222,44 @@ struct TrackerV2::Impl {
             }
         }
 
+        // 迭代机器人 Model
         for (const auto& [id, target] : seen) {
-            if (robots.contains(id)) {
+            if (!robots.contains(id)) {
+                robot_stamps[id] = timestamp;
+
                 robots.try_emplace(id, robot_config);
-                robots[id].start_with(target.armor2ds);
+                robots[id].configure_camera(
+                    std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
+                    camera.distort_coeff);
+                robots[id].update_transform({
+                    .translation = camera.translation,
+                    .orientation = camera.orientation,
+                });
+                if (!robots[id].start_with(target.armor2ds)) {
+                    robots.erase(id);
+                }
             } else {
+                const auto dt = std::chrono::duration<double> {
+                    timestamp - robot_stamps[id],
+                };
+                robot_stamps[id] = timestamp;
+
+                auto& model = robots[id];
+                model.update_transform({
+                    .translation = camera.translation,
+                    .orientation = camera.orientation,
+                });
+                model.predict(dt.count());
+                model.correct(target.armor2ds, target.bars);
+
+                if (model.converge()) {
+                    std::ranges::copy( // Armor 2d
+                        model.addition().armors, std::back_inserter(addition.tracked2d));
+                    std::ranges::copy( // Armor 3d
+                        model.full(), std::back_inserter(addition.tracked3d));
+                }
             }
         }
-
         return nullptr;
     }
 };
@@ -225,10 +269,32 @@ TrackerV2::TrackerV2(const YAML::Node& yaml)
 
 TrackerV2::~TrackerV2() noexcept = default;
 
-auto TrackerV2::clean(Timestamp stamp) noexcept -> void { pimpl->clean(stamp); }
+auto TrackerV2::update_track_color(CampColor camp) -> void {
+    /*^^*/ if (camp == CampColor::RED) {
+        pimpl->track_color = ArmorColor::RED;
+    } else if (camp == CampColor::BLUE) {
+        pimpl->track_color = ArmorColor::BLUE;
+    }
+    // Do nothing for unknown camp
+}
+
+auto TrackerV2::update_camera(const Transform& t) noexcept -> void {
+    pimpl->camera.translation = t.translation;
+    pimpl->camera.orientation = t.orientation;
+}
+auto TrackerV2::update_camera(const std::array<double, 9>& param) noexcept -> void {
+    pimpl->camera.from(param);
+}
+auto TrackerV2::update_camera(const std::array<double, 5>& param) noexcept -> void {
+    pimpl->camera.from(param);
+}
+
+auto TrackerV2::clean() noexcept -> void { pimpl->clean(); }
 
 auto TrackerV2::store(std::span<const Armor2d> item) -> void { pimpl->store(item); }
 auto TrackerV2::store(std::span<const Armor3d> item) -> void { pimpl->store(item); }
 auto TrackerV2::store(std::span<const Lightbar2d> item) -> void { pimpl->store(item); }
 
-auto TrackerV2::execute() -> Trackable::Unique { return pimpl->execute(); }
+auto TrackerV2::execute(Timestamp stamp) -> Trackable::Unique { return pimpl->execute(stamp); }
+
+auto TrackerV2::addition() const -> const Addition& { return pimpl->addition; }
