@@ -39,6 +39,7 @@ public:
     explicit TrackerV2(const YAML::Node&);
 
     auto update_track_color(CampColor) -> void;
+    auto update_track_genre(DeviceIds) -> void;
 
     auto update_camera(const Transform&) noexcept -> void;
     auto update_camera(const std::array<double, 9>&) noexcept -> void;

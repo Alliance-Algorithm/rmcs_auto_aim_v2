@@ -100,6 +100,7 @@ struct TrackerV2::Impl {
     } config;
 
     ArmorColor track_color = ArmorColor::DARK;
+    DeviceIds track_device = DeviceIds::Full();
     CameraFeature camera;
 
     struct Stored {
@@ -144,21 +145,21 @@ struct TrackerV2::Impl {
 
     auto store(std::span<const Armor2d> items) {
         for (const auto& item : items) {
-            if (item.color == track_color) {
+            if (item.color == track_color && track_device.contains(item.genre)) {
                 stored.armor2ds.push_back(item);
             }
         }
     }
     auto store(std::span<const Armor3d> items) {
         for (const auto& item : items) {
-            if (item.color == track_color) {
+            if (item.color == track_color && track_device.contains(item.genre)) {
                 stored.armor3ds.push_back(item);
             }
         }
     }
     auto store(std::span<const Lightbar2d> items) {
         for (const auto& item : items) {
-            if (item.color == track_color) {
+            if (item.color == track_color && track_device.contains(item.genre)) {
                 stored.lightbar2ds.push_back(item);
             }
         }
@@ -274,6 +275,7 @@ struct TrackerV2::Impl {
         }
 
         auto result = Trackable::Unique { };
+        { }
 
         return result;
     }
@@ -292,6 +294,7 @@ auto TrackerV2::update_track_color(CampColor camp) -> void {
     }
     // Do nothing for unknown camp
 }
+auto TrackerV2::update_track_genre(DeviceIds ids) -> void { pimpl->track_device = ids; }
 
 auto TrackerV2::update_camera(const Transform& t) noexcept -> void {
     pimpl->camera.translation = t.translation;

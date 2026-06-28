@@ -116,6 +116,9 @@ struct AutoAim::Impl {
             }
             visual.publish(armor3ds, "visible_armors");
 
+            /// @NOTE:
+            ///  🚧 施工中...... 新的跟踪器即将到来
+            ///  期待新的 EKF 的表现吧！
             auto trackable = Trackable::Unique { };
             {
                 using namespace rmcs_msgs;
@@ -123,6 +126,7 @@ struct AutoAim::Impl {
                     tracker_v2->update_track_color(
                         (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
+                tracker_v2->update_track_genre(DeviceIds::Full());
                 tracker_v2->update_camera(context.camera_transform);
 
                 tracker_v2->clean();
