@@ -95,19 +95,21 @@ struct TrackerV2::Impl {
         static constexpr std::tuple metas {
             // clang-format off
             &Config::fallback_color, "fallback_color",
+            &Config::timeout_seconds, "timeout_seconds",
             // clang-format on
         };
     } config;
 
+    struct {
+        Armor2ds armor2ds;
+        Armor3ds armor3ds;
+        Lightbar2ds lightbars;
+    } stored;
+
+    ArmorGenre track_genre = ArmorGenre::UNKNOWN;
     ArmorColor track_color = ArmorColor::DARK;
     DeviceIds track_device = DeviceIds::Full();
     CameraFeature camera;
-
-    struct Stored {
-        Armor2ds armor2ds;
-        Armor3ds armor3ds;
-        Lightbar2ds lightbar2ds;
-    } stored;
 
     RobotModel::Config robot_config;
     std::unordered_map<ArmorGenre, Timestamp> robot_stamps;
@@ -140,7 +142,7 @@ struct TrackerV2::Impl {
     auto clean() noexcept {
         stored.armor2ds.clear();
         stored.armor3ds.clear();
-        stored.lightbar2ds.clear();
+        stored.lightbars.clear();
     }
 
     auto store(std::span<const Armor2d> items) {
@@ -160,7 +162,7 @@ struct TrackerV2::Impl {
     auto store(std::span<const Lightbar2d> items) {
         for (const auto& item : items) {
             if (item.color == track_color && track_device.contains(item.genre)) {
-                stored.lightbar2ds.push_back(item);
+                stored.lightbars.push_back(item);
             }
         }
     }
@@ -168,6 +170,7 @@ struct TrackerV2::Impl {
     auto execute(Timestamp timestamp) {
         addition.tracked2d.clear();
         addition.tracked3d.clear();
+        addition.lightbars.clear();
 
         { // 前哨站观测超时
             const auto dt = std::chrono::duration<double> {
@@ -202,7 +205,7 @@ struct TrackerV2::Impl {
         for (const auto& armor : stored.armor3ds) {
             seen[armor.genre].armor3ds.push_back(armor);
         }
-        for (const auto& bar : stored.lightbar2ds) {
+        for (const auto& bar : stored.lightbars) {
             seen[bar.genre].bars.push_back(bar);
         }
 
@@ -224,21 +227,18 @@ struct TrackerV2::Impl {
                         };
                         outpost->predict(dt.count());
                         outpost->correct(armors.front());
-
-                        if (outpost->converge()) {
-                            std::ranges::copy(
-                                outpost->full(), std::back_inserter(addition.tracked3d));
-                        }
                     }
                     outpost_stamp = timestamp;
                 }
-                seen.erase(kId);
             }
         }
         { // @NOTE: 故作姿态地假装在迭代大符
         }
         // 迭代机器人 Model
         for (const auto& [id, target] : seen) {
+            if (id == DeviceId::OUTPOST) {
+                continue;
+            }
             if (robots.contains(id) == false) {
                 robots.try_emplace(id, robot_config);
                 robots[id].configure_camera(
@@ -263,20 +263,59 @@ struct TrackerV2::Impl {
                 });
                 model.predict(dt.count());
                 model.correct(target.armor2ds, target.bars);
-
-                if (model.converge()) {
-                    std::ranges::copy( // Armor 2d
-                        model.addition().armors, std::back_inserter(addition.tracked2d));
-                    std::ranges::copy( // Armor 3d
-                        model.full(), std::back_inserter(addition.tracked3d));
-                }
             }
             robot_stamps[id] = timestamp;
         }
 
-        auto result = Trackable::Unique { };
-        { }
+        // 选择目标并填充调试信息
+        const auto calculate = [&](DeviceId id, const Point3d& p) -> double {
+            /// @NOTE:
+            ///  占位符实现，按照目标中心到摄像机视角光轴的
+            ///  距离比较优先级，后续可能会引入更复杂的判断
+            ///  标准，也可能不会（
+            const auto distance_score =
+                compute_distance2cam_x({ camera.translation, camera.orientation }, p);
+            const auto memory_score = (id == track_genre) ? 0 : 1;
 
+            return distance_score * memory_score;
+        };
+
+        auto result = Trackable::Unique { };
+        auto better = std::numeric_limits<double>::max();
+        {
+            if (outpost && outpost->converge()) {
+                const auto state = outpost->state();
+                const auto score = calculate(DeviceId::OUTPOST, state.direction());
+                if (better > score) {
+                    better = score;
+                    result = make_trackable(timestamp, state);
+
+                    track_genre = DeviceId::OUTPOST;
+                }
+                std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
+            }
+            for (const auto& [id, model] : robots) {
+                if (model.converge()) {
+                    const auto state = model.state();
+                    const auto score = calculate(id, state.direction());
+                    if (better > score) {
+                        better = score;
+                        result = make_trackable(timestamp, state);
+
+                        track_genre = id;
+                    }
+                    std::ranges::copy( // Armor 2d
+                        model.addition().armors, std::back_inserter(addition.tracked2d));
+                    std::ranges::copy( // Armor 3d
+                        model.full(), std::back_inserter(addition.tracked3d));
+                    std::ranges::copy(
+                        model.addition().tracked | std::views::transform([](const auto& item) {
+                            return Addition::Lightbar { item.lightbar_id, item.point };
+                        }),
+                        std::back_inserter(addition.lightbars));
+                }
+            }
+        }
         return result;
     }
 };

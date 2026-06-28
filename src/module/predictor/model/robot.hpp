@@ -96,7 +96,7 @@ public:
     auto predict(double dt) noexcept -> void;
     auto correct(std::span<const Armor2d>, std::span<const Lightbar2d>) noexcept -> void;
 
-    auto state() noexcept -> State;
+    auto state() const noexcept -> State;
 
     auto full() const -> std::array<Armor3d, 4>;
 

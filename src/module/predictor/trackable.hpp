@@ -61,4 +61,8 @@ private:
     State state;
 };
 
+constexpr auto make_trackable = []<class State>(Timestamp stamp, const State& state) {
+    return std::make_unique<Ins<State>>(stamp, state);
+};
+
 }

@@ -34,6 +34,12 @@ public:
     struct Addition {
         Armor2ds tracked2d;
         Armor3ds tracked3d;
+
+        struct Lightbar {
+            int id;
+            Point2d point;
+        };
+        std::vector<Lightbar> lightbars;
     };
 
     explicit TrackerV2(const YAML::Node&);

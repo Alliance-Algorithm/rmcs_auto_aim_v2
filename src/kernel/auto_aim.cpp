@@ -82,9 +82,9 @@ struct AutoAim::Impl {
                 auto result = identifier.sync_identify(*image);
                 if (!result.has_value()) continue;
 
-                for (const auto& roi : result->areas) {
-                    visual.draw_later(roi);
-                }
+                // for (const auto& roi : result->areas) {
+                //     visual.draw_later(roi);
+                // }
                 visual.draw_later(result->armors);
                 visual.draw_later(result->green_light);
 
@@ -104,9 +104,9 @@ struct AutoAim::Impl {
 
                 const auto& addition = estimator.addition();
                 visual.draw_later(addition.detected_2d);
-                visual.draw_later(addition.areas);
-                visual.draw_later(addition.predicted_near);
-                visual.draw_later(addition.predicted_away);
+                // visual.draw_later(addition.areas);
+                // visual.draw_later(addition.predicted_near);
+                // visual.draw_later(addition.predicted_away);
 
                 visual.publish(addition.origin, "origin_armors");
                 visual.publish(addition.detected_3d, "outpost_lightbars");
@@ -141,6 +141,13 @@ struct AutoAim::Impl {
                     visual.draw_later(Canvas::ArmorShape {
                         .shape = item,
                         .color = { 127, 127, 127 },
+                    });
+                }
+                for (const auto& item : addition.lightbars) {
+                    visual.draw_later(Canvas::Text {
+                        .content  = std::to_string(item.id),
+                        .top_left = item.point.make<cv::Point2i>(),
+                        .color    = kYellow,
                     });
                 }
                 visual.publish(addition.tracked3d, "trackable");

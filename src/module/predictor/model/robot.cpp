@@ -669,7 +669,7 @@ auto RobotModel::correct(
     pimpl->correct(armors, lightbars);
 }
 
-auto RobotModel::state() noexcept -> State { return pimpl->context.get_state(); }
+auto RobotModel::state() const noexcept -> State { return pimpl->context.get_state(); }
 
 auto RobotModel::full() const -> std::array<Armor3d, 4> { return pimpl->full(); }
 
