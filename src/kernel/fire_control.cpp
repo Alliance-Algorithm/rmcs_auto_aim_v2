@@ -1,189 +1,210 @@
 #include "fire_control.hpp"
 
-#include <chrono>
 #include <cmath>
 #include <format>
 #include <memory>
 #include <optional>
 
-#include "module/fire_control/armor_selector.hpp"
-#include "module/fire_control/planner/trajectory_planner.hpp"
 #include "module/fire_control/shoot_evaluator.hpp"
-#include "module/fire_control/target_solver.hpp"
-#include "module/predictor/snapshot.hpp"
+#include "module/fire_control/trajectory_solution.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/serializable.hpp"
 
 using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
 
-struct FireControl::Impl {
+struct FireControllerV2::Impl {
     struct Config : util::Serializable {
-        double initial_bullet_speed;
+        double bullet_speed;
         double shoot_delay;
-        bool mpc_enable;
-        double yaw_offset;
-        double pitch_offset;
+        double offset_yaw { 0.0 };
+        double offset_pitch { 0.0 };
 
-        constexpr static std::tuple metas {
-            &Config::initial_bullet_speed,
-            "initial_bullet_speed",
+        std::array<double, 2> attack_window { 20.0, 20.0 };
+
+        static constexpr std::tuple metas {
+            &Config::bullet_speed,
+            "bullet_speed",
             &Config::shoot_delay,
             "shoot_delay",
-            &Config::mpc_enable,
-            "mpc_enable",
-            &Config::yaw_offset,
-            "yaw_offset",
-            &Config::pitch_offset,
-            "pitch_offset",
+            &Config::offset_yaw,
+            "offset_yaw",
+            &Config::offset_pitch,
+            "offset_pitch",
+            &Config::attack_window,
+            "attack_window",
         };
     } config;
 
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) return std::unexpected { result.error() };
+    ShootEvaluator shoot_evaluator;
 
-        if (!(config.initial_bullet_speed > 0.0)) {
-            return std::unexpected { std::format("Initial_bullet_speed must > 0 m/s") };
+    double cached_yaw   = kNaN;
+    double cached_pitch = kNaN;
+    Timestamp cached_stamp;
+    std::optional<size_t> last_armor_id;
+
+    explicit Impl(const YAML::Node& yaml) {
+        if (const auto ret = config.serialize(yaml); !ret.has_value()) {
+            throw std::runtime_error { std::format("FireControllerV2: {}", ret.error()) };
         }
 
-        config.yaw_offset   = util::deg2rad(config.yaw_offset);
-        config.pitch_offset = util::deg2rad(config.pitch_offset);
+        config.offset_yaw       = util::deg2rad(config.offset_yaw);
+        config.offset_pitch     = util::deg2rad(config.offset_pitch);
+        config.attack_window[0] = util::deg2rad(config.attack_window[0]);
+        config.attack_window[1] = util::deg2rad(config.attack_window[1]);
 
-        auto selector_result = armor_selector.configure_yaml(yaml["armor_target_selector"]);
-        if (!selector_result.has_value()) {
-            return std::unexpected {
-                std::format("armor_target_selector init failed: {}", selector_result.error()),
+        if (const auto ret = shoot_evaluator.configure_yaml(yaml["shoot_evaluator"]);
+            !ret.has_value()) {
+            throw std::runtime_error {
+                std::format("FireControllerV2 shoot_evaluator: {}", ret.error()),
             };
         }
-
-        auto evaluate_result = shoot_evaluator.configure_yaml(yaml["shoot_evaluator"]);
-        if (!evaluate_result.has_value()) {
-            return std::unexpected {
-                std::format("shoot_evaluator init failed: {}", evaluate_result.error()),
-            };
-        }
-
-        auto planner_result = trajectory_planner.configure_yaml(yaml["mpc"]);
-        if (!planner_result.has_value()) {
-            return std::unexpected {
-                std::format("trajectory_planner init failed: {}", planner_result.error()),
-            };
-        }
-
-        return {};
     }
 
-    auto solve(predictor::Snapshot const& snapshot, GimbalState const& gimbal_state)
-        -> std::optional<Result> {
+    auto aim(const Trackable& trackable) -> std::optional<Aimed> {
+        constexpr auto kMaxIterate = std::size_t { 5 };
+        constexpr auto kEpsilon    = 0.001;
 
-        /// 1. 目标选择
-        auto selected_armor_id  = int {};
-        auto aim_point_position = Eigen::Vector3d {};
-        auto center_position    = Eigen::Vector3d {};
+        // ---- 粗估飞行时间 ------------------------------------------------
+
+        const auto center = trackable.direction().make<Eigen::Vector3d>();
+        auto fly_time     = center.norm() / config.bullet_speed;
+
+        // ---- 预测采样 → 选定装甲板 ---------------------------------------
+
+        std::optional<size_t> armor_id;
+
         {
-            auto const target_motion   = snapshot.motion();
-            auto target_center         = target_motion.center_position.make<Eigen::Vector3d>();
-            auto const coarse_fly_time = target_center.norm() / config.initial_bullet_speed;
-            auto const selection_predict_time = config.shoot_delay + coarse_fly_time;
-            auto const selection_time         = snapshot.time_stamp()
-                + std::chrono::duration_cast<Duration>(
-                    std::chrono::duration<double>(selection_predict_time));
+            auto clone = trackable.clone();
+            clone->jump_into(config.shoot_delay + fly_time);
 
-            auto target_candidates = target_solver.make_candidates(snapshot, selection_time);
-            auto selected_index = armor_selector.select(target_candidates, last_selected_armor_id);
+            const auto aimpoints = clone->aimpoints();
+            const auto center    = clone->direction().make<Eigen::Vector3d>();
+            const auto cam_dir   = std::atan2(center.y(), center.x());
 
-            if (!selected_index.has_value()) {
-                last_selected_armor_id.reset();
+            // 先检查上一帧选中的板是否还在窗口内
+            if (last_armor_id.has_value() && *last_armor_id < aimpoints.size()) {
+                const auto& pt      = aimpoints[*last_armor_id];
+                const auto pt_eigen = pt.make<Eigen::Vector3d>();
+                const auto dir      = pt_eigen - center;
+                const auto delta = util::normalize_angle(std::atan2(-dir.y(), -dir.x()) - cam_dir);
+
+                const auto abs_delta = std::abs(delta);
+                const auto threshold =
+                    (delta > 0) ? config.attack_window[0] : config.attack_window[1];
+                if (abs_delta <= threshold) {
+                    armor_id = last_armor_id;
+                }
+            }
+
+            // 上一块板出窗了（或没有上一帧），遍历所有候选重新选
+            if (!armor_id.has_value()) {
+                auto best_id    = std::optional<size_t> { };
+                auto best_delta = std::numeric_limits<double>::max();
+
+                for (size_t i = 0; i < aimpoints.size(); ++i) {
+                    const auto& pt      = aimpoints[i];
+                    const auto pt_eigen = pt.make<Eigen::Vector3d>();
+                    const auto dir      = pt_eigen - center;
+                    const auto delta =
+                        util::normalize_angle(std::atan2(-dir.y(), -dir.x()) - cam_dir);
+
+                    const auto abs_delta = std::abs(delta);
+                    const auto threshold =
+                        (delta > 0) ? config.attack_window[0] : config.attack_window[1];
+                    if (abs_delta > threshold) continue;
+
+                    if (abs_delta < best_delta) {
+                        best_delta = abs_delta;
+                        best_id    = i;
+                    }
+                }
+
+                armor_id = best_id;
+            }
+
+            if (!armor_id.has_value()) {
+                last_armor_id.reset();
                 return std::nullopt;
             }
-
-            auto const& selected = target_candidates[*selected_index];
-            selected_armor_id    = selected.armor.id;
-            center_position      = target_center;
-            selected.armor.translation.copy_to(aim_point_position);
         }
 
-        /// 2. 弹道解算
-        auto target_solution = TargetSolution {};
-        {
-            auto solution = target_solver.solve(snapshot, selected_armor_id, gimbal_state.timestamp,
-                config.initial_bullet_speed, config.shoot_delay);
+        last_armor_id = armor_id;
 
-            if (!solution.has_value()) {
-                last_selected_armor_id.reset();
-                return std::nullopt;
-            }
+        // ---- 迭代收敛飞行时间 ---------------------------------------------
 
-            last_selected_armor_id = solution->candidate.armor.id;
-            target_solution        = *solution;
+        auto attack = Eigen::Vector3d { };
+        auto yaw    = double { };
+        auto pitch  = double { };
+
+        for (size_t i = 0; i < kMaxIterate; ++i) {
+            auto clone = trackable.clone();
+            clone->jump_into(config.shoot_delay + fly_time);
+
+            const auto aimpoints = clone->aimpoints();
+            if (*armor_id >= aimpoints.size()) return std::nullopt;
+
+            attack = aimpoints[*armor_id].make<Eigen::Vector3d>();
+
+            auto solution                  = TrajectorySolution { };
+            solution.input.v0              = config.bullet_speed;
+            solution.input.target_position = attack;
+
+            const auto result = solution.solve();
+            if (!result.has_value()) return std::nullopt;
+
+            const auto time_error = std::abs(result->fly_time - fly_time);
+            yaw                   = result->yaw;
+            pitch                 = result->pitch;
+            fly_time              = result->fly_time;
+
+            if (time_error < kEpsilon) break;
         }
 
-        /// 3. 轨迹规划
-        auto feedforward = std::optional<Feedforward> {};
-        if (config.mpc_enable) {
-            auto planned = trajectory_planner.plan(snapshot, target_solution,
-                gimbal_state.timestamp, config.initial_bullet_speed, config.shoot_delay);
+        // ---- 偏置校正 ---------------------------------------------------
 
-            if (planned.has_value()) {
-                feedforward = Feedforward {
-                    .yaw        = planned->yaw,
-                    .pitch      = planned->pitch,
-                    .pitch_rate = planned->pitch_rate,
-                    .yaw_rate   = planned->yaw_rate,
-                    .pitch_acc  = planned->pitch_acc,
-                    .yaw_acc    = planned->yaw_acc,
-                };
-            }
-        }
+        yaw   = util::normalize_angle(yaw + config.offset_yaw);
+        pitch = pitch + config.offset_pitch;
 
-        /// 4. 偏移校正
-        auto yaw   = feedforward.has_value() ? feedforward->yaw : target_solution.attitude.yaw;
-        auto pitch = feedforward.has_value() ? feedforward->pitch : target_solution.attitude.pitch;
-        yaw        = util::normalize_angle(yaw + config.yaw_offset);
-        pitch      = pitch + config.pitch_offset;
+        // ---- 射击评估 ---------------------------------------------------
 
-        /// 5. 射击评估
-        auto shoot_permitted = bool {};
-        {
-            auto shoot_command = ShootEvaluator::Command {
-                .yaw                = yaw,
-                .pitch              = pitch,
-                .center_position    = center_position,
-                .aim_point_position = aim_point_position,
-            };
-            shoot_permitted = shoot_evaluator.evaluate(shoot_command, gimbal_state);
-        }
+        const auto shoot_permitted = shoot_evaluator.evaluate(
+            {
+                .yaw    = yaw,
+                .pitch  = pitch,
+                .center = center,
+                .attack = attack,
+            },
+            {
+                .timestamp = cached_stamp,
+                .yaw       = cached_yaw,
+                .pitch     = cached_pitch,
+            });
 
-        // 6. 组装结果
-        return Result {
-            .pitch           = pitch,
-            .yaw             = yaw,
-            .feedforward     = feedforward,
-            .shoot_permitted = shoot_permitted,
-            .center_position = Point3d { center_position },
-            .aim_point       = Point3d { aim_point_position },
-            .impact_time     = target_solution.impact_time,
+        // ---- 组装结果 ---------------------------------------------------
+
+        return Aimed {
+            .yaw    = yaw,
+            .pitch  = pitch,
+            .shoot  = shoot_permitted,
+            .center = Point3d { center },
+            .attack = Point3d { attack },
         };
     }
-
-    TrajectoryPlanner trajectory_planner {};
-    TargetSolver target_solver {};
-    ShootEvaluator shoot_evaluator {};
-    ArmorSelector armor_selector {};
-    std::optional<int> last_selected_armor_id {};
 };
 
-FireControl::FireControl() noexcept
-    : pimpl { std::make_unique<Impl>() } { }
+FireControllerV2::FireControllerV2(const YAML::Node& yaml)
+    : pimpl { std::make_unique<Impl>(yaml) } { }
 
-FireControl::~FireControl() noexcept = default;
+FireControllerV2::~FireControllerV2() noexcept = default;
 
-auto FireControl::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
+auto FireControllerV2::update(double yaw, double pitch) -> void {
+    pimpl->cached_yaw   = yaw;
+    pimpl->cached_pitch = pitch;
 }
 
-auto FireControl::solve(const predictor::Snapshot& snapshot, GimbalState const& gimbal_state)
-    -> std::optional<Result> {
-    return pimpl->solve(snapshot, gimbal_state);
+auto FireControllerV2::update(Timestamp timestamp) -> void { pimpl->cached_stamp = timestamp; }
+
+auto FireControllerV2::aim(const Trackable& trackable) -> std::optional<Aimed> {
+    return pimpl->aim(trackable);
 }

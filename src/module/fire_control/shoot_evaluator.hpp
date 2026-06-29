@@ -20,8 +20,8 @@ public:
     struct Command {
         double yaw { std::numeric_limits<double>::quiet_NaN() };
         double pitch { std::numeric_limits<double>::quiet_NaN() };
-        Eigen::Vector3d center_position { Eigen::Vector3d::Zero() };
-        Eigen::Vector3d aim_point_position { Eigen::Vector3d::Zero() };
+        Eigen::Vector3d center { Eigen::Vector3d::Zero() };
+        Eigen::Vector3d attack { Eigen::Vector3d::Zero() };
     };
 
     auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;

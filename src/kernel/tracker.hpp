@@ -1,31 +1,15 @@
 #pragma once
 
-#include <expected>
+#include <optional>
 #include <span>
 #include <yaml-cpp/yaml.h>
 
 #include "module/predictor/trackable.hpp"
-#include "module/tracker/decider.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 namespace rmcs::kernel {
-
-struct Tracker {
-    RMCS_PIMPL_DEFINITION(Tracker)
-
-public:
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
-
-    auto set_invincible_armors(DeviceIds devices) -> void;
-
-    auto set_enemy_color(CampColor color) -> void;
-
-    auto filter_armors(std::span<Armor2d> armors) const -> std::vector<Armor2d>;
-
-    auto decide(std::span<Armor3d const> armors, TimePoint t) -> tracker::Decider::Output;
-};
 
 class TrackerV2 {
     RMCS_PIMPL_DEFINITION(TrackerV2)

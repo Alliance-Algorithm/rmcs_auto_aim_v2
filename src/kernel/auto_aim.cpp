@@ -31,12 +31,11 @@ struct AutoAim::Impl {
 
     Capturer cap { };
     Identifier identifier { };
-    Tracker tracker { };
     PoseEstimator estimator { };
-    FireControl fire { };
     Visualization visual { };
 
     std::unique_ptr<TrackerV2> tracker_v2;
+    std::unique_ptr<FireControllerV2> fire_v2;
 
     std::jthread worker;
 
@@ -62,6 +61,7 @@ struct AutoAim::Impl {
                 context = self.current_context;
             }
             visual.publish(context.camera_transform, "camera_link");
+            visual.publish(context.yaw, "yaw");
 
             if (framerate.tick()) {
                 node.info("Autoaim Framerate: {}", framerate.fps());
@@ -152,47 +152,28 @@ struct AutoAim::Impl {
                 }
                 visual.publish(addition.tracked3d, "trackable");
             }
-            continue;
 
-            /// 3. Apply Tracker
-            auto target = tracker.decide(armor3ds, image->get_timestamp());
-            auto cmd    = AutoAimState::kInvalid();
-            if (target.snapshot) {
-                auto& snapshot = target.snapshot;
-                auto armors    = snapshot->predicted_armors(Clock::now());
-                visual.publish(armors, "visible_robot");
+            /// 3. 弹道解算
+            auto cmd = AutoAimState::kInvalid();
+            if (trackable) {
+                fire_v2->update(context.yaw, context.pitch);
+                fire_v2->update(context.timestamp);
 
-                const auto gimbal_state = fire_control::GimbalState {
-                    .timestamp = context.timestamp,
-                    .yaw       = context.yaw,
-                    .pitch     = context.pitch,
-                };
-                if (auto result = fire.solve(*snapshot, gimbal_state)) {
+                if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_control = true;
-                    cmd.target         = target.target_id;
-                    cmd.should_shoot   = result->shoot_permitted;
-                    cmd.yaw            = result->yaw;
-                    cmd.pitch          = result->pitch;
-                    cmd.robot_center   = result->center_position;
+                    cmd.should_shoot   = aimed->shoot;
+                    cmd.yaw            = aimed->yaw;
+                    cmd.pitch          = aimed->pitch;
+                    cmd.robot_center   = aimed->center;
 
-                    if (auto feedforward = result->feedforward) {
-                        cmd.yaw_rate   = feedforward->yaw_rate;
-                        cmd.pitch_rate = feedforward->pitch_rate;
-                        cmd.yaw_acc    = feedforward->yaw_acc;
-                        cmd.pitch_acc  = feedforward->pitch_acc;
-                    }
-
-                    auto impact_armors = snapshot->predicted_armors(result->impact_time);
-                    visual.publish(impact_armors, "impact_robot");
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                    visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
-                        cmd.yaw_acc, cmd.pitch_acc);
+                    visual.publish(aimed->yaw, "aimed_yaw");
 
-                    if (auto aim_2d = estimator.make_point2d(result->aim_point)) {
+                    if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
                         visual.draw_later(Canvas::Point {
                             .origin = aim_2d->make<cv::Point2i>(),
                             .radius = 5,
-                            .color  = result->shoot_permitted ? kRed : kGreen,
+                            .color  = aimed->shoot ? kRed : kGreen,
                         });
                     }
                 }
@@ -238,17 +219,9 @@ struct AutoAim::Impl {
             handle_result("identifier", identifier.initialize(config));
         }
         {
-            auto config = configs["tracker"];
-            handle_result("tracker", tracker.initialize(config));
-        }
-        {
             auto config = configs["pose_estimator"];
             handle_result("estimator", estimator.initialize(config));
             estimator.configure_camera(camera_matrix, distort_coeff);
-        }
-        {
-            auto config = configs["fire_control"];
-            handle_result("fire_control", fire.initialize(config));
         }
         if (use_visualization) {
             auto config = configs["visualization"];
@@ -258,6 +231,8 @@ struct AutoAim::Impl {
         tracker_v2 = std::make_unique<TrackerV2>(configs["tracker"]);
         tracker_v2->update_camera(camera_matrix);
         tracker_v2->update_camera(distort_coeff);
+
+        fire_v2 = std::make_unique<FireControllerV2>(configs["fire_control"]);
 
         worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }

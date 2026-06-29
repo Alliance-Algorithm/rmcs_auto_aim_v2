@@ -1,43 +1,32 @@
 #pragma once
+#include "module/predictor/trackable.hpp"
+#include "utility/pimpl.hpp"
 
-#include <expected>
 #include <optional>
 
 #include <yaml-cpp/yaml.h>
 
-#include "module/fire_control/types.hpp"
-#include "module/predictor/snapshot.hpp"
-#include "utility/pimpl.hpp"
-
 namespace rmcs::kernel {
 
-class FireControl {
-    RMCS_PIMPL_DEFINITION(FireControl)
+class FireControllerV2 {
+    RMCS_PIMPL_DEFINITION(FireControllerV2)
 
 public:
-    struct Feedforward {
-        double yaw;
-        double pitch;
-        double pitch_rate;
-        double yaw_rate;
-        double pitch_acc;
-        double yaw_acc;
+    struct Aimed {
+        double yaw, pitch;
+
+        bool shoot = false;
+
+        Point3d center = { };
+        Point3d attack = { };
     };
 
-    struct Result {
-        double pitch;
-        double yaw;
-        std::optional<Feedforward> feedforward;
-        bool shoot_permitted;
-        Point3d center_position;
-        Point3d aim_point;
-        TimePoint impact_time;
-    };
+    explicit FireControllerV2(const YAML::Node&);
 
-    auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
+    auto update(double yaw, double pitch) -> void;
+    auto update(Timestamp timestamp) -> void;
 
-    auto solve(const predictor::Snapshot& snapshot, fire_control::GimbalState const& gimbal_state)
-        -> std::optional<Result>;
+    auto aim(const Trackable&) -> std::optional<Aimed>;
 };
 
-} // namespace rmcs::kernel
+}

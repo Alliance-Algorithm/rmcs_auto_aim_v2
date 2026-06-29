@@ -2,8 +2,6 @@
 
 #include "module/predictor/model/outpost.hpp"
 #include "module/predictor/model/robot.hpp"
-#include "module/tracker/armor_filter.hpp"
-#include "module/tracker/decider.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/serializable.hpp"
@@ -12,80 +10,7 @@
 #include <unordered_map>
 
 using namespace rmcs::kernel;
-using namespace rmcs::tracker;
 using namespace rmcs::util;
-
-struct Tracker::Impl {
-    ArmorFilter filter;
-    Decider decider;
-
-    struct Config : util::Serializable {
-        std::string enemy_color;
-        constexpr static std::tuple metas { &Config::enemy_color, "enemy_color" };
-    };
-
-    Config config;
-
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-
-        if (config.enemy_color == "red") {
-            filter.set_enemy_color(CampColor::RED);
-        } else if (config.enemy_color == "blue") {
-            filter.set_enemy_color(CampColor::BLUE);
-        } else {
-            return std::unexpected { "enemy_color 应该是 [blue] or [red]." };
-        }
-
-        result = decider.initialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
-
-        return { };
-    }
-
-    auto set_invincible_armors(DeviceIds devices) { filter.set_invincible_armors(devices); }
-
-    auto set_enemy_color(CampColor color) { filter.set_enemy_color(color); }
-
-    auto filter_armors(std::span<Armor2d> const& armors) const -> std::vector<Armor2d> {
-        auto result = filter.filter(armors);
-        return result;
-    }
-
-    auto decide(std::span<Armor3d const> armors, TimePoint t) -> Decider::Output {
-        auto decider_output = decider.update(armors, t);
-        return decider_output;
-    }
-
-    // TODO:need to choose armor by priority
-};
-
-Tracker::Tracker() noexcept
-    : pimpl(std::make_unique<Impl>()) { }
-Tracker::~Tracker() noexcept = default;
-
-auto Tracker::initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-    return pimpl->initialize(yaml);
-}
-
-auto Tracker::set_invincible_armors(DeviceIds devices) -> void {
-    pimpl->set_invincible_armors(devices);
-}
-
-auto Tracker::set_enemy_color(CampColor color) -> void { pimpl->set_enemy_color(color); }
-
-auto Tracker::filter_armors(std::span<Armor2d> armors) const -> std::vector<Armor2d> {
-    return pimpl->filter_armors(armors);
-}
-
-auto Tracker::decide(std::span<Armor3d const> armors, TimePoint t) -> Decider::Output {
-    return pimpl->decide(armors, t);
-}
 
 struct TrackerV2::Impl {
     struct Config : util::Serializable {
