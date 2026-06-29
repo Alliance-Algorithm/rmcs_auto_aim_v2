@@ -10,7 +10,7 @@ namespace rmcs::fire_control {
 struct TrajectorySolution {
     struct Input {
         double v0 { 0. };
-        Eigen::Vector3d target_position { 0.0, 0.0, 0.0 };
+        Eigen::Vector3d point { 0.0, 0.0, 0.0 };
     } input;
 
     struct Output {
@@ -22,7 +22,7 @@ struct TrajectorySolution {
     auto solve() const -> std::optional<Output>;
 
 private:
-    auto Estimate(double v0, double pitch, double d, double air_resistance) const
+    auto estimate(double v0, double pitch, double d, double air_resistance) const
         -> std::tuple<double, double>;
 
     const int kMaxIterateCount { 10 };

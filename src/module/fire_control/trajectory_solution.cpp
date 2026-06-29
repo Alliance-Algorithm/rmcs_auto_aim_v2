@@ -5,20 +5,20 @@
 using namespace rmcs::fire_control;
 
 auto TrajectorySolution::solve() const -> std::optional<Output> {
-    auto const target_d = std::hypot(input.target_position.x(), input.target_position.y());
-    auto const target_h = input.target_position.z();
+    auto const target_d = std::hypot(input.point.x(), input.point.y());
+    auto const target_h = input.point.z();
 
     if (input.v0 <= 0 || target_d <= 0) return std::nullopt;
 
     double pitch   = std::atan2(target_h, target_d);
-    auto const yaw = std::atan2(input.target_position.y(), input.target_position.x());
+    auto const yaw = std::atan2(input.point.y(), input.point.x());
 
     for (int i = 0; i < kMaxIterateCount; ++i) {
-        auto [actual_h, t] = Estimate(input.v0, pitch, target_d, kAirResistanceCoefficient);
+        auto [actual_h, t] = estimate(input.v0, pitch, target_d, kAirResistanceCoefficient);
 
         auto h_error = target_h - actual_h;
         if (std::abs(h_error) < kHeightErrorThreold) {
-            auto result     = Output {};
+            auto result     = Output { };
             result.fly_time = t;
             result.yaw      = yaw;
             result.pitch    = pitch;
@@ -33,7 +33,7 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
     return std::nullopt;
 }
 
-auto TrajectorySolution::Estimate(double v0, double pitch, double d, double air_resistance) const
+auto TrajectorySolution::estimate(double v0, double pitch, double d, double air_resistance) const
     -> std::tuple<double, double> {
     double x = 0, y = 0, t = 0;
     double vx = v0 * std::cos(pitch);

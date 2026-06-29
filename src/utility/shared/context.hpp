@@ -11,7 +11,7 @@ namespace rmcs {
 struct AutoAimState {
     TimePoint timestamp { };
 
-    bool should_control { false };
+    bool should_track { false };
     bool should_shoot = { false };
 
     double yaw { kNaN };

@@ -1,7 +1,7 @@
 #include "tracker.hpp"
 
-#include "module/predictor/model/outpost.hpp"
-#include "module/predictor/model/robot.hpp"
+#include "module/tracker/model/outpost.hpp"
+#include "module/tracker/model/robot.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/serializable.hpp"

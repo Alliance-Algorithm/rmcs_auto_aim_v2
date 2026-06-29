@@ -71,7 +71,7 @@ target_link_libraries(
 add_executable(
     test_outpost_ekf
     ${TOOL_DIR}/test_outpost_ekf.cpp
-    ${RMCS_SRC_DIR}/module/predictor/model/outpost.cpp
+    ${RMCS_SRC_DIR}/module/tracker/model/outpost.cpp
     ${RMCS_SRC_DIR}/utility/math/outpost.cpp
     ${RMCS_SRC_DIR}/utility/panic.cpp
     ${RMCS_SRC_DIR}/utility/rclcpp/node.cpp
@@ -86,7 +86,7 @@ target_link_libraries(
 add_executable(
     test_robot_ekf
     ${TOOL_DIR}/test_robot_ekf.cpp
-    ${RMCS_SRC_DIR}/module/predictor/model/robot.cpp
+    ${RMCS_SRC_DIR}/module/tracker/model/robot.cpp
     ${RMCS_SRC_DIR}/utility/math/robot.cpp
     ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
     ${RMCS_SRC_DIR}/utility/math/camera.cpp

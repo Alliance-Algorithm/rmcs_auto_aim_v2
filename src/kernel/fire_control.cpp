@@ -12,9 +12,11 @@
 
 using namespace rmcs::kernel;
 using namespace rmcs::fire_control;
+using namespace rmcs::util;
 
 struct FireControllerV2::Impl {
-    struct Config : util::Serializable {
+
+    struct Config : Serializable {
         double bullet_speed;
         double shoot_delay;
         double offset_yaw { 0.0 };
@@ -23,16 +25,13 @@ struct FireControllerV2::Impl {
         std::array<double, 2> attack_window { 20.0, 20.0 };
 
         static constexpr std::tuple metas {
-            &Config::bullet_speed,
-            "bullet_speed",
-            &Config::shoot_delay,
-            "shoot_delay",
-            &Config::offset_yaw,
-            "offset_yaw",
-            &Config::offset_pitch,
-            "offset_pitch",
-            &Config::attack_window,
-            "attack_window",
+            // clang-format off
+            &Config::bullet_speed, "bullet_speed",
+            &Config::shoot_delay, "shoot_delay",
+            &Config::offset_yaw, "offset_yaw",
+            &Config::offset_pitch, "offset_pitch",
+            &Config::attack_window, "attack_window",
+            // clang-format on
         };
     } config;
 
@@ -41,7 +40,7 @@ struct FireControllerV2::Impl {
     double cached_yaw   = kNaN;
     double cached_pitch = kNaN;
     Timestamp cached_stamp;
-    std::optional<size_t> last_armor_id;
+    std::optional<std::size_t> last_armor_id;
 
     explicit Impl(const YAML::Node& yaml) {
         if (const auto ret = config.serialize(yaml); !ret.has_value()) {
@@ -65,15 +64,14 @@ struct FireControllerV2::Impl {
         constexpr auto kMaxIterate = std::size_t { 5 };
         constexpr auto kEpsilon    = 0.001;
 
-        // ---- 粗估飞行时间 ------------------------------------------------
-
+        // 粗估飞行时间
         const auto center = trackable.direction().make<Eigen::Vector3d>();
-        auto fly_time     = center.norm() / config.bullet_speed;
 
-        // ---- 预测采样 → 选定装甲板 ---------------------------------------
+        auto fly_time = center.norm() / config.bullet_speed;
 
-        std::optional<size_t> armor_id;
+        // 预测采样 → 选定装甲板
 
+        auto armor_id = std::optional<std::size_t> { };
         {
             auto clone = trackable.clone();
             clone->jump_into(config.shoot_delay + fly_time);
@@ -83,10 +81,9 @@ struct FireControllerV2::Impl {
             const auto cam_dir   = std::atan2(center.y(), center.x());
 
             // 先检查上一帧选中的板是否还在窗口内
-            if (last_armor_id.has_value() && *last_armor_id < aimpoints.size()) {
-                const auto& pt      = aimpoints[*last_armor_id];
-                const auto pt_eigen = pt.make<Eigen::Vector3d>();
-                const auto dir      = pt_eigen - center;
+            if (last_armor_id && *last_armor_id < aimpoints.size()) {
+                const auto pt    = aimpoints[*last_armor_id].make<Eigen::Vector3d>();
+                const auto dir   = pt - center;
                 const auto delta = util::normalize_angle(std::atan2(-dir.y(), -dir.x()) - cam_dir);
 
                 const auto abs_delta = std::abs(delta);
@@ -102,10 +99,9 @@ struct FireControllerV2::Impl {
                 auto best_id    = std::optional<size_t> { };
                 auto best_delta = std::numeric_limits<double>::max();
 
-                for (size_t i = 0; i < aimpoints.size(); ++i) {
-                    const auto& pt      = aimpoints[i];
-                    const auto pt_eigen = pt.make<Eigen::Vector3d>();
-                    const auto dir      = pt_eigen - center;
+                for (std::size_t i = 0; i < aimpoints.size(); ++i) {
+                    const auto pt  = aimpoints[i].make<Eigen::Vector3d>();
+                    const auto dir = pt - center;
                     const auto delta =
                         util::normalize_angle(std::atan2(-dir.y(), -dir.x()) - cam_dir);
 
@@ -119,7 +115,6 @@ struct FireControllerV2::Impl {
                         best_id    = i;
                     }
                 }
-
                 armor_id = best_id;
             }
 
@@ -131,7 +126,7 @@ struct FireControllerV2::Impl {
 
         last_armor_id = armor_id;
 
-        // ---- 迭代收敛飞行时间 ---------------------------------------------
+        // 迭代收敛飞行时间
 
         auto attack = Eigen::Vector3d { };
         auto yaw    = double { };
@@ -146,29 +141,29 @@ struct FireControllerV2::Impl {
 
             attack = aimpoints[*armor_id].make<Eigen::Vector3d>();
 
-            auto solution                  = TrajectorySolution { };
-            solution.input.v0              = config.bullet_speed;
-            solution.input.target_position = attack;
+            auto solution = TrajectorySolution { };
+
+            solution.input.v0    = config.bullet_speed;
+            solution.input.point = attack;
 
             const auto result = solution.solve();
-            if (!result.has_value()) return std::nullopt;
+            if (!result) return std::nullopt;
 
-            const auto time_error = std::abs(result->fly_time - fly_time);
-            yaw                   = result->yaw;
-            pitch                 = result->pitch;
-            fly_time              = result->fly_time;
+            fly_time = result->fly_time;
+            yaw      = result->yaw;
+            pitch    = result->pitch;
 
-            if (time_error < kEpsilon) break;
+            if (std::abs(result->fly_time - fly_time) < kEpsilon) break;
         }
 
-        // ---- 偏置校正 ---------------------------------------------------
+        // 偏置校正
 
         yaw   = util::normalize_angle(yaw + config.offset_yaw);
         pitch = pitch + config.offset_pitch;
 
-        // ---- 射击评估 ---------------------------------------------------
+        // 射击评估
 
-        const auto shoot_permitted = shoot_evaluator.evaluate(
+        const auto shoot = shoot_evaluator.evaluate(
             {
                 .yaw    = yaw,
                 .pitch  = pitch,
@@ -181,12 +176,10 @@ struct FireControllerV2::Impl {
                 .pitch     = cached_pitch,
             });
 
-        // ---- 组装结果 ---------------------------------------------------
-
         return Aimed {
             .yaw    = yaw,
             .pitch  = pitch,
-            .shoot  = shoot_permitted,
+            .shoot  = shoot,
             .center = Point3d { center },
             .attack = Point3d { attack },
         };

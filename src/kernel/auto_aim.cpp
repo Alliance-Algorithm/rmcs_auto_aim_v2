@@ -160,11 +160,11 @@ struct AutoAim::Impl {
                 fire_v2->update(context.timestamp);
 
                 if (auto aimed = fire_v2->aim(*trackable)) {
-                    cmd.should_control = true;
-                    cmd.should_shoot   = aimed->shoot;
-                    cmd.yaw            = aimed->yaw;
-                    cmd.pitch          = aimed->pitch;
-                    cmd.robot_center   = aimed->center;
+                    cmd.should_track = true;
+                    cmd.should_shoot = aimed->shoot;
+                    cmd.yaw          = aimed->yaw;
+                    cmd.pitch        = aimed->pitch;
+                    cmd.robot_center = aimed->center;
 
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
                     visual.publish(aimed->yaw, "aimed_yaw");
@@ -179,9 +179,9 @@ struct AutoAim::Impl {
                 }
             }
             visual.draw_later(
-                Canvas::Text { "ATTACK", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
+                Canvas::Text { "SHOOT", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
             visual.draw_later(
-                Canvas::Text { "CONTROL", { 10, 640 }, cmd.should_control ? kRed : kWhite });
+                Canvas::Text { "TRACK", { 10, 640 }, cmd.should_track ? kRed : kWhite });
 
             {
                 std::lock_guard lock { self.command_mutex };

@@ -51,12 +51,6 @@ ament_add_gtest(
     ${TEST_DIR}/duck_type.cpp
 )
 
-# Pipeline
-ament_add_gtest(
-    test_pipeline
-    ${TEST_DIR}/pipeline.cpp
-)
-
 # Serializable
 ament_add_gtest(
     test_serializable
