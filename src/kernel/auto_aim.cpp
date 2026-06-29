@@ -162,12 +162,13 @@ struct AutoAim::Impl {
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;
                     cmd.should_shoot = aimed->shoot;
-                    cmd.yaw          = aimed->yaw;
+                    cmd.yaw          = aimed->aim_yaw;
                     cmd.pitch        = aimed->pitch;
                     cmd.robot_center = aimed->center;
 
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                    visual.publish(aimed->yaw, "aimed_yaw");
+                    visual.publish(aimed->aim_yaw, "aim_yaw");
+                    visual.publish(aimed->raw_yaw, "raw_yaw");
 
                     if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
                         visual.draw_later(Canvas::Point {

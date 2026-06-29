@@ -177,11 +177,12 @@ struct FireControllerV2::Impl {
             });
 
         return Aimed {
-            .yaw    = yaw,
-            .pitch  = pitch,
-            .shoot  = shoot,
-            .center = Point3d { center },
-            .attack = Point3d { attack },
+            .aim_yaw = yaw,
+            .raw_yaw = yaw,
+            .pitch   = pitch,
+            .shoot   = shoot,
+            .center  = Point3d { center },
+            .attack  = Point3d { attack },
         };
     }
 };

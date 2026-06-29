@@ -128,13 +128,3 @@ ament_add_gtest(
     test_transform_communication
     ${TEST_DIR}/transform_communication.cpp
 )
-
-# Tiny MPC solver
-ament_add_gtest(
-    test_tiny_mpc_solver
-    ${TEST_DIR}/tiny_mpc_solver.cpp
-)
-target_link_libraries(
-    test_tiny_mpc_solver
-    tinympcstatic
-)

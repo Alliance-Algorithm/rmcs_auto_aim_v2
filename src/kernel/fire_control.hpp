@@ -13,7 +13,10 @@ class FireControllerV2 {
 
 public:
     struct Aimed {
-        double yaw, pitch;
+        double aim_yaw = 0;
+        double raw_yaw = 0;
+
+        double pitch = 0;
 
         bool shoot = false;
 

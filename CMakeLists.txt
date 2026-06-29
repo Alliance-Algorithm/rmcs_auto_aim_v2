@@ -7,19 +7,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_TYPE "Release")
 add_compile_options(-Wall -Wextra -Wpedantic -O3)
 
-include(FetchContent)
-
-FetchContent_Declare(
-    tinympc
-    GIT_REPOSITORY https://github.com/Alliance-Algorithm/TinyMPC.git
-    GIT_TAG main
-    SOURCE_SUBDIR src/tinympc
-)
-FetchContent_MakeAvailable(tinympc)
-if(TARGET tinympcstatic AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(tinympcstatic PRIVATE -w)
-endif()
-
 ## 依赖查找
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -125,7 +112,6 @@ target_link_libraries(
         ${PROJECT_NAME}_utility
         openvino::runtime
     PRIVATE
-        tinympcstatic
         ${hikcamera_LIBRARIES}
 )
 
