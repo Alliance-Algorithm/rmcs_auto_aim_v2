@@ -189,6 +189,8 @@ struct OutpostModel::Impl {
     int pending_sign        = 0; // 候选方向
     int sign_evidence_count = 0; // 候选方向连续命中计数
 
+    std::size_t update_count = 0;
+
     Context context;
     Config config { };
 
@@ -224,9 +226,8 @@ private:
         return jacobian * covariance * jacobian.transpose() + context.noise_process;
     }
 
-    static auto
-    measure_innovation(const ObservationVector& observation, const StateVector& prior_state)
-        -> ObservationVector {
+    static auto measure_innovation(
+        const ObservationVector& observation, const StateVector& prior_state) -> ObservationVector {
 
         auto predicted_observation = ObservationVector { };
         predicted_observation << prior_state[0], prior_state[1], prior_state[2], prior_state[4];
@@ -239,15 +240,14 @@ private:
     auto calculate_kalman_gain(const Covariance& prior_covariance) const -> KalmanGain {
         const auto jacobian = make_observation_jacobian();
 
-        const auto innovation_covariance
-            = jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
+        const auto innovation_covariance =
+            jacobian * prior_covariance * jacobian.transpose() + context.noise_observation;
 
         return prior_covariance * jacobian.transpose()
             * innovation_covariance.ldlt().solve(ObservationNoise::Identity());
     }
 
-    auto a_posteriori_update(
-        const StateVector& prior_state, const Covariance& prior_covariance,
+    auto a_posteriori_update(const StateVector& prior_state, const Covariance& prior_covariance,
         const KalmanGain& kalman_gain, const ObservationVector& innovation,
         const ObservationJacobian& jacobian) const -> std::pair<StateVector, Covariance> {
 
@@ -258,8 +258,8 @@ private:
         const auto complement          = Covariance::Identity() - kalman_gain * jacobian;
         auto posterior_covariance      = Covariance { };
         posterior_covariance.noalias() = complement * prior_covariance * complement.transpose();
-        posterior_covariance
-            += (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
+        posterior_covariance +=
+            (kalman_gain * context.noise_observation * kalman_gain.transpose()).eval();
         posterior_covariance = 0.5 * (posterior_covariance + posterior_covariance.transpose());
 
         return { posterior_state, posterior_covariance };
@@ -276,16 +276,16 @@ public:
         const auto translation = armor.translation.make<Eigen::Vector3d>();
         const auto orientation = armor.orientation.make<Eigen::Quaterniond>();
 
-        const auto backward = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
-        const auto armor2center
-            = Eigen::Vector3d { Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() }
-                                * backward };
+        const auto backward     = Eigen::Vector3d { orientation * Eigen::Vector3d::UnitX() };
+        const auto armor2center = Eigen::Vector3d {
+            Eigen::AngleAxisd { -pitch, orientation * Eigen::Vector3d::UnitY() } * backward
+        };
         const auto center = Eigen::Vector3d { translation + kRadius * armor2center };
 
         context.update_center(center);
         context.posteriors_state[3] = 0.0;
-        context.posteriors_state[4]
-            = util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
+        context.posteriors_state[4] =
+            util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
 
         context.set_noise(config);
         context.reset_covariance();
@@ -327,8 +327,8 @@ public:
 
             const auto center = Eigen::Vector3d { translation + kRadius * armor2center };
 
-            const auto armor_yaw
-                = util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
+            const auto armor_yaw =
+                util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
 
             observation << center.x(), center.y(), center.z(), armor_yaw;
         }
@@ -407,8 +407,8 @@ public:
         const auto kalman_gain = calculate_kalman_gain(prior_covariance);
         const auto jacobian    = make_observation_jacobian();
 
-        const auto [posterior_state, posterior_covariance]
-            = a_posteriori_update(prior_state, prior_covariance, kalman_gain, innovation, jacobian);
+        const auto [posterior_state, posterior_covariance] =
+            a_posteriori_update(prior_state, prior_covariance, kalman_gain, innovation, jacobian);
 
         context.posteriors_state      = posterior_state;
         context.posteriors_covariance = posterior_covariance;
@@ -418,18 +418,20 @@ public:
         last_observation << context.posteriors_state[0], context.posteriors_state[1],
             context.posteriors_state[2] + delta_height,
             util::normalize_angle(context.posteriors_state[4] + delta_yaw);
+
+        update_count += 1;
     }
 
     auto at(std::uint8_t index) const noexcept -> Armor3d {
         // EKF state 跟踪参考板（ref_index），求 index 相对 ref_index 的偏移
         const auto delta_yaw = util::normalize_angle(
             std::get<0>(kOffsetTable[index]) - std::get<0>(kOffsetTable[abs_ref_index]));
-        const auto delta_height
-            = std::get<1>(kOffsetTable[index]) - std::get<1>(kOffsetTable[abs_ref_index]);
+        const auto delta_height =
+            std::get<1>(kOffsetTable[index]) - std::get<1>(kOffsetTable[abs_ref_index]);
 
         // center→armor 方向的 yaw（state[4] 的约定）
-        const auto center2armor_yaw
-            = util::normalize_angle(context.posteriors_state[4] + delta_yaw);
+        const auto center2armor_yaw =
+            util::normalize_angle(context.posteriors_state[4] + delta_yaw);
 
         // 装甲板位置 = 旋转中心 + radius * center→armor 方向
         const auto armor_pos = Eigen::Vector3d {
@@ -452,6 +454,21 @@ public:
             .translation = Translation { armor_pos },
             .orientation = Orientation { orientation },
         };
+    }
+
+    auto converge() const -> bool {
+        constexpr auto kMinUpdate = std::size_t { 5 };
+        constexpr auto kMaxCovXY  = 0.01;
+        constexpr auto kMaxCovYaw = 0.01;
+
+        if (update_count < kMinUpdate) return false;
+
+        const auto& cov = context.posteriors_covariance;
+        if (cov(0, 0) > kMaxCovXY) return false;
+        if (cov(1, 1) > kMaxCovXY) return false;
+        if (cov(4, 4) > kMaxCovYaw) return false;
+
+        return true;
     }
 };
 
@@ -482,3 +499,5 @@ auto OutpostModel::full() const -> std::array<Armor3d, 3> {
 auto OutpostModel::current() const -> Armor3d {
     return pimpl->at((pimpl->abs_ref_index + pimpl->rel_see_index + 3) % 3);
 }
+
+auto OutpostModel::converge() const -> bool { return pimpl->converge(); }

@@ -51,20 +51,20 @@ public:
         double rotation_speed_min = std::numbers::pi * 0;
         double rotation_speed_max = std::numbers::pi * 8;
 
-        double yaw_full_max = 60.0 * std::numbers::pi / 180.0;
+        double yaw_full_max = 70.0 * std::numbers::pi / 180.0;
         double yaw_part_max = 90.0 * std::numbers::pi / 180.0;
 
         // 过程噪声
         double noise_x = 1e-4;
         double noise_y = 1e-4;
-        double noise_z = 1e-4;
+        double noise_z = 1e-8;
 
         double noise_vx = 5e-3;
         double noise_vy = 5e-3;
-        double noise_vz = 5e-3;
+        double noise_vz = 1e-8;
 
-        double noise_rotation_angle = 5e-4;
-        double noise_rotation_speed = 1e-2;
+        double noise_rotation_angle = 1e-3;
+        double noise_rotation_speed = 0.50;
 
         double noise_radius_forward = 1e-8;
         double noise_radius_lateral = 1e-8;
@@ -100,10 +100,7 @@ public:
 
     auto full() const -> std::array<Armor3d, 4>;
 
-    auto converge() const -> bool {
-        // TODO: 待实现，并不是我自信到认为该模型一定收敛
-        return true;
-    }
+    auto converge() const -> bool;
 
     auto addition() const -> const Addition&;
 };

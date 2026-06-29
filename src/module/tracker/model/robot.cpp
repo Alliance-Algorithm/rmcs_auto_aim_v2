@@ -213,6 +213,7 @@ struct RobotModel::Impl {
     Context context;
     Observable observable;
 
+    std::size_t update_count = 0;
     ArmorGenre genre { DeviceId::UNKNOWN };
     ArmorColor color { ArmorColor::DARK };
 
@@ -236,6 +237,9 @@ private:
 
         const auto fx = camera_feature.camera_matrix[0][0];
         const auto fy = camera_feature.camera_matrix[1][1];
+
+        const auto r_cam2odom =
+            camera_feature.orientation.make<Eigen::Quaterniond>().conjugate().toRotationMatrix();
 
         auto jacobian = Eigen::Matrix<double, 4, 11> { };
         jacobian.setZero();
@@ -309,7 +313,8 @@ private:
 
             if (armor_id == 1 || armor_id == 3) jacobian_position(2, kStateHL) = 1.0;
 
-            jacobian.block<2, 11>(row, 0).noalias() = *jacobian_projection_opt * jacobian_position;
+            jacobian.block<2, 11>(row, 0).noalias() =
+                *jacobian_projection_opt * r_cam2odom * jacobian_position;
         }
 
         return jacobian;
@@ -459,9 +464,7 @@ public:
 
         // H (4×11): geometry Jacobian
         const auto jacobian = make_observation_jacobian(id);
-        if (jacobian.hasNaN()) {
-            return;
-        }
+        if (jacobian.hasNaN()) return;
 
         // Kalman gain
         const auto innovation_covariance =
@@ -474,6 +477,8 @@ public:
         // state update
         auto posterior_state = StateVector { prior_state };
         posterior_state.noalias() += kalman_gain * innovation;
+
+        if (posterior_state.hasNaN() || !posterior_state.allFinite()) return;
         posterior_state[kStateA] = util::normalize_angle(posterior_state[kStateA]);
 
         posterior_state[kStateRF] = std::clamp(
@@ -482,6 +487,9 @@ public:
             posterior_state[kStateRL], config.radius_lateral_min, config.radius_lateral_max);
         posterior_state[kStateHL] = std::clamp(
             posterior_state[kStateHL], config.height_lateral_min, config.height_lateral_max);
+
+        posterior_state[kStateVx] = std::clamp(posterior_state[kStateVx], -10.0, 10.0);
+        posterior_state[kStateVy] = std::clamp(posterior_state[kStateVy], -10.0, 10.0);
 
         // covariance update
         const auto complement          = Covariance::Identity() - kalman_gain * jacobian;
@@ -540,9 +548,10 @@ public:
         auto sorted = std::vector<SortedEntry> { };
 
         // Step 1: 交叉匹配，找四角点误差和最小的完整装甲板作为锚
-        auto anchor_armor_id        = int { -1 };
-        auto best_error_sum         = std::numeric_limits<double>::max();
-        const Armor2d* anchor_armor = nullptr;
+        Armor2d const* anchor_armor = nullptr;
+
+        auto anchor_armor_id = int { -1 };
+        auto best_error_sum  = std::numeric_limits<double>::max();
 
         for (const auto& armor : armors) {
             for (int armor_id = 0; armor_id < 4; ++armor_id) {
@@ -639,6 +648,20 @@ public:
             armor.br = { static_cast<float>(lower[r].x()), static_cast<float>(lower[r].y()) };
             armor.bl = { static_cast<float>(lower[l].x()), static_cast<float>(lower[l].y()) };
         }
+        update_count += 1;
+    }
+
+    auto converge() const -> bool {
+        constexpr auto kMinUpdate = std::size_t { 5 };
+        constexpr auto kMaxCovXY  = 1.0;
+
+        if (update_count < kMinUpdate) return false;
+
+        const auto& cov = context.posteriors_covariance;
+        if (cov(kStateX, kStateX) > kMaxCovXY) return false;
+        if (cov(kStateY, kStateY) > kMaxCovXY) return false;
+
+        return true;
     }
 };
 
@@ -672,5 +695,7 @@ auto RobotModel::correct(
 auto RobotModel::state() const noexcept -> State { return pimpl->context.get_state(); }
 
 auto RobotModel::full() const -> std::array<Armor3d, 4> { return pimpl->full(); }
+
+auto RobotModel::converge() const -> bool { return pimpl->converge(); }
 
 auto RobotModel::addition() const -> const Addition& { return pimpl->addition; }

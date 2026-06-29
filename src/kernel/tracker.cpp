@@ -6,6 +6,7 @@
 #include "utility/math/camera.hpp"
 #include "utility/serializable.hpp"
 
+#include <algorithm>
 #include <ranges>
 #include <unordered_map>
 
@@ -16,11 +17,13 @@ struct TrackerV2::Impl {
     struct Config : util::Serializable {
         std::string fallback_color = "RED";
         double timeout_seconds     = 1.5;
+        double image_margin        = 20.0;
 
         static constexpr std::tuple metas {
             // clang-format off
             &Config::fallback_color, "fallback_color",
             &Config::timeout_seconds, "timeout_seconds",
+            &Config::image_margin, "image_margin",
             // clang-format on
         };
     } config;
@@ -71,8 +74,19 @@ struct TrackerV2::Impl {
     }
 
     auto store(std::span<const Armor2d> items) {
+        const auto kWidth  = camera.camera_matrix[0][2] * 2.0;
+        const auto kHeight = camera.camera_matrix[1][2] * 2.0;
+
         for (const auto& item : items) {
             if (item.color == track_color && track_device.contains(item.genre)) {
+                const auto min_x = std::min({ item.tl.x, item.tr.x, item.bl.x, item.br.x });
+                const auto max_x = std::max({ item.tl.x, item.tr.x, item.bl.x, item.br.x });
+                const auto min_y = std::min({ item.tl.y, item.tr.y, item.bl.y, item.br.y });
+                const auto max_y = std::max({ item.tl.y, item.tr.y, item.bl.y, item.br.y });
+
+                if (min_x < config.image_margin || max_x > kWidth - config.image_margin) continue;
+                if (min_y < config.image_margin || max_y > kHeight - config.image_margin) continue;
+
                 stored.armor2ds.push_back(item);
             }
         }
@@ -102,20 +116,24 @@ struct TrackerV2::Impl {
                 timestamp - outpost_stamp,
             };
             if (dt.count() > config.timeout_seconds) {
-                outpost = nullptr;
+                outpost       = nullptr;
+                outpost_stamp = timestamp;
             }
         }
         { // @NOTE: 假装这里有大符的超时处理
         }
         // 机器人观测超时处理
-        for (const auto [id, stamp] : robot_stamps) {
-            const auto dt = std::chrono::duration<double> {
-                timestamp - stamp,
-            };
+        std::erase_if(robot_stamps, [&](const auto& item) {
+            const auto [id, stamp] = item;
+
+            const auto dt = std::chrono::duration<double> { timestamp - stamp };
             if (dt.count() > config.timeout_seconds) {
                 robots.erase(id);
+                logging.warn("Timeout model with {}", get_enum_name(id));
+                return true;
             }
-        }
+            return false;
+        });
 
         struct Target final {
             std::vector<Armor2d> armor2ds;
@@ -175,6 +193,9 @@ struct TrackerV2::Impl {
                 });
                 if (!robots[id].start_with(target.armor2ds)) {
                     robots.erase(id);
+                    logging.warn("Init failed with {}", get_enum_name(id));
+                } else {
+                    logging.info("Init OK with {}", get_enum_name(id));
                 }
             } else {
                 const auto dt = std::chrono::duration<double> {

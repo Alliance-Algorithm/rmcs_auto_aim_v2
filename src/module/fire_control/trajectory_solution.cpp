@@ -21,7 +21,7 @@ auto TrajectorySolution::solve() const -> std::optional<Output> {
             auto result     = Output { };
             result.fly_time = t;
             result.yaw      = yaw;
-            result.pitch    = pitch;
+            result.pitch    = -pitch;
             return result;
         }
 
