@@ -129,7 +129,6 @@ struct TrackerV2::Impl {
             const auto dt = std::chrono::duration<double> { timestamp - stamp };
             if (dt.count() > config.timeout_seconds) {
                 robot_models.erase(id);
-                logging.warn("Timeout model with {}", get_enum_name(id));
                 return true;
             }
             return false;
@@ -194,7 +193,6 @@ struct TrackerV2::Impl {
                 if (!robot_models[id].init(target.armor2ds)) {
                     robot_models.erase(id);
                     robot_stamps.erase(id);
-                    logging.warn("Init failed with {}", get_enum_name(id));
                 } else {
                     logging.info("Init OK with {}", get_enum_name(id));
                 }

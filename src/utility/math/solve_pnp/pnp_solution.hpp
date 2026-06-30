@@ -47,6 +47,8 @@ struct RobustPnpSolution {
     } input;
 
     struct Result {
+        /// solve() 内部已经通过 CameraFeature 外参转换到 Odom 坐标系
+        /// 因为有一些裁剪分支必须依赖 Odom 系下的信息
         Armor3d armor3d;
     } result;
 

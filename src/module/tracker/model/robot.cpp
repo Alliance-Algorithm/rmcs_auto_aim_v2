@@ -1,5 +1,6 @@
 #include "robot.hpp"
 
+#include "utility/clock.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/math/conversion.hpp"
@@ -68,7 +69,7 @@ struct RobotModel::Impl {
 
         auto reset_covariance() noexcept {
             auto diag = StateVector { };
-            diag << 1.0, 1.0, 1.0, // x, y, z
+            diag << 64.0, 64.0, 64.0, // x, y, z
                 64.0, 64.0, 64.0, // vx, vy, vz
                 0.4, // rotation_angle
                 100.0, // rotation_speed
@@ -213,6 +214,7 @@ struct RobotModel::Impl {
     Context context;
     Observable observable;
 
+    Timestamp init_timestamp = Clock::now();
     std::size_t update_count = 0;
     ArmorGenre genre { DeviceId::UNKNOWN };
     ArmorColor color { ArmorColor::DARK };
@@ -345,7 +347,7 @@ public:
         observable.feature.orientation = t.orientation;
     }
 
-    auto start_with(std::span<const Armor2d> armors2d) noexcept -> bool {
+    auto init(std::span<const Armor2d> armors2d) noexcept -> bool {
         constexpr auto kPitch = kPredictedOtherArmorPitch;
 
         genre = DeviceId::UNKNOWN;
@@ -377,28 +379,12 @@ public:
         const auto orientation = best_armor3d.orientation.make<Eigen::Quaterniond>();
         const auto translation = best_armor3d.translation.make<Eigen::Vector3d>();
 
-        const auto armor_to_center = Eigen::Vector3d {
+        const auto armor2center = Eigen::Vector3d {
             Eigen::AngleAxisd { -kPitch, orientation * Eigen::Vector3d::UnitY() }
                 * (orientation * Eigen::Vector3d::UnitX()),
         };
-        const auto obs_yaw =
-            util::normalize_angle(std::atan2(-armor_to_center.y(), -armor_to_center.x()));
-        auto center = Eigen::Vector3d { translation + 0.2 * armor_to_center };
-        auto yaw    = obs_yaw;
-
-        // PnP 结果在相机系，变到 odom 系
-        {
-            const auto q_odom_from_cam  = camera_feature.orientation.make<Eigen::Quaterniond>();
-            const auto t_camera         = camera_feature.translation.make<Eigen::Vector3d>();
-            center                      = q_odom_from_cam * center + t_camera;
-            const auto direction_in_cam = Eigen::Vector3d {
-                std::cos(yaw),
-                std::sin(yaw),
-                0.0,
-            };
-            const auto direction_in_odom = q_odom_from_cam * direction_in_cam;
-            yaw                          = std::atan2(direction_in_odom.y(), direction_in_odom.x());
-        }
+        auto yaw    = util::normalize_angle(std::atan2(-armor2center.y(), -armor2center.x()));
+        auto center = Eigen::Vector3d { translation + 0.2 * armor2center };
 
         context.posteriors_state           = StateVector::Zero();
         context.posteriors_state[kStateX]  = center.x();
@@ -420,6 +406,8 @@ public:
 
         context.posteriors_state[kStateA] = yaw;
         observable.update(center, yaw, 0.2, 0.2, 0.0);
+
+        init_timestamp = Clock::now();
         return true;
     }
 
@@ -661,8 +649,12 @@ public:
         if (cov(kStateX, kStateX) > kMaxCovXY) return false;
         if (cov(kStateY, kStateY) > kMaxCovXY) return false;
 
+        using namespace std::chrono_literals;
+        if (Clock::now() - init_timestamp < 0.1s) return false;
+
         return true;
     }
+
     auto diverged() const -> bool {
         const auto& state = context.posteriors_state;
         const auto& cov   = context.posteriors_covariance;
@@ -698,7 +690,7 @@ auto RobotModel::update_camera(std::array<double, 9> matrix, std::array<double, 
 }
 
 auto RobotModel::init(std::span<const Armor2d> armors) noexcept -> bool {
-    return pimpl->start_with(armors);
+    return pimpl->init(armors);
 }
 
 auto RobotModel::update_transform(const Transform& t) noexcept -> void {
