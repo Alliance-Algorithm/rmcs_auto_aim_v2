@@ -652,7 +652,7 @@ public:
     }
 
     auto converge() const -> bool {
-        constexpr auto kMinUpdate = std::size_t { 5 };
+        constexpr auto kMinUpdate = std::size_t { 10 };
         constexpr auto kMaxCovXY  = 1.0;
 
         if (update_count < kMinUpdate) return false;
@@ -663,6 +663,28 @@ public:
 
         return true;
     }
+    auto diverged() const -> bool {
+        const auto& state = context.posteriors_state;
+        const auto& cov   = context.posteriors_covariance;
+        return std::ranges::any_of(
+            std::array {
+                cov(kStateX, kStateX) > 150,
+                cov(kStateY, kStateY) > 150,
+
+                std::abs(state[kStateX]) > 15.0,
+                std::abs(state[kStateY]) > 15.0,
+                std::abs(state[kStateZ]) > 02.0,
+                std::abs(state[kStateW]) > 10.0 * std::numbers::pi,
+
+                std::abs(state[kStateVx]) > 5.,
+                std::abs(state[kStateVy]) > 5.,
+                std::abs(state[kStateVz]) > 1.,
+
+                state.hasNaN() == true,
+                state.allFinite() == false,
+            },
+            std::identity { });
+    }
 };
 
 RobotModel::RobotModel(const Config& cfg) noexcept
@@ -670,14 +692,12 @@ RobotModel::RobotModel(const Config& cfg) noexcept
 
 RobotModel::~RobotModel() noexcept = default;
 
-auto RobotModel::configure(const Config& cfg) noexcept -> void { pimpl->config = cfg; }
-
-auto RobotModel::configure_camera(
-    std::array<double, 9> matrix, std::array<double, 5> coeff) noexcept -> void {
+auto RobotModel::update_camera(std::array<double, 9> matrix, std::array<double, 5> coeff) noexcept
+    -> void {
     pimpl->configure_camera(matrix, coeff);
 }
 
-auto RobotModel::start_with(std::span<const Armor2d> armors) noexcept -> bool {
+auto RobotModel::init(std::span<const Armor2d> armors) noexcept -> bool {
     return pimpl->start_with(armors);
 }
 
@@ -697,5 +717,6 @@ auto RobotModel::state() const noexcept -> State { return pimpl->context.get_sta
 auto RobotModel::full() const -> std::array<Armor3d, 4> { return pimpl->full(); }
 
 auto RobotModel::converge() const -> bool { return pimpl->converge(); }
+auto RobotModel::diverged() const -> bool { return pimpl->diverged(); }
 
 auto RobotModel::addition() const -> const Addition& { return pimpl->addition; }

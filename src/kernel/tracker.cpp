@@ -41,7 +41,7 @@ struct TrackerV2::Impl {
 
     RobotModel::Config robot_config;
     std::unordered_map<ArmorGenre, Timestamp> robot_stamps;
-    std::unordered_map<ArmorGenre, RobotModel> robots;
+    std::unordered_map<ArmorGenre, RobotModel> robot_models;
 
     OutpostModel::Config outpost_config;
     Timestamp outpost_stamp;
@@ -128,7 +128,7 @@ struct TrackerV2::Impl {
 
             const auto dt = std::chrono::duration<double> { timestamp - stamp };
             if (dt.count() > config.timeout_seconds) {
-                robots.erase(id);
+                robot_models.erase(id);
                 logging.warn("Timeout model with {}", get_enum_name(id));
                 return true;
             }
@@ -182,17 +182,18 @@ struct TrackerV2::Impl {
             if (id == DeviceId::OUTPOST) {
                 continue;
             }
-            if (robots.contains(id) == false) {
-                robots.try_emplace(id, robot_config);
-                robots[id].configure_camera(
+            if (robot_models.contains(id) == false) {
+                robot_models.try_emplace(id, robot_config);
+                robot_models[id].update_camera(
                     std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
                     camera.distort_coeff);
-                robots[id].update_transform({
+                robot_models[id].update_transform({
                     .translation = camera.translation,
                     .orientation = camera.orientation,
                 });
-                if (!robots[id].start_with(target.armor2ds)) {
-                    robots.erase(id);
+                if (!robot_models[id].init(target.armor2ds)) {
+                    robot_models.erase(id);
+                    robot_stamps.erase(id);
                     logging.warn("Init failed with {}", get_enum_name(id));
                 } else {
                     logging.info("Init OK with {}", get_enum_name(id));
@@ -202,13 +203,19 @@ struct TrackerV2::Impl {
                     timestamp - robot_stamps[id],
                 };
 
-                auto& model = robots[id];
+                auto& model = robot_models[id];
                 model.update_transform({
                     .translation = camera.translation,
                     .orientation = camera.orientation,
                 });
                 model.predict(dt.count());
                 model.correct(target.armor2ds, target.bars);
+
+                if (model.diverged()) {
+                    robot_models.erase(id);
+                    robot_stamps.erase(id);
+                    logging.warn("{} is diverged", get_enum_name(id));
+                }
             }
             robot_stamps[id] = timestamp;
         }
@@ -229,6 +236,8 @@ struct TrackerV2::Impl {
         auto result = Trackable::Unique { };
         auto better = std::numeric_limits<double>::max();
         {
+            /// @FIXME:
+            ///  1. 误识别的机器人，也会被认为是收敛的，因为只进行了一帧 init
             if (outpost && outpost->converge()) {
                 const auto state = outpost->state();
                 const auto score = calculate(DeviceId::OUTPOST, state.direction());
@@ -240,7 +249,7 @@ struct TrackerV2::Impl {
                 }
                 std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
             }
-            for (const auto& [id, model] : robots) {
+            for (const auto& [id, model] : robot_models) {
                 if (model.converge()) {
                     const auto state = model.state();
                     const auto score = calculate(id, state.direction());

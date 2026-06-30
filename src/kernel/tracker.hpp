@@ -1,13 +1,12 @@
 #pragma once
 
-#include <optional>
-#include <span>
-#include <yaml-cpp/yaml.h>
-
 #include "module/tracker/trackable.hpp"
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
+
+#include <span>
+#include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
 

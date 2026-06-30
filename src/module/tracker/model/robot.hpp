@@ -86,22 +86,18 @@ public:
 
     explicit RobotModel(const Config&) noexcept;
 
-    auto configure(const Config&) noexcept -> void;
-
-    auto configure_camera(std::array<double, 9>, std::array<double, 5>) noexcept -> void;
-
+    auto update_camera(std::array<double, 9>, std::array<double, 5>) noexcept -> void;
     auto update_transform(const Transform&) noexcept -> void;
 
-    auto start_with(std::span<const Armor2d>) noexcept -> bool;
+    auto init(std::span<const Armor2d>) noexcept -> bool;
     auto predict(double dt) noexcept -> void;
     auto correct(std::span<const Armor2d>, std::span<const Lightbar2d>) noexcept -> void;
 
-    auto state() const noexcept -> State;
-
-    auto full() const -> std::array<Armor3d, 4>;
-
     auto converge() const -> bool;
+    auto diverged() const -> bool;
 
+    auto state() const noexcept -> State;
+    auto full() const -> std::array<Armor3d, 4>;
     auto addition() const -> const Addition&;
 };
 

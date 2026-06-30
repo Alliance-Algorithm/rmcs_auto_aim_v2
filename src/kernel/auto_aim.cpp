@@ -173,7 +173,7 @@ struct AutoAim::Impl {
                     if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
                         visual.draw_later(Canvas::Point {
                             .origin = aim_2d->make<cv::Point2i>(),
-                            .radius = 5,
+                            .radius = 3,
                             .color  = aimed->shoot ? kRed : kGreen,
                         });
                     }
