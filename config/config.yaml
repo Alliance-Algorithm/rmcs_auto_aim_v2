@@ -54,8 +54,6 @@ capturer:
     allow_skipping: false
 
 identifier:
-  binarization_threshold: 0.5
-
   # openvino infer
   model_location: "shenzhen-0526.onnx"
   # model_location: "shenzhen-0708.onnx"
@@ -78,8 +76,9 @@ identifier:
     max_aspect_ratio: 1.5
 
 tracker:
-  # enemy_color: red
-  enemy_color: blue
+  fallback_color: BLUE
+  timeout_seconds: 1.5
+  image_margin: 50
 
 pose_estimator:
   distance_optimizer: true
@@ -90,29 +89,11 @@ pose_estimator:
   outpost_armor_thickness: 0.022
 
 fire_control:
-  initial_bullet_speed: 23.5 # m/s
+  bullet_speed: 23.5 # m/s
   shoot_delay: 0.04 # s
-  mpc_enable: true
-  yaw_offset: -0.0 # degree
-  pitch_offset: +0.0 # degree
-
-  armor_target_selector:
-    coming_angle: 60.0 # degree
-    leaving_angle: 20.0 # degree
-    outpost_coming_angle: 40.0 # degree
-    outpost_leaving_angle: 30.0 # degree
-    switch_threshold: 8.0 # degree
-
-  mpc:
-    mpc_max_yaw_acc: 50.0
-    mpc_yaw_q_angle: 9000000.0
-    mpc_yaw_q_rate: 0.0
-    mpc_yaw_r_acc: 1.0
-    mpc_max_pitch_acc: 100.0
-    mpc_pitch_q_angle: 9000000.0
-    mpc_pitch_q_rate: 0.0
-    mpc_pitch_r_acc: 1.0
-    mpc_max_iter: 5
+  offset_yaw: -0.0 # degree
+  offset_pitch: +0.0 # degree
+  attack_window: [60.0, 60.0] # degree [left, right]
 
   shoot_evaluator:
     is_lazy_gimbal: false
