@@ -149,11 +149,13 @@ struct FireControllerV2::Impl {
             const auto result = solution.solve();
             if (!result) return std::nullopt;
 
+            const auto prev_fly_time = fly_time;
+
             fly_time = result->fly_time;
             yaw      = result->yaw;
             pitch    = result->pitch;
 
-            if (std::abs(result->fly_time - fly_time) < kEpsilon) break;
+            if (std::abs(fly_time - prev_fly_time) < kEpsilon) break;
         }
 
         // 偏置校正

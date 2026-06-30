@@ -90,8 +90,6 @@ struct AutoAim::Impl {
 
                 armor2ds    = std::move(result->armors);
                 lightbar2ds = std::move(result->lightbars);
-
-                if (armor2ds.empty()) continue;
             }
 
             /// 2. Transform 2d to 3d

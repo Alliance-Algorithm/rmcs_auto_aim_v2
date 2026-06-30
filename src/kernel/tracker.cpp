@@ -193,6 +193,7 @@ struct TrackerV2::Impl {
                 if (!robot_models[id].init(target.armor2ds)) {
                     robot_models.erase(id);
                     robot_stamps.erase(id);
+                    continue;
                 } else {
                     logging.info("Init OK with {}", get_enum_name(id));
                 }
@@ -213,6 +214,7 @@ struct TrackerV2::Impl {
                     robot_models.erase(id);
                     robot_stamps.erase(id);
                     logging.warn("{} is diverged", get_enum_name(id));
+                    continue;
                 }
             }
             robot_stamps[id] = timestamp;
