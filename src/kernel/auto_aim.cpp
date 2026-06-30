@@ -26,18 +26,20 @@ using namespace rmcs::util;
 using namespace rmcs::kernel;
 
 struct AutoAim::Impl {
+    AutoAim& self;
     RclcppNode node { "auto_aim" };
 
     Capturer cap { };
     Identifier identifier { };
-    Tracker tracker { };
     PoseEstimator estimator { };
-    FireControl fire { };
     Visualization visual { };
+
+    std::unique_ptr<TrackerV2> tracker_v2;
+    std::unique_ptr<FireControllerV2> fire_v2;
 
     std::jthread worker;
 
-    auto run(AutoAim& self, const std::stop_token& stop) -> void {
+    auto run(const std::stop_token& stop) -> void {
         using namespace std::chrono_literals;
 
         node.set_pub_topic_prefix("/rmcs/auto_aim/");
@@ -59,6 +61,7 @@ struct AutoAim::Impl {
                 context = self.current_context;
             }
             visual.publish(context.camera_transform, "camera_link");
+            visual.publish(context.yaw, "yaw");
 
             if (framerate.tick()) {
                 node.info("Autoaim Framerate: {}", framerate.fps());
@@ -69,13 +72,14 @@ struct AutoAim::Impl {
                     Canvas::Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
                 visual.draw_later( // 自瞄帧率
                     Canvas::Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
-                visual.update_image(*image);
+                visual.update_image(image->mat);
             } };
 
             /// 1. Identify Armor
-            auto armors_2d = Armor2ds { };
+            auto armor2ds    = Armor2ds { };
+            auto lightbar2ds = Lightbar2ds { };
             {
-                auto result = identifier.sync_identify(*image);
+                auto result = identifier.sync_identify(image->mat);
                 if (!result.has_value()) continue;
 
                 for (const auto& roi : result->areas) {
@@ -84,91 +88,99 @@ struct AutoAim::Impl {
                 visual.draw_later(result->armors);
                 visual.draw_later(result->green_light);
 
-                using namespace rmcs_msgs;
-                if (context.id != RobotId::UNKNOWN) {
-                    if (context.id.color() == RobotColor::RED) {
-                        tracker.set_enemy_color(CampColor::BLUE);
-                    } else {
-                        tracker.set_enemy_color(CampColor::RED);
-                    }
-                }
-
-                tracker.set_invincible_armors(context.invincible_devices);
-                armors_2d = tracker.filter_armors(result->armors);
-
-                if (armors_2d.empty()) continue;
+                armor2ds    = std::move(result->armors);
+                lightbar2ds = std::move(result->lightbars);
             }
 
             /// 2. Transform 2d to 3d
-            auto armors_3d = Armor3ds { };
+            /// @NOTE: 即将废弃，现在是 2d 观测直接输入 EKF 的时代了
+            auto armor3ds = Armor3ds { };
             {
                 estimator.update_camera_transform(context.camera_transform);
 
-                auto result = estimator.estimate_armor(armors_2d, *image);
+                auto result = estimator.estimate_armor(armor2ds, image->mat);
 
                 const auto& addition = estimator.addition();
                 visual.draw_later(addition.detected_2d);
-                visual.draw_later(addition.areas);
-                visual.draw_later(addition.predicted_near);
-                visual.draw_later(addition.predicted_away);
+                // visual.draw_later(addition.areas);
+                // visual.draw_later(addition.predicted_near);
+                // visual.draw_later(addition.predicted_away);
 
                 visual.publish(addition.origin, "origin_armors");
                 visual.publish(addition.detected_3d, "outpost_lightbars");
                 visual.publish({ addition.center_3d, Orientation::kIdentity() }, "outpost_center");
 
-                armors_3d = result;
-                if (armors_3d.empty()) continue;
+                armor3ds = std::move(result);
+            }
+            visual.publish(armor3ds, "visible_armors");
 
-                visual.publish(armors_3d, "visible_armors");
+            /// @NOTE:
+            ///  🚧 施工中...... 新的跟踪器即将到来
+            ///  期待新的 EKF 的表现吧！
+            auto trackable = Trackable::Unique { };
+            {
+                using namespace rmcs_msgs;
+                if (context.id != RobotId::UNKNOWN) {
+                    tracker_v2->update_track_color(
+                        (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                }
+                tracker_v2->update_track_genre(DeviceIds::Full());
+                tracker_v2->update_camera(context.camera_transform);
+
+                tracker_v2->clean();
+                tracker_v2->store(armor2ds);
+                tracker_v2->store(armor3ds);
+                tracker_v2->store(lightbar2ds);
+
+                trackable = tracker_v2->execute(image->timestamp);
+
+                const auto& addition = tracker_v2->addition();
+                for (const auto& item : addition.tracked2d) {
+                    visual.draw_later(Canvas::ArmorShape {
+                        .shape = item,
+                        .color = { 127, 127, 127 },
+                    });
+                }
+                for (const auto& item : addition.lightbars) {
+                    visual.draw_later(Canvas::Text {
+                        .content  = std::to_string(item.id),
+                        .top_left = item.point.make<cv::Point2i>(),
+                        .color    = kYellow,
+                    });
+                }
+                visual.publish(addition.tracked3d, "trackable");
             }
 
-            /// 3. Apply Tracker
-            auto target = tracker.decide(armors_3d, image->get_timestamp());
-            auto cmd    = AutoAimState::kInvalid();
-            if (target.snapshot) {
-                auto& snapshot = target.snapshot;
-                auto armors    = snapshot->predicted_armors(Clock::now());
-                visual.publish(armors, "visible_robot");
+            /// 3. 弹道解算
+            auto cmd = AutoAimState::kInvalid();
+            if (trackable) {
+                fire_v2->update(context.yaw, context.pitch);
+                fire_v2->update(context.timestamp);
 
-                const auto gimbal_state = fire_control::GimbalState {
-                    .timestamp = context.timestamp,
-                    .yaw       = context.yaw,
-                    .pitch     = context.pitch,
-                };
-                if (auto result = fire.solve(*snapshot, gimbal_state)) {
-                    cmd.should_control = true;
-                    cmd.target         = target.target_id;
-                    cmd.should_shoot   = result->shoot_permitted;
-                    cmd.yaw            = result->yaw;
-                    cmd.pitch          = result->pitch;
-                    cmd.robot_center   = result->center_position;
+                if (auto aimed = fire_v2->aim(*trackable)) {
+                    cmd.should_track = true;
+                    cmd.should_shoot = aimed->shoot;
+                    cmd.yaw          = aimed->aim_yaw;
+                    cmd.pitch        = aimed->pitch;
+                    cmd.robot_center = aimed->center;
 
-                    if (auto feedforward = result->feedforward) {
-                        cmd.yaw_rate   = feedforward->yaw_rate;
-                        cmd.pitch_rate = feedforward->pitch_rate;
-                        cmd.yaw_acc    = feedforward->yaw_acc;
-                        cmd.pitch_acc  = feedforward->pitch_acc;
-                    }
-
-                    auto impact_armors = snapshot->predicted_armors(result->impact_time);
-                    visual.publish(impact_armors, "impact_robot");
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                    visual.update_mpc_plan(cmd.yaw, cmd.pitch, cmd.yaw_rate, cmd.pitch_rate,
-                        cmd.yaw_acc, cmd.pitch_acc);
+                    visual.publish(aimed->aim_yaw, "aim_yaw");
+                    visual.publish(aimed->raw_yaw, "raw_yaw");
 
-                    if (auto aim_2d = estimator.make_point2d(result->aim_point)) {
+                    if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
                         visual.draw_later(Canvas::Point {
                             .origin = aim_2d->make<cv::Point2i>(),
-                            .radius = 5,
-                            .color  = result->shoot_permitted ? kRed : kGreen,
+                            .radius = 3,
+                            .color  = aimed->shoot ? kRed : kGreen,
                         });
                     }
                 }
             }
             visual.draw_later(
-                Canvas::Text { "ATTACK", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
+                Canvas::Text { "SHOOT", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
             visual.draw_later(
-                Canvas::Text { "CONTROL", { 10, 640 }, cmd.should_control ? kRed : kWhite });
+                Canvas::Text { "TRACK", { 10, 640 }, cmd.should_track ? kRed : kWhite });
 
             {
                 std::lock_guard lock { self.command_mutex };
@@ -178,7 +190,9 @@ struct AutoAim::Impl {
         }
     }
 
-    explicit Impl(AutoAim& self) {
+    explicit Impl(AutoAim& self)
+        : self { self } {
+
         const auto configs           = util::configs();
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();
         const auto distort_coeff     = configs["distort_coeff"].as<std::array<double, 5>>();
@@ -197,31 +211,29 @@ struct AutoAim::Impl {
             handle_result("capturer", cap.initialize(config));
         }
         {
-            auto config               = configs["identifier"];
-            const auto model_location = std::filesystem::path { util::Parameters::share_location() }
+            auto config         = configs["identifier"];
+            auto model_location = std::filesystem::path { util::Parameters::share_location() }
                 / std::filesystem::path { config["model_location"].as<std::string>() };
             config["model_location"] = model_location.string();
             handle_result("identifier", identifier.initialize(config));
-        }
-        {
-            auto config = configs["tracker"];
-            handle_result("tracker", tracker.initialize(config));
         }
         {
             auto config = configs["pose_estimator"];
             handle_result("estimator", estimator.initialize(config));
             estimator.configure_camera(camera_matrix, distort_coeff);
         }
-        {
-            auto config = configs["fire_control"];
-            handle_result("fire_control", fire.initialize(config));
-        }
         if (use_visualization) {
             auto config = configs["visualization"];
             handle_result("visualization", visual.initialize(config));
         }
 
-        worker = std::jthread([this, &self](const std::stop_token& stop) { run(self, stop); });
+        tracker_v2 = std::make_unique<TrackerV2>(configs["tracker"]);
+        tracker_v2->update_camera(camera_matrix);
+        tracker_v2->update_camera(distort_coeff);
+
+        fire_v2 = std::make_unique<FireControllerV2>(configs["fire_control"]);
+
+        worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }
     ~Impl() {
         worker.request_stop();

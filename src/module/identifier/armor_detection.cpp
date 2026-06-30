@@ -4,7 +4,6 @@
 #include "module/identifier/models/shenzhen_0708.hpp"
 #include "module/identifier/models/tongji_yolov5.hpp"
 
-#include "utility/image/image.details.hpp"
 #include "utility/math/sigmoid.hpp"
 #include "utility/model/common_model.hpp"
 #include "utility/robot/id.hpp"
@@ -190,10 +189,8 @@ struct ArmorDetection::Impl {
                 config.score_threshold, config.nms_threshold, adapt_scaling, roi_offset);
     }
 
-    auto generate_openvino_request(const Image& image) noexcept
+    auto generate_openvino_request(const cv::Mat& origin_mat) noexcept
         -> std::expected<ov::InferRequest, std::string> {
-
-        const auto& origin_mat = image.details().mat;
         if (origin_mat.empty()) [[unlikely]] {
             return std::unexpected { "Empty image mat" };
         }
@@ -279,7 +276,7 @@ struct ArmorDetection::Impl {
         return explain_infer_functor->explain(finished_request);
     }
 
-    auto sync_detect(const Image& image) noexcept -> Armor2ds {
+    auto sync_detect(const cv::Mat& image) noexcept -> Armor2ds {
         auto result = generate_openvino_request(image);
         if (!result.has_value()) {
             return { };
@@ -297,7 +294,7 @@ auto ArmorDetection::initialize(const YAML::Node& yaml) noexcept
     return pimpl->configure(yaml);
 }
 
-auto ArmorDetection::sync_detect(const Image& image) noexcept -> std::vector<Armor2d> {
+auto ArmorDetection::sync_detect(const cv::Mat& image) noexcept -> std::vector<Armor2d> {
     return pimpl->sync_detect(image);
 }
 

@@ -2,6 +2,7 @@
 #include "utility/image/image.hpp"
 
 #include <expected>
+#include <memory>
 #include <yaml-cpp/yaml.h>
 
 namespace rmcs::cap {
@@ -31,12 +32,12 @@ public:
     using Config = Impl::Config;
 
     auto configure_yaml(const Yaml& yaml) noexcept -> NormalResult {
-        auto config = Config {};
+        auto config = Config { };
         auto result = config.serialize(yaml);
 
         if (result.has_value()) {
             Impl::configure(config);
-            return {};
+            return { };
         } else {
             return std::unexpected { result.error() };
         }

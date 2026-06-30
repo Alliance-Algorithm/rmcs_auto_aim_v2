@@ -6,7 +6,7 @@
 
 template <std::size_t cols, typename scale>
 static auto cast_opencv_matrix(std::array<scale, cols>& source) {
-    auto mat_type = int {};
+    auto mat_type = int { };
     /*  */ if constexpr (std::same_as<scale, double>) {
         mat_type = CV_64FC1;
     } else if constexpr (std::same_as<scale, float>) {
@@ -22,7 +22,7 @@ static auto cast_opencv_matrix(std::array<scale, cols>& source) {
 
 template <std::size_t cols, std::size_t rows, typename scale>
 static auto cast_opencv_matrix(std::array<std::array<scale, cols>, rows>& source) {
-    auto mat_type = int {};
+    auto mat_type = int { };
     /*  */ if constexpr (std::same_as<scale, double>) {
         mat_type = CV_64FC1;
     } else if constexpr (std::same_as<scale, float>) {

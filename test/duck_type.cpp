@@ -37,10 +37,10 @@ TEST(DuckArrayTest, Access) {
     };
 
     const auto duck_array = rmcs::duck_array {
-        check_logger {},
-        LoggerType0 {},
-        LoggerType1 {},
-        LoggerType2 {},
+        check_logger { },
+        LoggerType0 { },
+        LoggerType1 { },
+        LoggerType2 { },
     };
 
     // Assert

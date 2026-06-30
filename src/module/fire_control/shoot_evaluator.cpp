@@ -61,28 +61,26 @@ struct ShootEvaluator::Impl {
             return std::unexpected { "split_distance must be >= 0" };
         }
 
-        return {};
+        return { };
     }
 
     auto evaluate(Command const& command, GimbalState const& state) noexcept -> bool {
         auto should_fire = false;
 
         if (config.is_lazy_gimbal) {
-            auto const aim_point_yaw =
-                std::atan2(command.aim_point_position.y(), command.aim_point_position.x());
-            const auto aim_delta  = std::abs(util::normalize_angle(state.yaw - aim_point_yaw));
-            const auto is_overlap = aim_delta < config.near_yaw_tolerance;
+            auto const aim_point_yaw = std::atan2(command.attack.y(), command.attack.x());
+            const auto aim_delta     = std::abs(util::normalize_angle(state.yaw - aim_point_yaw));
+            const auto is_overlap    = aim_delta < config.near_yaw_tolerance;
             if (!is_overlap) {
                 last_command_ = command;
                 return false;
             }
         }
 
-        auto const center_distance =
-            std::hypot(command.center_position.x(), command.center_position.y());
+        auto const center_distance = std::hypot(command.center.x(), command.center.y());
         const auto yaw_tolerance   = (center_distance > config.split_distance)
-              ? config.far_yaw_tolerance
-              : config.near_yaw_tolerance;
+            ? config.far_yaw_tolerance
+            : config.near_yaw_tolerance;
         const auto pitch_tolerance = (center_distance > config.split_distance)
             ? config.far_pitch_tolerance
             : config.near_pitch_tolerance;
@@ -103,7 +101,7 @@ struct ShootEvaluator::Impl {
     }
 
 private:
-    std::optional<Command> last_command_ {};
+    std::optional<Command> last_command_ { };
 };
 
 ShootEvaluator::ShootEvaluator() noexcept

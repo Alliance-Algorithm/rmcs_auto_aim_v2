@@ -1,20 +1,20 @@
 #include <algorithm> // for std::clamp, std::replace
-#include <cstdlib>   // for std::getenv
+#include <cstdlib> // for std::getenv
 #include <filesystem>
 #include <gtest/gtest.h>
-#include <iomanip>  // for std::setprecision
+#include <iomanip> // for std::setprecision
 #include <iostream> // for structured output
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <eigen3/Eigen/Dense>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "assets_manager.hpp"
 #include "module/identifier/armor_detection.hpp"
-#include "utility/image/image.details.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/robot/armor.hpp"
@@ -36,7 +36,7 @@ AssetsManager assets_manager;
 struct PnpTestCase {
     std::string filename;
     double expected_distance_m; // 预期的目标距离（米）
-    double expected_angle_deg;  // 预期的偏航角（度，0 或 45）
+    double expected_angle_deg; // 预期的偏航角（度，0 或 45）
 };
 
 // 所有本地测试数据
@@ -60,7 +60,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
     double k2 = -0.087667493884102, double k3 = 0.792381808294582) {
 
     auto distort_coeff = std::array<double, 5> { k1, k2, 0, 0, k3 };
-    PnpSolution::Input input {};
+    PnpSolution::Input input { };
     input.camera.camera_matrix = { {
         { fx, 0.0, cx },
         { 0.0, fy, cy },
@@ -91,7 +91,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         nms_threshold: 0.3
     )";
 
-    auto detector = identifier::ArmorDetection {};
+    auto detector = identifier::ArmorDetection { };
     auto yaml     = YAML::Load(config_yaml);
 
     const auto location    = std::filesystem::path { __FILE__ }.parent_path();
@@ -109,10 +109,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         throw std::runtime_error("Failed to read image: " + full_path.string());
     }
 
-    auto image          = rmcs::Image {};
-    image.details().mat = cv_mat;
-
-    auto detect_result = detector.sync_detect(image);
+    auto detect_result = detector.sync_detect(cv_mat);
     if (detect_result.empty()) {
         throw std::runtime_error("Armor detection failed");
     }
@@ -160,7 +157,7 @@ double normalize_angle_90(double angle_rad) {
 
 // 四元数转 ZYX 欧拉角 (Yaw, Pitch, Roll)，单位：弧度
 static Eigen::Vector3d quaternion_to_euler_rad(const Orientation& q) {
-    Quaterniond quat(q.w, q.x, q.y, q.z);                            // Eigen 构造函数期望 (w,x,y,z)
+    Quaterniond quat(q.w, q.x, q.y, q.z); // Eigen 构造函数期望 (w,x,y,z)
     const auto euler = quat.toRotationMatrix().eulerAngles(2, 1, 0); // yaw(Z), pitch(Y), roll(X)
     return { euler[0], euler[1], euler[2] };
 }

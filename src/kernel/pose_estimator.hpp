@@ -1,11 +1,12 @@
 #pragma once
 
-#include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <array>
 #include <expected>
+
+#include <opencv2/core/mat.hpp>
 #include <yaml-cpp/yaml.h>
 
 namespace rmcs::kernel {
@@ -31,7 +32,7 @@ public:
     auto update_camera_transform(const Transform& transform) -> void;
 
     auto estimate_armor(const std::vector<Armor2d>&) const -> Armor3ds;
-    auto estimate_armor(const std::vector<Armor2d>&, Image&) const -> Armor3ds;
+    auto estimate_armor(const std::vector<Armor2d>&, const cv::Mat&) const -> Armor3ds;
 
     auto make_point2d(const Point3d& point_odom) const -> std::optional<Point2d>;
 

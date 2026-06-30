@@ -18,6 +18,13 @@ public:
         // 以参考装甲板朝向为基准的角速度与 yaw 角
         double rotation_speed;
         double rotation_angle;
+
+        std::uint8_t index = 0;
+
+        auto transition(double seconds) -> void;
+
+        auto direction() const -> Point3d;
+        auto aimpoints() const -> std::vector<Point3d>;
     };
 
     struct Config {
@@ -75,6 +82,8 @@ public:
     // 注意纯预测不会改变 current 返回的装甲板，即使预测后准
     // 备返回的装甲板在前哨站背面
     auto current() const -> Armor3d;
+
+    auto converge() const -> bool;
 };
 
 }

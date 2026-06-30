@@ -17,7 +17,7 @@ struct RclcppNode::Impl {
     std::string pub_topic_prefix;
 
     explicit Impl() noexcept
-        : guard {} { }
+        : guard { } { }
 };
 
 RclcppNode::RclcppNode(const std::string& name) noexcept

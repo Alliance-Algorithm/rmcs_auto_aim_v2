@@ -1,11 +1,11 @@
 #pragma once
 
-#include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <expected>
 
+#include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <yaml-cpp/yaml.h>
 
@@ -16,7 +16,7 @@ class ArmorDetection {
 
 public:
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto sync_detect(const Image&) noexcept -> std::vector<Armor2d>;
+    auto sync_detect(const cv::Mat&) noexcept -> std::vector<Armor2d>;
 };
 
 }

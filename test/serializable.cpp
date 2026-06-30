@@ -49,7 +49,7 @@ TEST(serializable, rclcpp_init) {
 }
 
 TEST(serializable, node_adapter) {
-    auto param = std::string {};
+    auto param = std::string { };
 
     static_assert(details::rclcpp_node_trait<rclcpp::Node>, " ");
 
@@ -60,7 +60,7 @@ TEST(serializable, node_adapter) {
 
     static_assert(details::yaml_cpp_trait<YAML::Node>, " ");
 
-    auto yaml_node    = YAML::Node {};
+    auto yaml_node    = YAML::Node { };
     auto yaml_adapter = details::NodeAdapter<YAML::Node> { yaml_node };
 
     auto ret2 = yaml_adapter.get_param("", param);
@@ -81,7 +81,7 @@ TEST(serializable, yaml_cpp) {
 
     ASSERT_TRUE(yaml_node.IsMap());
 
-    auto t       = T {};
+    auto t       = T { };
     auto adapter = details::NodeAdapter<YAML::Node> { yaml_node };
 
     auto ret = t.serialize("", adapter);
@@ -96,10 +96,10 @@ TEST(serializable, yaml_cpp) {
 TEST(serializable, rclcpp) {
     using namespace rmcs::util;
 
-    auto options = rclcpp::NodeOptions {}.automatically_declare_parameters_from_overrides(true);
+    auto options = rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true);
     auto node    = std::make_shared<rclcpp::Node>("serializable", options);
 
-    auto t = T {};
+    auto t = T { };
 
     auto ret = t.serialize("test", *node);
     if (!ret.has_value()) {

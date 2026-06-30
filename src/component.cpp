@@ -66,7 +66,7 @@ public:
             ctx.yaw         = std::atan2(dir.y(), dir.x());
             ctx.pitch       = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
-            const auto& iso = *camera_transform;
+            const auto& iso                  = *camera_transform;
             ctx.camera_transform.translation = Translation { iso.translation() };
             ctx.camera_transform.orientation = Orientation { Eigen::Quaterniond(iso.rotation()) };
 
@@ -79,7 +79,7 @@ public:
                 using namespace std::chrono_literals;
                 if (Clock::now() - cmd.timestamp > 100ms) return;
 
-                *should_control = cmd.should_control;
+                *should_control = cmd.should_track;
                 *should_shoot   = cmd.should_shoot;
                 *yaw_rate       = cmd.yaw_rate;
                 *pitch_rate     = cmd.pitch_rate;
@@ -91,7 +91,7 @@ public:
                     cmd.robot_center.z,
                 };
 
-                if (!cmd.should_control) return;
+                if (!cmd.should_track) return;
 
                 const auto pitch  = cmd.pitch;
                 const auto yaw    = cmd.yaw;

@@ -1,6 +1,5 @@
 #include "adjacency_lightbar.hpp"
 #include "module/identifier/lightbar.hpp"
-#include "utility/image/image.details.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
 
@@ -34,12 +33,12 @@ struct AdjacencyLightbarFinder::Impl {
 
     auto set_armor_thickness(double thickness) { armor_thickness = thickness; }
 
-    auto find(const Image& image, const Armor2d& armor2d, const Armor3d& armor3d)
+    auto find(const cv::Mat& mat, const Armor2d& armor2d, const Armor3d& armor3d)
         -> std::optional<Result> {
 
         detected.reset();
 
-        if (image.details().mat.empty()) return std::nullopt;
+        if (mat.empty()) return std::nullopt;
 
         const auto t = armor3d.translation.make<Eigen::Vector3d>();
         const auto q = armor3d.orientation.make<Eigen::Quaterniond>();
@@ -57,8 +56,6 @@ struct AdjacencyLightbarFinder::Impl {
         solution.solve();
 
         // 开始选取 ROI，识别灯条
-        const auto& mat = image.details().mat;
-
         const auto distance = armor3d.translation.make<Eigen::Vector3d>().norm();
         const auto margin_x = std::max(12, static_cast<int>(120.0 / distance + 32.0));
         const auto margin_y = std::max(12, static_cast<int>(090.0 / distance + 24.0));
@@ -247,7 +244,7 @@ auto AdjacencyLightbarFinder::set_armor_thickness(double thickness) -> void {
 }
 
 auto AdjacencyLightbarFinder::find(
-    const Image& image, const Armor2d& armor2d, const Armor3d& armor3d) -> std::optional<Result> {
+    const cv::Mat& image, const Armor2d& armor2d, const Armor3d& armor3d) -> std::optional<Result> {
     return pimpl->find(image, armor2d, armor3d);
 }
 

@@ -66,7 +66,7 @@ private:
 
         auto reset() noexcept -> void {
             limit.reset();
-            metronome.last_reach_interval_timestamp = {};
+            metronome.last_reach_interval_timestamp = { };
         }
 
         auto enable() noexcept -> void { limit.enable(); }
@@ -75,7 +75,7 @@ private:
     struct string_hash {
         using is_transparent = void;
         auto operator()(std::string_view sv) const -> std::size_t {
-            return std::hash<std::string_view> {}(sv);
+            return std::hash<std::string_view> { }(sv);
         }
     };
 

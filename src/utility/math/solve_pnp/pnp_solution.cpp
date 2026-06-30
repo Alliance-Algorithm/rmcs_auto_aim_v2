@@ -112,7 +112,6 @@ auto RobustPnpSolution::solve() -> bool {
 
     const auto q_odom_camera = feature.orientation.make<Eigen::Quaterniond>();
     const auto t_odom_camera = feature.translation.make<Eigen::Vector3d>();
-    const auto pitch_sign    = armor2d.genre == DeviceId::OUTPOST ? -1.0 : +1.0;
 
     auto best_armor = std::optional<Armor3d> { };
     auto best_error = std::numeric_limits<double>::max();
@@ -144,9 +143,12 @@ auto RobustPnpSolution::solve() -> bool {
         const auto camera_to_armor = t_camera_armor.normalized();
         if (back_direction.dot(camera_to_armor) <= 0.0) continue;
 
-        // [剪枝] 去除 Odom 系下，Pitch 不合理的装甲板，前哨站朝下，其余朝上
-        const auto pitch = eulers(q_odom_armor, 2, 1, 0)[1];
-        if (pitch * pitch_sign <= 0.0) continue;
+        // [剪枝] 去除 Odom 系下，Pitch 不合理的装甲板
+        const auto expected = (armor2d.genre == ArmorGenre::OUTPOST) //
+            ? kPredictedOutpostArmorPitch
+            : kPredictedOtherArmorPitch;
+        const auto pitch    = eulers(q_odom_armor, 2, 1, 0)[1];
+        if (std::abs(pitch - expected) > util::deg2rad(40.0)) continue;
 
         const auto error = index < errors.size() ? errors[index] : 0.0;
         if (error >= best_error) continue;

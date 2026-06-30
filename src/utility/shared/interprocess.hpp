@@ -108,8 +108,8 @@ struct Client {
         auto recv(T& out_data) const noexcept -> void {
             if (!context) return;
 
-            auto version1 = std::uint64_t {};
-            auto version2 = std::uint64_t {};
+            auto version1 = std::uint64_t { };
+            auto version2 = std::uint64_t { };
 
             do {
                 version1 = context->version.load(std::memory_order::acquire);
@@ -126,9 +126,9 @@ struct Client {
         {
             if (!context) return;
 
-            auto snapshot = T {};
-            auto version1 = std::uint64_t {};
-            auto version2 = std::uint64_t {};
+            auto snapshot = T { };
+            auto version1 = std::uint64_t { };
+            auto version2 = std::uint64_t { };
 
             do {
                 version1 = context->version.load(std::memory_order::acquire);

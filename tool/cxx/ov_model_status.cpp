@@ -20,13 +20,13 @@ auto main(int argc, char* argv[]) -> int {
     }
 
     auto as_text = [](const auto& value) {
-        auto stream = std::ostringstream {};
+        auto stream = std::ostringstream { };
         stream << value;
         return stream.str();
     };
 
     try {
-        const auto ov_core  = ov::Core {};
+        const auto ov_core  = ov::Core { };
         const auto ov_model = ov_core.read_model(filename);
 
         std::println("==== Model Basic Status ====");

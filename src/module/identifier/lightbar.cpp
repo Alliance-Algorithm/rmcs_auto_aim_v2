@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
@@ -36,16 +37,24 @@ auto LightbarFinder::solve() -> bool {
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
     if (contours.empty()) return false;
 
-    const auto predicted_dx =
-        static_cast<double>(input.predicted_upper.x - input.predicted_lower.x);
-    const auto predicted_dy =
-        static_cast<double>(input.predicted_upper.y - input.predicted_lower.y);
-    const auto predicted_angle    = std::atan2(predicted_dy, predicted_dx);
-    const auto predicted_length   = std::hypot(predicted_dx, predicted_dy);
-    const auto predicted_midpoint = cv::Point2d {
-        0.5 * static_cast<double>(input.predicted_upper.x + input.predicted_lower.x),
-        0.5 * static_cast<double>(input.predicted_upper.y + input.predicted_lower.y),
-    };
+    const auto has_prediction =
+        input.predicted_upper.has_value() && input.predicted_lower.has_value();
+
+    auto predicted_angle    = double { 0 };
+    auto predicted_length   = double { 0 };
+    auto predicted_midpoint = cv::Point2d { };
+    if (has_prediction) {
+        const auto predicted_dx =
+            static_cast<double>(input.predicted_upper->x - input.predicted_lower->x);
+        const auto predicted_dy =
+            static_cast<double>(input.predicted_upper->y - input.predicted_lower->y);
+        predicted_angle    = std::atan2(predicted_dy, predicted_dx);
+        predicted_length   = std::hypot(predicted_dx, predicted_dy);
+        predicted_midpoint = cv::Point2d {
+            0.5 * static_cast<double>(input.predicted_upper->x + input.predicted_lower->x),
+            0.5 * static_cast<double>(input.predicted_upper->y + input.predicted_lower->y),
+        };
+    }
 
     auto best_top    = cv::Point2f { };
     auto best_bottom = cv::Point2f { };
@@ -81,26 +90,31 @@ auto LightbarFinder::solve() -> bool {
             point_b = 0.5f * (corners[2] + corners[3]);
         }
 
-        const auto dx          = static_cast<double>(point_b.x - point_a.x);
-        const auto dy          = static_cast<double>(point_b.y - point_a.y);
-        const auto length      = std::hypot(dx, dy);
-        const auto line_angle  = std::atan2(dy, dx);
-        const auto angle_diff  = util::normalize_angle(line_angle - predicted_angle);
-        const auto angle_error = std::min(
-            std::abs(angle_diff), std::abs(util::normalize_angle(angle_diff + std::numbers::pi)));
-        if (angle_error > util::deg2rad(30.0)) continue;
+        const auto dx         = static_cast<double>(point_b.x - point_a.x);
+        const auto dy         = static_cast<double>(point_b.y - point_a.y);
+        const auto length     = std::hypot(dx, dy);
+        const auto line_angle = std::atan2(dy, dx);
 
-        auto midpoint = cv::Point2d {
-            0.5 * static_cast<double>(point_a.x + point_b.x),
-            0.5 * static_cast<double>(point_a.y + point_b.y),
-        };
-        const auto midpoint_error =
-            std::hypot(midpoint.x - predicted_midpoint.x, midpoint.y - predicted_midpoint.y);
-        const auto length_error = std::abs(length - predicted_length);
+        auto score = double { 0 };
+        if (has_prediction) {
+            const auto angle_diff  = util::normalize_angle(line_angle - predicted_angle);
+            const auto angle_error = std::min(std::abs(angle_diff),
+                std::abs(util::normalize_angle(angle_diff + std::numbers::pi)));
+            if (angle_error > util::deg2rad(30.0)) continue;
 
-        // 保留预测约束，只把端点提取替换成轮廓矩形法。
-        const auto score = angle_error * 180.0 / std::numbers::pi + 0.12 * midpoint_error
-            + 0.04 * length_error - 0.08 * length;
+            auto midpoint = cv::Point2d {
+                0.5 * static_cast<double>(point_a.x + point_b.x),
+                0.5 * static_cast<double>(point_a.y + point_b.y),
+            };
+            const auto midpoint_error =
+                std::hypot(midpoint.x - predicted_midpoint.x, midpoint.y - predicted_midpoint.y);
+            const auto length_error = std::abs(length - predicted_length);
+
+            score = angle_error * 180.0 / std::numbers::pi + 0.12 * midpoint_error
+                + 0.04 * length_error - 0.08 * length;
+        } else {
+            score = -length;
+        }
         if (score >= best_score) continue;
 
         best_score = score;
@@ -119,17 +133,22 @@ auto LightbarFinder::solve() -> bool {
     auto point_b = cv::Point2i { static_cast<int>(std::lround(best_bottom.x)),
         static_cast<int>(std::lround(best_bottom.y)) };
 
-    const auto distance_a1 =
-        std::hypot(point_a.x - input.predicted_upper.x, point_a.y - input.predicted_upper.y);
-    const auto distance_b1 =
-        std::hypot(point_b.x - input.predicted_upper.x, point_b.y - input.predicted_upper.y);
+    if (has_prediction) {
+        const auto distance_a1 =
+            std::hypot(point_a.x - input.predicted_upper->x, point_a.y - input.predicted_upper->y);
+        const auto distance_b1 =
+            std::hypot(point_b.x - input.predicted_upper->x, point_b.y - input.predicted_upper->y);
 
-    if (distance_a1 <= distance_b1) {
+        if (distance_a1 <= distance_b1) {
+            result.upper = point_a;
+            result.lower = point_b;
+        } else {
+            result.upper = point_b;
+            result.lower = point_a;
+        }
+    } else {
         result.upper = point_a;
         result.lower = point_b;
-    } else {
-        result.upper = point_b;
-        result.lower = point_a;
     }
 
     return true;

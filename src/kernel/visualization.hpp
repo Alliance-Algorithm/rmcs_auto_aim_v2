@@ -4,10 +4,11 @@
 #include <span>
 #include <string>
 
+#include <opencv2/core/mat.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "utility/image/drawable.hpp"
-#include "utility/image/image.hpp"
+#include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 namespace rmcs::kernel {
@@ -22,7 +23,7 @@ public:
 
     auto initialized() const noexcept -> bool;
 
-    auto update_image(Image& image) -> bool;
+    auto update_image(cv::Mat& image) -> bool;
 
     /// Publishable [OdomLink As Default]
 

@@ -5,12 +5,12 @@
 namespace rmcs {
 
 template <class T>
-concept scalar2d_struct_trait = requires(T t) {
+concept scalar2d_struct_trait = requires(const T& t) {
     { t.x } -> std::convertible_to<double>;
     { t.y } -> std::convertible_to<double>;
 };
 template <class T>
-concept scalar2d_object_trait = requires(T t) {
+concept scalar2d_object_trait = requires(const T& t) {
     { t.x() } -> std::convertible_to<double>;
     { t.y() } -> std::convertible_to<double>;
 };
@@ -18,13 +18,13 @@ template <class T>
 concept scalar2d_trait = scalar2d_struct_trait<T> || scalar2d_object_trait<T>;
 
 template <class T>
-concept scalar3d_struct_trait = requires(T t) {
+concept scalar3d_struct_trait = requires(const T& t) {
     { t.x } -> std::convertible_to<double>;
     { t.y } -> std::convertible_to<double>;
     { t.z } -> std::convertible_to<double>;
 };
 template <class T>
-concept scalar3d_object_trait = requires(T t) {
+concept scalar3d_object_trait = requires(const T& t) {
     { t.x() } -> std::convertible_to<double>;
     { t.y() } -> std::convertible_to<double>;
     { t.z() } -> std::convertible_to<double>;
@@ -33,14 +33,14 @@ template <class T>
 concept scalar3d_trait = scalar3d_struct_trait<T> || scalar3d_object_trait<T>;
 
 template <class T>
-concept scalar4d_struct_trait = requires(T t) {
+concept scalar4d_struct_trait = requires(const T& t) {
     { t.x } -> std::convertible_to<double>;
     { t.y } -> std::convertible_to<double>;
     { t.z } -> std::convertible_to<double>;
     { t.w } -> std::convertible_to<double>;
 };
 template <class T>
-concept scalar4d_object_trait = requires(T t) {
+concept scalar4d_object_trait = requires(const T& t) {
     { t.x() } -> std::convertible_to<double>;
     { t.y() } -> std::convertible_to<double>;
     { t.z() } -> std::convertible_to<double>;

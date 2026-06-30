@@ -11,7 +11,7 @@ namespace rmcs {
 struct AutoAimState {
     TimePoint timestamp { };
 
-    bool should_control { false };
+    bool should_track { false };
     bool should_shoot = { false };
 
     double yaw { kNaN };
@@ -41,7 +41,7 @@ struct SystemContext {
     double yaw { kNaN };
     double pitch { kNaN };
 
-    Transform camera_transform = Transform::kNaN();
+    Transform camera_transform = Transform::kIdentity();
 
     /// Lazy Context
     ///

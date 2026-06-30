@@ -7,7 +7,7 @@
 
 #include "utility/math/conversion.hpp"
 
-using namespace rmcs::util;
+namespace rmcs::util {
 
 auto CameraFeature::from(std::array<double, 9> input) -> void {
     for (std::size_t i = 0; i < input.size(); ++i) {
@@ -39,4 +39,17 @@ auto CameraFeature::cv_translation() const -> cv::Vec3d {
     auto t_ros = translation.make<Eigen::Vector3d>();
     auto t_ocv = ros2opencv_position(t_ros);
     return { t_ocv[0], t_ocv[1], t_ocv[2] };
+}
+
+auto compute_distance2cam_x(const Transform& cam, const Point3d& point) -> double {
+    const auto ct = cam.translation.make<Eigen::Vector3d>();
+    const auto cq = cam.orientation.make<Eigen::Quaterniond>();
+    const auto pt = point.make<Eigen::Vector3d>();
+
+    const auto to_target = pt - ct;
+    const auto q_inv     = cq.inverse();
+    const auto in_cam    = q_inv * to_target;
+
+    return std::sqrt(in_cam.y() * in_cam.y() + in_cam.z() * in_cam.z());
+}
 }

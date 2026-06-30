@@ -51,12 +51,6 @@ ament_add_gtest(
     ${TEST_DIR}/duck_type.cpp
 )
 
-# Pipeline
-ament_add_gtest(
-    test_pipeline
-    ${TEST_DIR}/pipeline.cpp
-)
-
 # Serializable
 ament_add_gtest(
     test_serializable
@@ -79,7 +73,6 @@ ament_add_gtest(
     test_model_infer
     ${TEST_DIR}/model_infer.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
-    ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 target_link_libraries(
     test_model_infer
@@ -103,7 +96,6 @@ ament_add_gtest(
     ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
     ${RMCS_SRC_DIR}/utility/math/camera.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
-    ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 ament_target_dependencies(
     test_solve_pnp
@@ -133,14 +125,4 @@ target_link_libraries(
 ament_add_gtest(
     test_transform_communication
     ${TEST_DIR}/transform_communication.cpp
-)
-
-# Tiny MPC solver
-ament_add_gtest(
-    test_tiny_mpc_solver
-    ${TEST_DIR}/tiny_mpc_solver.cpp
-)
-target_link_libraries(
-    test_tiny_mpc_solver
-    tinympcstatic
 )

@@ -1,5 +1,6 @@
 #pragma once
-#include "utility/image/image.hpp"
+
+#include <opencv2/core/mat.hpp>
 
 namespace rmcs {
 
@@ -7,7 +8,7 @@ struct PreProcess {
 
     double binarization_threshold;
 
-    auto process(const Image&, Image&) const noexcept -> void;
+    auto process(const cv::Mat&, cv::Mat&) const noexcept -> void;
 };
 
 }

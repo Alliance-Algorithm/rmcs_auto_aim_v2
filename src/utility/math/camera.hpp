@@ -27,4 +27,6 @@ struct CameraFeature {
     auto distortion() const -> cv::Mat;
 };
 
+auto compute_distance2cam_x(const Transform& cam, const Point3d& point) -> double;
+
 } // namespace rmcs::util

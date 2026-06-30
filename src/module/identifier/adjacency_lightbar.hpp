@@ -1,11 +1,12 @@
 #pragma once
 
-#include "utility/image/image.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
 #include <optional>
+
+#include <opencv2/core/mat.hpp>
 
 namespace rmcs {
 
@@ -25,7 +26,7 @@ public:
 
     auto set_armor_thickness(double thickness) -> void;
 
-    auto find(const Image& image, const Armor2d& armor2d, const Armor3d& armor3d)
+    auto find(const cv::Mat& image, const Armor2d& armor2d, const Armor3d& armor3d)
         -> std::optional<Result>;
 };
 

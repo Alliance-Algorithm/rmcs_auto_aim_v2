@@ -1,17 +1,12 @@
 #include "preprocess.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <opencv2/imgproc.hpp>
 
 using namespace rmcs;
-using do_not_warning = Image::Details;
 
-auto PreProcess::process(const Image& image, Image& out) const noexcept -> void {
-    const auto& mat = image.details().mat;
+auto PreProcess::process(const cv::Mat& image, cv::Mat& out) const noexcept -> void {
+    auto gray_image = cv::Mat { };
+    cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
 
-    auto gray_image = cv::Mat {};
-    cv::cvtColor(mat, gray_image, cv::COLOR_BGR2GRAY);
-
-    auto& binarized_image = out.details().mat;
-    cv::threshold(gray_image, binarized_image, binarization_threshold, 255, cv::THRESH_BINARY);
+    cv::threshold(gray_image, out, binarization_threshold, 255, cv::THRESH_BINARY);
 }

@@ -2,7 +2,6 @@
 
 #include "module/debug/visualization/mpc_plan_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
-#include "utility/image/image.details.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/rclcpp/visual/armor.hpp"
 #include "utility/rclcpp/visual/arrow.hpp"
@@ -51,7 +50,7 @@ struct Visualization::Impl {
         };
     };
 
-    Config config {};
+    Config config { };
     RclcppNode rclcpp { "visual" };
 
     debug::StreamSession session;
@@ -99,12 +98,12 @@ struct Visualization::Impl {
         });
 
         is_initialized = true;
-        return {};
+        return { };
     }
 
     auto initialized() const noexcept { return is_initialized; }
 
-    auto send_image(Image& image) noexcept -> bool {
+    auto send_image(cv::Mat& image) noexcept -> bool {
         if (!is_initialized) return false;
         if (!config.enable_stream) return false;
 
@@ -115,11 +114,9 @@ struct Visualization::Impl {
             drawables.clear();
         }
 
-        const auto& mat = image.details().mat;
-
         if (!size_determined) {
-            session_config.format.w = mat.cols;
-            session_config.format.h = mat.rows;
+            session_config.format.w = image.cols;
+            session_config.format.h = image.rows;
 
             if (auto result = session.open(session_config); !result) {
                 rclcpp.error("Failed to open visualization session");
@@ -132,7 +129,7 @@ struct Visualization::Impl {
         }
         if (!session.opened()) return false;
 
-        return session.push_frame(mat);
+        return session.push_frame(image);
     }
 
     auto draw_later(std::unique_ptr<IDrawable> drawable) -> void {
@@ -206,7 +203,7 @@ auto Visualization::initialize(const YAML::Node& yaml) noexcept
 
 auto Visualization::initialized() const noexcept -> bool { return pimpl->initialized(); }
 
-auto Visualization::update_image(Image& image) -> bool { return pimpl->send_image(image); }
+auto Visualization::update_image(cv::Mat& image) -> bool { return pimpl->send_image(image); }
 
 auto Visualization::draw_later(std::unique_ptr<IDrawable> drawable) -> void {
     pimpl->draw_later(std::move(drawable));

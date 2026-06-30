@@ -1,5 +1,4 @@
 #include "drawable.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <format>
 #include <opencv2/imgproc.hpp>
@@ -23,8 +22,25 @@ namespace details {
 
 }
 
+auto Canvas::draw(const ArmorShape& armor) -> void {
+    auto& mat = canvas;
+
+    const auto& color = armor.color;
+    const auto& shape = armor.shape;
+
+    cv::circle(mat, shape.tl, 2, color, -1);
+    cv::circle(mat, shape.tr, 2, color, -1);
+    cv::circle(mat, shape.br, 2, color, -1);
+    cv::circle(mat, shape.bl, 2, color, -1);
+
+    cv::line(mat, shape.tl, shape.tr, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.tr, shape.br, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.br, shape.bl, color, line_thickness, cv::LINE_AA);
+    cv::line(mat, shape.bl, shape.tl, color, line_thickness, cv::LINE_AA);
+}
+
 auto Canvas::draw(const Armor2d& armor) -> void {
-    auto& mat = canvas.details().mat;
+    auto& mat = canvas;
 
     const auto color = details::to_scalar(armor.color, transparency);
     const auto white = cv::Scalar { 255, 255, 255, static_cast<double>(transparency) };
@@ -64,7 +80,7 @@ auto Canvas::draw(const Armor2d& armor) -> void {
 }
 
 auto Canvas::draw(const Lightbar2d& lightbar) -> void {
-    auto& mat  = canvas.details().mat;
+    auto& mat  = canvas;
     auto color = lightbar.draw_color.value_or(details::to_scalar(lightbar.color, transparency));
 
     cv::circle(mat, lightbar.upper.make<cv::Point2f>(), 2, color, -1, cv::LINE_AA);
@@ -72,14 +88,14 @@ auto Canvas::draw(const Lightbar2d& lightbar) -> void {
 }
 
 auto Canvas::draw(const cv::Rect2i& rect) -> void {
-    auto& mat  = canvas.details().mat;
+    auto& mat  = canvas;
     auto color = cv::Scalar { 127, 127, 127, static_cast<double>(transparency) };
 
     cv::rectangle(mat, rect, color, line_thickness, cv::LINE_AA);
 }
 
 auto Canvas::draw(const Text& text) -> void {
-    auto& mat = canvas.details().mat;
+    auto& mat = canvas;
 
     const auto font  = cv::FONT_HERSHEY_SIMPLEX;
     const auto scale = 0.5;
@@ -100,7 +116,7 @@ auto Canvas::draw(const Text& text) -> void {
 }
 
 auto Canvas::draw(const Point& point) -> void {
-    auto& mat = canvas.details().mat;
+    auto& mat = canvas;
     cv::circle(mat, point.origin, point.radius, point.color, -1, cv::LINE_AA);
 }
 

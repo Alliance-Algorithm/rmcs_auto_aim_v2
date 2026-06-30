@@ -9,8 +9,6 @@
 
 #include <opencv2/videoio.hpp>
 
-#include "utility/image/image.details.hpp"
-
 using namespace rmcs::cap;
 
 struct LocalVideo::Impl {
@@ -73,7 +71,7 @@ struct LocalVideo::Impl {
     std::optional<cv::VideoCapture> capturer;
     bool playing { true };
     TerminalRawMode terminal_raw_mode;
-    std::unique_ptr<Image> latest_image;
+    std::optional<Image> latest_image;
 
     std::chrono::nanoseconds interval_duration { 0 };
     TimePoint last_read_time { Clock::now() };
@@ -112,7 +110,7 @@ struct LocalVideo::Impl {
         set_framerate_interval(target_fps);
 
         playing      = true;
-        latest_image = nullptr;
+        latest_image = std::nullopt;
         terminal_raw_mode.enable();
         last_read_time = Clock::now();
 
@@ -127,7 +125,7 @@ struct LocalVideo::Impl {
         if (capturer.has_value()) {
             capturer.reset();
         }
-        latest_image = nullptr;
+        latest_image = std::nullopt;
         terminal_raw_mode.disable();
         interval_duration = std::chrono::nanoseconds { 0 };
     }
@@ -158,7 +156,10 @@ struct LocalVideo::Impl {
         }
 
         if (!playing && latest_image) {
-            return latest_image->clone();
+            auto image       = std::make_unique<Image>();
+            image->mat       = latest_image->mat.clone();
+            image->timestamp = latest_image->timestamp;
+            return image;
         }
 
         auto frame = cv::Mat { };
@@ -180,9 +181,12 @@ struct LocalVideo::Impl {
         if (frame.empty()) {
             return std::unexpected { "Read frame is empty, possibly due to IO error." };
         }
-        image->details().set_mat(frame);
-        image->set_timestamp(last_read_time);
-        latest_image = image->clone();
+        image->mat       = std::move(frame);
+        image->timestamp = last_read_time;
+        latest_image     = Image {
+            .mat       = image->mat.clone(),
+            .timestamp = last_read_time,
+        };
 
         return image;
     };

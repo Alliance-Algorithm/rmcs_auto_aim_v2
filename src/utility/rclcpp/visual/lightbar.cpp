@@ -171,8 +171,7 @@ struct Lightbars::Impl {
         }
 
         for (std::size_t i = lightbars.size(); i < previous_size; ++i) {
-            visual_marker.markers.emplace_back(
-                make_delete_marker(static_cast<int>(i), stamp));
+            visual_marker.markers.emplace_back(make_delete_marker(static_cast<int>(i), stamp));
         }
 
         previous_size = lightbars.size();

@@ -1,21 +1,13 @@
 #pragma once
 #include "utility/clock.hpp"
-#include "utility/pimpl.hpp"
+
+#include <opencv2/core/mat.hpp>
 
 namespace rmcs {
 
-class Image {
-    RMCS_PIMPL_DEFINITION(Image)
-
-public:
-    struct Details;
-    auto details() noexcept -> Details&;
-    auto details() const noexcept -> Details const&;
-
-    auto get_timestamp() const noexcept -> TimePoint;
-    auto set_timestamp(TimePoint) noexcept -> void;
-
-    auto clone() const noexcept -> std::unique_ptr<Image>;
+struct Image {
+    cv::Mat mat;
+    Timestamp timestamp { };
 };
 
 }
