@@ -17,7 +17,7 @@ auto main() -> int {
         .timeout_ms  = 2'000,
         .exposure_us = 1'500,
     };
-    auto camera = hikcamera::Camera {};
+    auto camera = hikcamera::Camera { };
     camera.configure(config);
 
     if (auto r = camera.connect()) {

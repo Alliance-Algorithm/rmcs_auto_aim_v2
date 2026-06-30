@@ -51,11 +51,11 @@ struct task {
 
         static constexpr auto initial_suspend() noexcept {
             // Launch immediately
-            return std::suspend_never {};
+            return std::suspend_never { };
         }
         static constexpr auto final_suspend() noexcept {
             // Lazy destory
-            return std::suspend_always {};
+            return std::suspend_always { };
         }
     };
     std::coroutine_handle<promise_type> coroutine_handle;

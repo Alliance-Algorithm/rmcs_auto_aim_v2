@@ -244,8 +244,7 @@ auto AdjacencyLightbarFinder::set_armor_thickness(double thickness) -> void {
 }
 
 auto AdjacencyLightbarFinder::find(
-    const cv::Mat& image, const Armor2d& armor2d, const Armor3d& armor3d)
-    -> std::optional<Result> {
+    const cv::Mat& image, const Armor2d& armor2d, const Armor3d& armor3d) -> std::optional<Result> {
     return pimpl->find(image, armor2d, armor3d);
 }
 

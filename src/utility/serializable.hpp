@@ -60,7 +60,7 @@ namespace details {
                     std::format("Exception while reading '{}': {}", name, e.what()),
                 };
             }
-            return {};
+            return { };
         }
 
         template <typename T>
@@ -82,7 +82,7 @@ namespace details {
                     std::format("Catch unknown exception while getting {}: {}", name, e.what()),
                 };
             }
-            return {};
+            return { };
         }
     };
 
@@ -129,7 +129,7 @@ namespace details {
                 }
             };
             const auto apply_function = [&]<typename... T>(MemberMeta<Data, T>... meta) {
-                auto result = Ret {};
+                auto result = Ret { };
                 std::ignore = ((result = deserialize(meta), result.has_value()) && ...);
                 return result;
             };
@@ -137,7 +137,7 @@ namespace details {
         }
 
         auto make_printable_from(const Data& source) const noexcept -> std::string {
-            auto result = std::string {};
+            auto result = std::string { };
 
             auto print_one = [&](const auto& meta) {
                 using val_t = std::decay_t<decltype(meta.extract_from(source))>;
@@ -167,7 +167,7 @@ struct Serializable {
     template <typename Metas>
     constexpr auto make_serializable(Metas metas) {
         constexpr auto N = std::tuple_size_v<Metas>;
-        return make_serializable_impl(metas, std::make_index_sequence<N / 2> {});
+        return make_serializable_impl(metas, std::make_index_sequence<N / 2> { });
     }
 
     template <typename T>

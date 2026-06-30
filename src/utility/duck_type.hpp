@@ -38,7 +38,7 @@ public:
     auto at(this auto&& self, std::size_t index, auto&& f) -> void
         requires(std::invocable<decltype(f), Ts&> && ...)
     {
-        self.impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...> {});
+        self.impl_at(std::forward<decltype(f)>(f), index, std::index_sequence_for<Ts...> { });
     }
 
     constexpr auto foreach (this auto&& self, auto&& f) -> void

@@ -8,8 +8,8 @@ auto Hikcamera::wait_image() noexcept -> ImageResult {
         return std::unexpected { captured.error() };
     }
 
-    auto image = std::make_unique<rmcs::Image>();
-    image->mat = std::move(captured->mat);
+    auto image       = std::make_unique<rmcs::Image>();
+    image->mat       = std::move(captured->mat);
     image->timestamp = captured->timestamp;
 
     return image;

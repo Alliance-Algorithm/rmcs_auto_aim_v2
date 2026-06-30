@@ -23,7 +23,7 @@ struct Scalar::Impl {
             auto topic_name = node.get_pub_topic_prefix() + name;
             publisher       = node.details->make_pub<Float64>(topic_name, qos::debug);
         }
-        auto msg = Float64 {};
+        auto msg = Float64 { };
         msg.data = value;
         publisher->publish(msg);
     }
@@ -34,7 +34,7 @@ Scalar::Scalar(RclcppNode& node, std::string name)
 
 Scalar::~Scalar() noexcept = default;
 
-Scalar::Scalar(Scalar&&) noexcept            = default;
+Scalar::Scalar(Scalar&&) noexcept                    = default;
 auto Scalar::operator=(Scalar&&) noexcept -> Scalar& = default;
 
 auto Scalar::publish(double value) -> void { pimpl->publish(value); }

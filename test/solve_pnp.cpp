@@ -1,8 +1,8 @@
 #include <algorithm> // for std::clamp, std::replace
-#include <cstdlib>   // for std::getenv
+#include <cstdlib> // for std::getenv
 #include <filesystem>
 #include <gtest/gtest.h>
-#include <iomanip>  // for std::setprecision
+#include <iomanip> // for std::setprecision
 #include <iostream> // for structured output
 #include <string>
 #include <string_view>
@@ -36,7 +36,7 @@ AssetsManager assets_manager;
 struct PnpTestCase {
     std::string filename;
     double expected_distance_m; // 预期的目标距离（米）
-    double expected_angle_deg;  // 预期的偏航角（度，0 或 45）
+    double expected_angle_deg; // 预期的偏航角（度，0 或 45）
 };
 
 // 所有本地测试数据
@@ -60,7 +60,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
     double k2 = -0.087667493884102, double k3 = 0.792381808294582) {
 
     auto distort_coeff = std::array<double, 5> { k1, k2, 0, 0, k3 };
-    PnpSolution::Input input {};
+    PnpSolution::Input input { };
     input.camera.camera_matrix = { {
         { fx, 0.0, cx },
         { 0.0, fy, cy },
@@ -91,7 +91,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         nms_threshold: 0.3
     )";
 
-    auto detector = identifier::ArmorDetection {};
+    auto detector = identifier::ArmorDetection { };
     auto yaml     = YAML::Load(config_yaml);
 
     const auto location    = std::filesystem::path { __FILE__ }.parent_path();
@@ -157,7 +157,7 @@ double normalize_angle_90(double angle_rad) {
 
 // 四元数转 ZYX 欧拉角 (Yaw, Pitch, Roll)，单位：弧度
 static Eigen::Vector3d quaternion_to_euler_rad(const Orientation& q) {
-    Quaterniond quat(q.w, q.x, q.y, q.z);                            // Eigen 构造函数期望 (w,x,y,z)
+    Quaterniond quat(q.w, q.x, q.y, q.z); // Eigen 构造函数期望 (w,x,y,z)
     const auto euler = quat.toRotationMatrix().eulerAngles(2, 1, 0); // yaw(Z), pitch(Y), roll(X)
     return { euler[0], euler[1], euler[2] };
 }

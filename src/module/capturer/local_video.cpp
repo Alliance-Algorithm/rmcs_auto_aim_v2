@@ -156,8 +156,8 @@ struct LocalVideo::Impl {
         }
 
         if (!playing && latest_image) {
-            auto image = std::make_unique<Image>();
-            image->mat = latest_image->mat.clone();
+            auto image       = std::make_unique<Image>();
+            image->mat       = latest_image->mat.clone();
             image->timestamp = latest_image->timestamp;
             return image;
         }
@@ -181,9 +181,9 @@ struct LocalVideo::Impl {
         if (frame.empty()) {
             return std::unexpected { "Read frame is empty, possibly due to IO error." };
         }
-        image->mat = std::move(frame);
+        image->mat       = std::move(frame);
         image->timestamp = last_read_time;
-        latest_image = Image {
+        latest_image     = Image {
             .mat       = image->mat.clone(),
             .timestamp = last_read_time,
         };

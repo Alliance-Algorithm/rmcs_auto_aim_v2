@@ -144,8 +144,8 @@ auto main(int argc, char** argv) -> int {
                 continue;
             }
 
-            auto image = std::make_unique<rmcs::Image>();
-            image->mat = captured->mat.clone();
+            auto image       = std::make_unique<rmcs::Image>();
+            image->mat       = captured->mat.clone();
             image->timestamp = captured->timestamp;
 
             {

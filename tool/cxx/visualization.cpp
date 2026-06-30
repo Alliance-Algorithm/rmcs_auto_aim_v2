@@ -21,7 +21,7 @@ auto main() -> int {
     std::println("> Use 'ros2 topic list' to check, and open foxglove to watch armors");
     std::println("> Rclcpp Prefix: {}", "/rmcs/auto_aim/");
 
-    constexpr auto translation_speed = 3.;   // m/s
+    constexpr auto translation_speed = 3.; // m/s
     constexpr auto orientation_speed = 6.28; // rad/s
 
     rclcpp::init(0, nullptr);
@@ -29,7 +29,7 @@ auto main() -> int {
     auto visual = RclcppNode { "example" };
     visual.set_pub_topic_prefix("/rmcs/auto_aim/");
 
-    auto armors = std::array<std::unique_ptr<Armor>, 4> {};
+    auto armors = std::array<std::unique_ptr<Armor>, 4> { };
     {
         auto config = Armor::Config {
             .rclcpp = visual,
@@ -53,7 +53,7 @@ auto main() -> int {
             .tf     = "camera_link",
         });
 
-    auto solution = ArmorsForwardSolution {};
+    auto solution = ArmorsForwardSolution { };
 
     auto start = std::chrono::steady_clock::now();
 

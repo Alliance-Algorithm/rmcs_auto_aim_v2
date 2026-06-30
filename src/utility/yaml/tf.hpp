@@ -15,9 +15,9 @@ namespace rmcs::util {
 enum class SerializeTfError {
     UNMATCHED_LINKS_IN_YAML, // YAML 中有未匹配的 transform
     UNMATCHED_LINKS_IN_TREE, // Tree 中有节点在 YAML 中找不到对应 transform
-    INVALID_YAML_FORMAT,     // YAML 格式无效（不是序列格式）
+    INVALID_YAML_FORMAT, // YAML 格式无效（不是序列格式）
     MISSING_REQUIRED_FIELDS, // Transform 缺少必需的字段（parent 或 child）
-    TYPE_MISMATCH,           // Transform 数据类型与节点 State 类型不匹配
+    TYPE_MISMATCH, // Transform 数据类型与节点 State 类型不匹配
 };
 constexpr auto to_string(SerializeTfError e) {
     switch (e) {
@@ -84,7 +84,7 @@ auto serialize_from(const YAML::Node& yaml) noexcept -> std::expected<void, Seri
     }
 
     // 建立 parent -> child 的映射，存储 transform 数据
-    auto transform_map      = std::map<std::string, std::map<std::string, YAML::Node>> {};
+    auto transform_map      = std::map<std::string, std::map<std::string, YAML::Node>> { };
     auto has_missing_fields = bool { false };
     for (const auto& transform_node : yaml) {
         if (!transform_node["parent"] || !transform_node["child"]) {
@@ -197,7 +197,7 @@ auto serialize_from(const YAML::Node& yaml) noexcept -> std::expected<void, Seri
         return std::unexpected { SerializeTfError::UNMATCHED_LINKS_IN_YAML };
     }
 
-    return {};
+    return { };
 }
 
 template <class Root>

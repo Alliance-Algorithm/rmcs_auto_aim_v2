@@ -28,7 +28,7 @@ struct VideoCapturer::Impl final {
     }
 
     auto read(std::chrono::milliseconds) const -> cv::Mat {
-        auto mat = cv::Mat {};
+        auto mat = cv::Mat { };
         if (!capturer_->read(mat))
             throw std::runtime_error { "VideoCapturer: Some errors happened while reading video" };
 
