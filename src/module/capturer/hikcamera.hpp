@@ -4,6 +4,8 @@
 #include "utility/image/image.hpp"
 #include "utility/serializable.hpp"
 
+#include <memory>
+
 namespace rmcs::cap {
 
 using NormalResult = std::expected<void, std::string>;

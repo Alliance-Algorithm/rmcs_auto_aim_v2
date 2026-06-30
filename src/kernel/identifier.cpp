@@ -5,7 +5,6 @@
 #include "module/identifier/green_light.hpp"
 #include "module/identifier/lightbar.hpp"
 
-#include "utility/image/image.details.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/corners_optimizor.hpp"
 #include "utility/robot/armor.hpp"
@@ -33,14 +32,14 @@ struct Identifier::Impl {
         return { };
     }
 
-    auto identify(const Image& src) noexcept -> std::optional<Identifier::Result> {
-        auto detected = armor_detection.sync_detect(src);
+    auto identify(const cv::Mat& mat) noexcept -> std::optional<Identifier::Result> {
+        auto detected = armor_detection.sync_detect(mat);
         if (detected.empty()) return std::nullopt;
 
         std::erase_if(
             detected, [](const Armor2d& armor) { return armor.genre == ArmorGenre::UNKNOWN; });
 
-        util::optimize_corners(src, detected);
+        util::optimize_corners(mat, detected);
 
         auto outpost = Armor2ds { };
         auto base    = Armor2ds { };
@@ -66,13 +65,13 @@ struct Identifier::Impl {
         ///  包矩形将会过于大
         auto& finder = green_light_finder;
         if (!base.empty()) {
-            if (auto ret = finder.locate(src, base); ret.green_light) {
+            if (auto ret = finder.locate(mat, base); ret.green_light) {
                 result.green_light = ret.green_light;
                 result.areas.push_back(*ret.detect_roi);
             }
         }
         if (!outpost.empty()) {
-            if (auto ret = finder.locate(src, outpost); ret.green_light) {
+            if (auto ret = finder.locate(mat, outpost); ret.green_light) {
                 result.green_light = ret.green_light;
                 result.areas.push_back(*ret.detect_roi);
             }
@@ -92,7 +91,6 @@ struct Identifier::Impl {
 
         // 邻侧灯条：单装甲板机器人 → 扩展 ROI + 识别
         {
-            const auto& mat   = src.details().mat;
             const auto bounds = cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
             for (const auto& [genre, armors] : robots) {
@@ -186,7 +184,7 @@ auto Identifier::initialize(const YAML::Node& yaml) noexcept -> std::expected<vo
     return pimpl->initialize(yaml);
 }
 
-auto Identifier::sync_identify(const Image& src) noexcept -> std::optional<Result> {
+auto Identifier::sync_identify(const cv::Mat& src) noexcept -> std::optional<Result> {
     return pimpl->identify(src);
 }
 

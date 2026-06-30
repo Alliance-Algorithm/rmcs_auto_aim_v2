@@ -1,6 +1,5 @@
 #include "green_light.hpp"
 
-#include "utility/image/image.details.hpp"
 #include "utility/serializable.hpp"
 
 #include <algorithm>
@@ -57,13 +56,11 @@ struct GreenLightFinder::Impl {
         return { };
     }
 
-    auto locate(const Image& image, std::span<const Armor2d> armors) const noexcept -> Result {
+    auto locate(const cv::Mat& mat, std::span<const Armor2d> armors) const noexcept -> Result {
         constexpr auto kExpandScale = 4.0;
         constexpr auto kGreenMargin = 30.0;
 
         if (armors.empty()) return { };
-
-        const auto& mat = image.details().mat;
         if (mat.empty()) return { };
 
         auto roi = cv::Rect2i { };
@@ -181,7 +178,7 @@ auto GreenLightFinder::initialize(const YAML::Node& yaml) noexcept
     return pimpl->initialize(yaml);
 }
 
-auto GreenLightFinder::locate(const Image& image, std::span<const Armor2d> armors) noexcept
+auto GreenLightFinder::locate(const cv::Mat& image, std::span<const Armor2d> armors) noexcept
     -> Result {
     return pimpl->locate(image, armors);
 }

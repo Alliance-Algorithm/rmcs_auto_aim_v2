@@ -9,12 +9,12 @@
 #include <vector>
 
 #include <eigen3/Eigen/Dense>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "assets_manager.hpp"
 #include "module/identifier/armor_detection.hpp"
-#include "utility/image/image.details.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/robot/armor.hpp"
@@ -109,10 +109,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         throw std::runtime_error("Failed to read image: " + full_path.string());
     }
 
-    auto image          = rmcs::Image {};
-    image.details().mat = cv_mat;
-
-    auto detect_result = detector.sync_detect(image);
+    auto detect_result = detector.sync_detect(cv_mat);
     if (detect_result.empty()) {
         throw std::runtime_error("Armor detection failed");
     }

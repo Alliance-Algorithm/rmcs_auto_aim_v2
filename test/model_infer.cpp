@@ -4,7 +4,6 @@
 #include "module/identifier/models/shenzhen_0526.hpp"
 #include "module/identifier/models/shenzhen_0708.hpp"
 #include "module/identifier/models/tongji_yolov5.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -15,6 +14,7 @@
 #include <stdexcept>
 
 #include <gtest/gtest.h>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <yaml-cpp/yaml.h>
 
@@ -75,7 +75,7 @@ struct ExpectedCorners {
 };
 
 template <class model_type>
-auto assert_sync_infer_with_expected(const Image& image,
+auto assert_sync_infer_with_expected(const cv::Mat& image,
     const std::array<ExpectedCorners, 2>& expected, bool use_roi_segment = false) -> void {
     const auto model_name     = std::string { model_type::kLocation };
     auto yaml                 = YAML::Load(config);
@@ -140,9 +140,8 @@ auto assert_sync_infer_with_expected(const Image& image,
 
 TEST(model, sync_infer) {
     const auto image_location = assets_manager.path("model_infer_example.jpg");
-    auto image { Image {} };
-    image.details().mat = cv::imread(image_location);
-    ASSERT_FALSE(image.details().mat.empty())
+    auto image = cv::imread(image_location);
+    ASSERT_FALSE(image.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());
 
     constexpr auto expected = std::array {
@@ -157,9 +156,8 @@ TEST(model, sync_infer) {
 
 TEST(model, sync_infer_with_roi_segment) {
     const auto image_location = assets_manager.path("model_infer_example.jpg");
-    auto image { Image {} };
-    image.details().mat = cv::imread(image_location);
-    ASSERT_FALSE(image.details().mat.empty())
+    auto image = cv::imread(image_location);
+    ASSERT_FALSE(image.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());
 
     constexpr auto expected = std::array {
@@ -174,7 +172,7 @@ TEST(model, sync_infer_with_roi_segment) {
 
 TEST(model, sync_infer_rejects_empty_image) {
     auto detector      = make_detector<TongJiYoloV5>();
-    auto empty_image   = Image {};
+    auto empty_image   = cv::Mat {};
     auto detect_result = detector->sync_detect(empty_image);
 
     ASSERT_TRUE(detect_result.empty());
@@ -182,15 +180,14 @@ TEST(model, sync_infer_rejects_empty_image) {
 
 TEST(model, sync_infer_rejects_invalid_roi) {
     const auto image_location = assets_manager.path("model_infer_example.jpg");
-    auto image { Image {} };
-    image.details().mat = cv::imread(image_location);
-    ASSERT_FALSE(image.details().mat.empty())
+    auto image = cv::imread(image_location);
+    ASSERT_FALSE(image.empty())
         << error_head << std::format("Failed to read image from '{}'", image_location.string());
 
     auto yaml               = YAML::Load(config);
     yaml["use_roi_segment"] = true;
-    yaml["roi_cols"]        = image.details().mat.cols + 1;
-    yaml["roi_rows"]        = image.details().mat.rows;
+    yaml["roi_cols"]        = image.cols + 1;
+    yaml["roi_rows"]        = image.rows;
 
     auto detector      = make_detector<TongJiYoloV5>(yaml);
     auto detect_result = detector->sync_detect(image);

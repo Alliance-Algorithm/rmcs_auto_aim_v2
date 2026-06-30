@@ -3,7 +3,6 @@
 #include "module/capturer/hikcamera.hpp"
 #include "module/capturer/local_video.hpp"
 #include "utility/framerate.hpp"
-#include "utility/image/image.details.hpp"
 #include "utility/image/recorder.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/service.hpp"
@@ -198,7 +197,7 @@ struct Capturer::Impl {
         // Success context
         auto success_callback = [&](std::unique_ptr<Image> image) {
             auto newest = image.release();
-            recorder.tick(newest->details().mat);
+            recorder.tick(newest->mat);
 
             if (!capture_queue.push(newest)) {
 

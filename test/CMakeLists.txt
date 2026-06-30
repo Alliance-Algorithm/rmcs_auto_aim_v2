@@ -73,7 +73,6 @@ ament_add_gtest(
     test_model_infer
     ${TEST_DIR}/model_infer.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
-    ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 target_link_libraries(
     test_model_infer
@@ -97,7 +96,6 @@ ament_add_gtest(
     ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
     ${RMCS_SRC_DIR}/utility/math/camera.cpp
     ${RMCS_SRC_DIR}/module/identifier/armor_detection.cpp
-    ${RMCS_SRC_DIR}/utility/image/image.cpp
 )
 ament_target_dependencies(
     test_solve_pnp

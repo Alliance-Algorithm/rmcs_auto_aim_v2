@@ -72,14 +72,14 @@ struct AutoAim::Impl {
                     Canvas::Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
                 visual.draw_later( // 自瞄帧率
                     Canvas::Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
-                visual.update_image(*image);
+                visual.update_image(image->mat);
             } };
 
             /// 1. Identify Armor
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
             {
-                auto result = identifier.sync_identify(*image);
+                auto result = identifier.sync_identify(image->mat);
                 if (!result.has_value()) continue;
 
                 for (const auto& roi : result->areas) {
@@ -100,7 +100,7 @@ struct AutoAim::Impl {
             {
                 estimator.update_camera_transform(context.camera_transform);
 
-                auto result = estimator.estimate_armor(armor2ds, *image);
+                auto result = estimator.estimate_armor(armor2ds, image->mat);
 
                 const auto& addition = estimator.addition();
                 visual.draw_later(addition.detected_2d);
@@ -134,7 +134,7 @@ struct AutoAim::Impl {
                 tracker_v2->store(armor3ds);
                 tracker_v2->store(lightbar2ds);
 
-                trackable = tracker_v2->execute(image->get_timestamp());
+                trackable = tracker_v2->execute(image->timestamp);
 
                 const auto& addition = tracker_v2->addition();
                 for (const auto& item : addition.tracked2d) {

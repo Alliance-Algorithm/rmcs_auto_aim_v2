@@ -1,11 +1,11 @@
 #pragma once
 
-#include "utility/image/image.hpp"
-
 #include <string>
+
+#include <opencv2/core/mat.hpp>
 
 namespace rmcs::util {
 
-auto draw_text(Image&, const std::string& text) noexcept -> void;
+auto draw_text(cv::Mat&, const std::string& text) noexcept -> void;
 
 }

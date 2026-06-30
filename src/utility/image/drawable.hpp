@@ -1,6 +1,7 @@
 #pragma once
-#include "utility/image/image.hpp"
 #include "utility/robot/armor.hpp"
+
+#include <opencv2/core/mat.hpp>
 
 namespace rmcs {
 
@@ -40,7 +41,7 @@ struct Canvas {
         cv::Scalar color = kWhite;
     };
 
-    Image& canvas;
+    cv::Mat& canvas;
 
     std::uint8_t transparency   = 255;
     std::uint8_t line_thickness = 1;

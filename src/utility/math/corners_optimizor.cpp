@@ -9,7 +9,6 @@
 ///  4. 沿对称轴在 [0.3L, 0.7L] 区间搜索亮度梯度最大的点作为角点
 
 #include "corners_optimizor.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -131,10 +130,8 @@ namespace {
 
 /// @FIXME: 角点优化的实现存在问题，等待后续修复再开启
 
-auto optimize_corners(const Image& image, Lightbar2d& lightbar) -> void {
+auto optimize_corners(const cv::Mat& mat, Lightbar2d& lightbar) -> void {
     return; // @FIXME:
-
-    const auto& mat = image.details().mat;
 
     if (mat.empty()) return;
     if (mat.channels() < 3) return;
@@ -191,7 +188,7 @@ auto optimize_corners(const Image& image, Lightbar2d& lightbar) -> void {
     }
 }
 
-auto optimize_corners(const Image& image, Armor2ds& armors) -> void {
+auto optimize_corners(const cv::Mat& image, Armor2ds& armors) -> void {
     return; // @FIXME:
 
     for (auto& armor : armors) {

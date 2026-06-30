@@ -153,7 +153,7 @@ struct PoseEstimator::Impl {
         };
         return result;
     }
-    auto solve_armor(const std::vector<Armor2d>& armor2ds, Image& image) {
+    auto solve_armor(const std::vector<Armor2d>& armor2ds, const cv::Mat& image) {
         auto armor3ds = solve_armor(armor2ds);
 
         if (!config.distance_optimizer) return armor3ds;
@@ -302,7 +302,7 @@ auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors) const -> 
     return pimpl->solve_armor(armors);
 }
 
-auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors, Image& image) const
+auto PoseEstimator::estimate_armor(const std::vector<Armor2d>& armors, const cv::Mat& image) const
     -> Armor3ds {
     return pimpl->solve_armor(armors, image);
 }

@@ -1,5 +1,4 @@
 #include "module/perception/rotation_estimator.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <hikcamera/capturer.hpp>
 
@@ -146,8 +145,8 @@ auto main(int argc, char** argv) -> int {
             }
 
             auto image = std::make_unique<rmcs::Image>();
-            image->details().set_mat(captured->mat.clone());
-            image->set_timestamp(captured->timestamp);
+            image->mat = captured->mat.clone();
+            image->timestamp = captured->timestamp;
 
             {
                 auto lock = std::lock_guard { latest_frame.mutex };

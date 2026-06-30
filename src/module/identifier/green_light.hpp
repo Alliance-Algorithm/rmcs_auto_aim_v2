@@ -1,6 +1,5 @@
 #pragma once
 
-#include "utility/image/image.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
 
@@ -8,6 +7,7 @@
 #include <optional>
 #include <span>
 
+#include <opencv2/core/mat.hpp>
 #include <opencv2/core/types.hpp>
 #include <yaml-cpp/yaml.h>
 
@@ -23,7 +23,7 @@ public:
     };
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
-    auto locate(const Image&, std::span<const Armor2d>) noexcept -> Result;
+    auto locate(const cv::Mat&, std::span<const Armor2d>) noexcept -> Result;
 };
 
 }

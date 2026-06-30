@@ -2,6 +2,7 @@
 #include "utility/image/image.hpp"
 
 #include <expected>
+#include <memory>
 #include <yaml-cpp/yaml.h>
 
 namespace rmcs::cap {

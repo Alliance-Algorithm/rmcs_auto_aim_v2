@@ -1,5 +1,4 @@
 #include "hikcamera.hpp"
-#include "utility/image/image.details.hpp"
 
 namespace rmcs::cap {
 
@@ -10,8 +9,8 @@ auto Hikcamera::wait_image() noexcept -> ImageResult {
     }
 
     auto image = std::make_unique<rmcs::Image>();
-    image->details().set_mat(captured->mat);
-    image->set_timestamp(captured->timestamp);
+    image->mat = std::move(captured->mat);
+    image->timestamp = captured->timestamp;
 
     return image;
 }

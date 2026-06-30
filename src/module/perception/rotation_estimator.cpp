@@ -11,7 +11,6 @@
 /// 归一化图像平面上的背景点速度输出 yaw/pitch/roll-like 视觉旋转速度波形。
 
 #include "rotation_estimator.hpp"
-#include "utility/image/image.details.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -218,7 +217,7 @@ struct RotationEstimator::Impl {
 
     auto update(const Image& image) -> std::optional<Estimate> {
 
-        const auto& input = image.details().mat;
+        const auto& input = image.mat;
         if (input.empty()) return std::nullopt;
 
         auto raw_gray = cv::Mat { };
@@ -239,7 +238,7 @@ struct RotationEstimator::Impl {
             cv::bitwise_and(allowed_mask, lightbar_mask, allowed_mask);
         }
 
-        const auto timestamp = image.get_timestamp();
+        const auto timestamp = image.timestamp;
 
         addition           = { };
         addition.timestamp = timestamp;
