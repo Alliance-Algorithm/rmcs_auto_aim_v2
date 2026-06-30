@@ -137,11 +137,12 @@ struct Identifier::Impl {
                         if (!finder.solve()) continue;
                     }
                     { // 长度筛选
-                        const auto armor_length =
-                            std::hypot(armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y);
-                        const auto detected_length =
+                        const auto armor_length = std::max<double>(
+                            std::hypot(armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y), 0.01);
+                        const auto detected_length = std::max<double>(
                             std::hypot(finder.result.upper.x - finder.result.lower.x,
-                                finder.result.upper.y - finder.result.lower.y);
+                                finder.result.upper.y - finder.result.lower.y),
+                            0.01);
                         if (std::abs(detected_length - armor_length) / armor_length > 0.2) continue;
                     }
                     { // 角度筛选
