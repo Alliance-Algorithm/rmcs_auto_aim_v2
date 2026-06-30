@@ -82,9 +82,9 @@ struct AutoAim::Impl {
                 auto result = identifier.sync_identify(*image);
                 if (!result.has_value()) continue;
 
-                // for (const auto& roi : result->areas) {
-                //     visual.draw_later(roi);
-                // }
+                for (const auto& roi : result->areas) {
+                    visual.draw_later(roi);
+                }
                 visual.draw_later(result->armors);
                 visual.draw_later(result->green_light);
 

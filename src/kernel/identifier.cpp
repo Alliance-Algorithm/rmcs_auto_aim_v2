@@ -82,8 +82,8 @@ struct Identifier::Impl {
             const auto y = result.green_light->y;
 
             const auto pred = [=](const Armor2d& armor) {
-                const auto is_building
-                    = (armor.genre == ArmorGenre::OUTPOST) || (armor.genre == ArmorGenre::BASE);
+                const auto is_building =
+                    (armor.genre == ArmorGenre::OUTPOST) || (armor.genre == ArmorGenre::BASE);
                 return is_building && armor.bl.y < 1. * y;
             };
             std::erase_if(detected, pred);
@@ -92,12 +92,8 @@ struct Identifier::Impl {
 
         // 邻侧灯条：单装甲板机器人 → 扩展 ROI + 识别
         {
-            constexpr auto kHorizontalCoeff  = 2.5;
-            constexpr auto kVerticalConstant = 40;
-            constexpr auto kGap              = 10;
-
-            const auto& mat         = src.details().mat;
-            const auto image_bounds = cv::Rect2i { 0, 0, mat.cols, mat.rows };
+            const auto& mat   = src.details().mat;
+            const auto bounds = cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
             for (const auto& [genre, armors] : robots) {
                 if (armors.size() != 1) continue;
@@ -107,64 +103,76 @@ struct Identifier::Impl {
                 const auto max_x  = std::max({ armor.tl.x, armor.tr.x, armor.br.x, armor.bl.x });
                 const auto min_y  = std::min({ armor.tl.y, armor.tr.y, armor.br.y, armor.bl.y });
                 const auto max_y  = std::max({ armor.tl.y, armor.tr.y, armor.br.y, armor.bl.y });
-                const auto width  = std::abs(armor.tr.x - armor.tl.x);
 
-                const auto h_extend = static_cast<int>(width * kHorizontalCoeff);
-                const auto top      = static_cast<int>(min_y - kVerticalConstant);
-                const auto height   = static_cast<int>(max_y - min_y + 2 * kVerticalConstant);
+                const auto aw = std::abs(max_x - min_x);
+                const auto ah = std::abs(max_y - min_y);
 
-                const auto camp = armor_color2camp_color(armor.color);
+                const auto top = static_cast<int>(min_y - ah * 2.);
+                const auto gap = static_cast<int>(aw * 1.0);
 
-                const auto rois = std::array {
-                    cv::Rect2i { static_cast<int>(min_x) - h_extend - kGap, top, h_extend, height },
-                    cv::Rect2i { static_cast<int>(max_x) + kGap, top, h_extend, height },
+                const auto rh = static_cast<int>(aw * 2.5);
+                const auto rw = static_cast<int>(aw * 1.5);
+
+                const auto point = [](auto x, auto y) {
+                    return cv::Point2i {
+                        static_cast<int>(std::round(x)),
+                        static_cast<int>(std::round(y)),
+                    };
                 };
-                for (const auto& roi : rois) {
+                const auto rois = std::array {
+                    cv::Rect2i { point(min_x - 1. * gap - 1. * rw, top), cv::Size2i { rw, rh } },
+                    cv::Rect2i { point(max_x + 1. * gap - 0. * rw, top), cv::Size2i { rw, rh } },
+                };
 
-                    const auto clipped = roi & image_bounds;
+                for (const auto& roi : rois) {
+                    const auto clipped = roi & bounds;
                     if (clipped.width <= 0 || clipped.height <= 0) continue;
 
                     result.areas.push_back(clipped);
 
                     auto finder = LightbarFinder { };
                     {
+                        const auto camp = armor_color2camp_color(armor.color);
+
                         finder.input.source = mat(clipped).clone();
                         finder.input.color  = camp;
                         if (!finder.solve()) continue;
                     }
                     { // 长度筛选
-                        const auto armor_length
-                            = std::hypot(armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y);
-                        const auto detected_length = std::hypot(
-                            finder.result.upper.x - finder.result.lower.x,
-                            finder.result.upper.y - finder.result.lower.y);
+                        const auto armor_length =
+                            std::hypot(armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y);
+                        const auto detected_length =
+                            std::hypot(finder.result.upper.x - finder.result.lower.x,
+                                finder.result.upper.y - finder.result.lower.y);
                         if (std::abs(detected_length - armor_length) / armor_length > 0.2) continue;
                     }
                     { // 角度筛选
-                        const auto armor_direction
-                            = cv::Point2d { armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y };
+                        const auto armor_direction =
+                            cv::Point2d { armor.tl.x - armor.bl.x, armor.tl.y - armor.bl.y };
                         const auto detected_direction = cv::Point2d {
                             static_cast<double>(finder.result.upper.x - finder.result.lower.x),
                             static_cast<double>(finder.result.upper.y - finder.result.lower.y),
                         };
                         const auto armor_angle = std::atan2(armor_direction.y, armor_direction.x);
-                        const auto detected_angle
-                            = std::atan2(detected_direction.y, detected_direction.x);
-                        const auto angle_diff
-                            = std::abs(util::normalize_angle(detected_angle - armor_angle));
+                        const auto detected_angle =
+                            std::atan2(detected_direction.y, detected_direction.x);
+                        const auto angle_diff =
+                            std::abs(util::normalize_angle(detected_angle - armor_angle));
                         if (angle_diff > util::deg2rad(20.0)) continue;
                     }
                     result.lightbars.push_back({
                         .genre = genre,
                         .color = armor.color,
-                        .upper = Point2d {
-                            static_cast<double>(finder.result.upper.x + clipped.x),
-                            static_cast<double>(finder.result.upper.y + clipped.y),
-                        },
-                        .lower = Point2d {
-                            static_cast<double>(finder.result.lower.x + clipped.x),
-                            static_cast<double>(finder.result.lower.y + clipped.y),
-                        },
+                        .upper =
+                            Point2d {
+                                static_cast<double>(finder.result.upper.x + clipped.x),
+                                static_cast<double>(finder.result.upper.y + clipped.y),
+                            },
+                        .lower =
+                            Point2d {
+                                static_cast<double>(finder.result.lower.x + clipped.x),
+                                static_cast<double>(finder.result.lower.y + clipped.y),
+                            },
                     });
                 }
             }
