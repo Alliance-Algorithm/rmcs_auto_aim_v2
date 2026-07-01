@@ -24,6 +24,11 @@ struct FireControllerV2::Impl {
 
         std::array<double, 2> attack_window { 20.0, 20.0 };
 
+        double yaw_tolerance { 0.07 };
+        double pitch_tolerance { 0.04 };
+        bool require_stable_command { true };
+        bool is_lazy_gimbal { false };
+
         static constexpr std::tuple metas {
             // clang-format off
             &Config::bullet_speed, "bullet_speed",
@@ -31,11 +36,15 @@ struct FireControllerV2::Impl {
             &Config::offset_yaw, "offset_yaw",
             &Config::offset_pitch, "offset_pitch",
             &Config::attack_window, "attack_window",
+            &Config::yaw_tolerance, "yaw_tolerance",
+            &Config::pitch_tolerance, "pitch_tolerance",
+            &Config::require_stable_command, "require_stable_command",
+            &Config::is_lazy_gimbal, "is_lazy_gimbal",
             // clang-format on
         };
     } config;
 
-    ShootEvaluator shoot_evaluator;
+    std::unique_ptr<ShootEvaluator> shoot_evaluator;
 
     double cached_yaw   = kNaN;
     double cached_pitch = kNaN;
@@ -47,17 +56,25 @@ struct FireControllerV2::Impl {
             throw std::runtime_error { std::format("FireControllerV2: {}", ret.error()) };
         }
 
+        if (!(config.yaw_tolerance > 0.0)) {
+            throw std::runtime_error { "FireControllerV2: yaw_tolerance must be > 0" };
+        }
+
+        if (!(config.pitch_tolerance > 0.0)) {
+            throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
+        }
+
         config.offset_yaw       = util::deg2rad(config.offset_yaw);
         config.offset_pitch     = util::deg2rad(config.offset_pitch);
         config.attack_window[0] = util::deg2rad(config.attack_window[0]);
         config.attack_window[1] = util::deg2rad(config.attack_window[1]);
 
-        if (const auto ret = shoot_evaluator.configure_yaml(yaml["shoot_evaluator"]);
-            !ret.has_value()) {
-            throw std::runtime_error {
-                std::format("FireControllerV2 shoot_evaluator: {}", ret.error()),
-            };
-        }
+        shoot_evaluator = std::make_unique<ShootEvaluator>(ShootEvaluator::Config {
+            .yaw_tolerance          = config.yaw_tolerance,
+            .pitch_tolerance        = config.pitch_tolerance,
+            .require_stable_command = config.require_stable_command,
+            .is_lazy_gimbal         = config.is_lazy_gimbal,
+        });
     }
 
     auto aim(const Trackable& trackable) -> std::optional<Aimed> {
@@ -96,7 +113,7 @@ struct FireControllerV2::Impl {
 
             // 上一块板出窗了（或没有上一帧），遍历所有候选重新选
             if (!armor_id.has_value()) {
-                auto best_id    = std::optional<size_t> { };
+                auto best_id    = std::optional<std::size_t> { };
                 auto best_delta = std::numeric_limits<double>::max();
 
                 for (std::size_t i = 0; i < aimpoints.size(); ++i) {
@@ -132,7 +149,7 @@ struct FireControllerV2::Impl {
         auto yaw    = double { };
         auto pitch  = double { };
 
-        for (size_t i = 0; i < kMaxIterate; ++i) {
+        for (std::size_t i = 0; i < kMaxIterate; ++i) {
             auto clone = trackable.clone();
             clone->jump_into(config.shoot_delay + fly_time);
 
@@ -165,18 +182,14 @@ struct FireControllerV2::Impl {
 
         // 射击评估
 
-        const auto shoot = shoot_evaluator.evaluate(
-            {
+        const auto shoot = shoot_evaluator->evaluate(
+            ShootEvaluator::Command {
                 .yaw    = yaw,
                 .pitch  = pitch,
                 .center = center,
                 .attack = attack,
             },
-            {
-                .timestamp = cached_stamp,
-                .yaw       = cached_yaw,
-                .pitch     = cached_pitch,
-            });
+            cached_yaw, cached_pitch);
 
         return Aimed {
             .aim_yaw = yaw,
@@ -194,12 +207,11 @@ FireControllerV2::FireControllerV2(const YAML::Node& yaml)
 
 FireControllerV2::~FireControllerV2() noexcept = default;
 
-auto FireControllerV2::update(double yaw, double pitch) -> void {
+auto FireControllerV2::update(Timestamp timestamp, double yaw, double pitch) -> void {
+    pimpl->cached_stamp = timestamp;
     pimpl->cached_yaw   = yaw;
     pimpl->cached_pitch = pitch;
 }
-
-auto FireControllerV2::update(Timestamp timestamp) -> void { pimpl->cached_stamp = timestamp; }
 
 auto FireControllerV2::aim(const Trackable& trackable) -> std::optional<Aimed> {
     return pimpl->aim(trackable);

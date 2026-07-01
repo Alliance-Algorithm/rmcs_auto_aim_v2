@@ -154,8 +154,7 @@ struct AutoAim::Impl {
             /// 3. 弹道解算
             auto cmd = AutoAimState::kInvalid();
             if (trackable) {
-                fire_v2->update(context.yaw, context.pitch);
-                fire_v2->update(context.timestamp);
+                fire_v2->update(context.timestamp, context.yaw, context.pitch);
 
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;

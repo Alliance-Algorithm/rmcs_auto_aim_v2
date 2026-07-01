@@ -26,8 +26,7 @@ public:
 
     explicit FireControllerV2(const YAML::Node&);
 
-    auto update(double yaw, double pitch) -> void;
-    auto update(Timestamp timestamp) -> void;
+    auto update(Timestamp timestamp, double yaw, double pitch) -> void;
 
     auto aim(const Trackable&) -> std::optional<Aimed>;
 };

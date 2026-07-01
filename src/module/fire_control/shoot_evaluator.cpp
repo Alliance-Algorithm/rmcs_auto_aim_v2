@@ -3,122 +3,135 @@
 #include <cmath>
 #include <optional>
 
+#include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
-#include "utility/serializable.hpp"
 
 using namespace rmcs::fire_control;
 
 struct ShootEvaluator::Impl {
-    struct Config : util::Serializable {
-        double near_yaw_tolerance { 3.0 };
-        double far_yaw_tolerance { 2.0 };
-        double near_pitch_tolerance { 2.0 };
-        double far_pitch_tolerance { 1.0 };
-        double split_distance { 3.0 };
-        bool is_lazy_gimbal { false };
+    static constexpr auto kMinDistance = 1e-6;
 
-        constexpr static std::tuple metas {
-            &Config::near_yaw_tolerance,
-            "near_yaw_tolerance",
-            &Config::far_yaw_tolerance,
-            "far_yaw_tolerance",
-            &Config::near_pitch_tolerance,
-            "near_pitch_tolerance",
-            &Config::far_pitch_tolerance,
-            "far_pitch_tolerance",
-            &Config::split_distance,
-            "split_distance",
-            &Config::is_lazy_gimbal,
-            "is_lazy_gimbal",
-        };
-    } config;
+    Config config;
 
-    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string> {
-        auto result = config.serialize(yaml);
-        if (!result.has_value()) {
-            return std::unexpected { result.error() };
-        }
+    struct YawWindow {
+        double right;
+        double left;
+    };
 
-        config.near_yaw_tolerance   = util::deg2rad(config.near_yaw_tolerance);
-        config.far_yaw_tolerance    = util::deg2rad(config.far_yaw_tolerance);
-        config.near_pitch_tolerance = util::deg2rad(config.near_pitch_tolerance);
-        config.far_pitch_tolerance  = util::deg2rad(config.far_pitch_tolerance);
-        last_command_.reset();
+    struct PitchWindow {
+        double lower;
+        double upper;
+    };
 
-        if (!(config.near_yaw_tolerance > 0.0) || !(config.far_yaw_tolerance > 0.0)) {
-            return std::unexpected {
-                "near_yaw_tolerance and far_yaw_tolerance must be > 0",
-            };
-        }
+    static auto finite(double value) noexcept -> bool { return std::isfinite(value); }
 
-        if (!(config.near_pitch_tolerance > 0.0) || !(config.far_pitch_tolerance > 0.0)) {
-            return std::unexpected {
-                "near_pitch_tolerance and far_pitch_tolerance must be > 0",
-            };
-        }
+    static auto finite(const Eigen::Vector3d& value) noexcept -> bool { return value.allFinite(); }
 
-        if (config.split_distance < 0.0) {
-            return std::unexpected { "split_distance must be >= 0" };
-        }
-
-        return { };
+    static auto finite(Command const& command) noexcept -> bool {
+        return finite(command.yaw) && finite(command.pitch) && finite(command.center)
+            && finite(command.attack);
     }
 
-    auto evaluate(Command const& command, GimbalState const& state) noexcept -> bool {
-        auto should_fire = false;
+    static auto finite(double yaw, double pitch) noexcept -> bool {
+        return finite(yaw) && finite(pitch);
+    }
+
+    static auto in_yaw_window(double yaw, double center, const YawWindow& window) noexcept -> bool {
+        const auto error = util::normalize_angle(yaw - center);
+        return error >= window.right && error <= window.left;
+    }
+
+    static auto in_pitch_window(double pitch, const PitchWindow& window) noexcept -> bool {
+        return pitch >= window.lower && pitch <= window.upper;
+    }
+
+    static auto make_logging(double xy, YawWindow yaw, PitchWindow pit) {
+        static auto temp = Printer { "ShootEvaluator" };
+        temp.info("distance: {:.2f}, yaw: [{:.2f}, {:.2f}], pitch: [{:.2f}, {:.2f}]", xy, yaw.left,
+            yaw.right, pit.upper, pit.lower);
+    }
+
+    explicit Impl(const Config& config)
+        : config { config } { }
+
+    auto yaw_window(Command const& command) const noexcept -> YawWindow {
+        const auto yaw_center = std::atan2(command.attack.y(), command.attack.x());
+        const auto lateral    = Eigen::Vector3d {
+            -std::sin(yaw_center),
+            +std::cos(yaw_center),
+            0.0,
+        };
+
+        const auto left_point  = command.attack + lateral * config.yaw_tolerance;
+        const auto right_point = command.attack - lateral * config.yaw_tolerance;
+
+        return {
+            .right =
+                util::normalize_angle(std::atan2(right_point.y(), right_point.x()) - yaw_center),
+            .left = util::normalize_angle(std::atan2(left_point.y(), left_point.x()) - yaw_center),
+        };
+    }
+
+    auto pitch_window(Command const& command) const noexcept -> PitchWindow {
+        const auto distance_xy  = std::hypot(command.attack.x(), command.attack.y());
+        const auto pitch_center = std::atan2(command.attack.z(), distance_xy);
+
+        const auto pitch_lower =
+            std::atan2(command.attack.z() - config.pitch_tolerance, distance_xy);
+        const auto pitch_upper =
+            std::atan2(command.attack.z() + config.pitch_tolerance, distance_xy);
+
+        return {
+            .lower = command.pitch + (pitch_lower - pitch_center),
+            .upper = command.pitch + (pitch_upper - pitch_center),
+        };
+    }
+
+    auto evaluate(Command const& command, double yaw, double pitch) noexcept -> bool {
+        if (!finite(command) || !finite(yaw, pitch)) {
+            last_command.reset();
+            return false;
+        }
+
+        const auto distance_xy = std::hypot(command.attack.x(), command.attack.y());
+        if (!(distance_xy > kMinDistance)) {
+            last_command.reset();
+            return false;
+        }
+
+        const auto yaw_window   = this->yaw_window(command);
+        const auto pitch_window = this->pitch_window(command);
 
         if (config.is_lazy_gimbal) {
-            auto const aim_point_yaw = std::atan2(command.attack.y(), command.attack.x());
-            const auto aim_delta     = std::abs(util::normalize_angle(state.yaw - aim_point_yaw));
-            const auto is_overlap    = aim_delta < config.near_yaw_tolerance;
-            if (!is_overlap) {
-                last_command_ = command;
+            const auto aim_point_yaw = std::atan2(command.attack.y(), command.attack.x());
+            if (!in_yaw_window(yaw, aim_point_yaw, yaw_window)) {
+                last_command = command;
                 return false;
             }
         }
 
-        auto const center_distance = std::hypot(command.center.x(), command.center.y());
-        const auto yaw_tolerance   = (center_distance > config.split_distance)
-            ? config.far_yaw_tolerance
-            : config.near_yaw_tolerance;
-        const auto pitch_tolerance = (center_distance > config.split_distance)
-            ? config.far_pitch_tolerance
-            : config.near_pitch_tolerance;
+        const auto aim_aligned =
+            in_yaw_window(yaw, command.yaw, yaw_window) && in_pitch_window(pitch, pitch_window);
 
-        if (last_command_.has_value()) {
-            const auto yaw_delta =
-                std::abs(util::normalize_angle(last_command_->yaw - command.yaw));
-            const auto track_delta =
-                std::abs(util::normalize_angle(state.yaw - last_command_->yaw));
-            const auto pitch_delta = std::abs(util::normalize_angle(state.pitch - command.pitch));
-
-            should_fire = (yaw_delta < yaw_tolerance) && (track_delta < yaw_tolerance)
-                && (pitch_delta < pitch_tolerance);
+        auto command_stable = false;
+        if (last_command.has_value()) {
+            command_stable = in_yaw_window(last_command->yaw, command.yaw, yaw_window)
+                && in_pitch_window(last_command->pitch, pitch_window);
         }
 
-        last_command_ = command;
-        return should_fire;
+        last_command = command;
+        return aim_aligned && (!config.require_stable_command || command_stable);
     }
 
 private:
-    std::optional<Command> last_command_ { };
+    std::optional<Command> last_command { };
 };
 
-ShootEvaluator::ShootEvaluator() noexcept
-    : pimpl { std::make_unique<Impl>() } { }
+ShootEvaluator::ShootEvaluator(const Config& config)
+    : pimpl { std::make_unique<Impl>(config) } { }
 
 ShootEvaluator::~ShootEvaluator() noexcept = default;
 
-auto ShootEvaluator::initialize(const YAML::Node& yaml) noexcept
-    -> std::expected<void, std::string> {
-    return pimpl->configure_yaml(yaml);
-}
-
-auto ShootEvaluator::configure_yaml(const YAML::Node& yaml) noexcept
-    -> std::expected<void, std::string> {
-    return pimpl->configure_yaml(yaml);
-}
-
-auto ShootEvaluator::evaluate(Command const& command, GimbalState const& state) noexcept -> bool {
-    return pimpl->evaluate(command, state);
+auto ShootEvaluator::evaluate(Command const& command, double yaw, double pitch) noexcept -> bool {
+    return pimpl->evaluate(command, yaw, pitch);
 }
