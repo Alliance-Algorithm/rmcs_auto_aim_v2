@@ -62,7 +62,7 @@ public:
 
         double noise_vx = 5e-2;
         double noise_vy = 5e-2;
-        double noise_vz = 1e-4;
+        double noise_vz = 1e-6;
 
         double noise_rotation_angle = 1e-3;
         double noise_rotation_speed = 1e-0;
