@@ -23,6 +23,12 @@ public:
             Point2d point;
         };
         std::vector<Lightbar> lightbars;
+
+        struct Info {
+            std::string text;
+            Point3d point;
+        };
+        std::vector<Info> infos;
     };
 
     explicit TrackerV2(const YAML::Node&);

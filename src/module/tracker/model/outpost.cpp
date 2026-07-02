@@ -24,9 +24,11 @@ auto OutpostModel::State::transition(double seconds) -> void {
     rotation_angle = util::normalize_angle(rotation_angle + rotation_speed * seconds);
 }
 
-auto OutpostModel::State::direction() const -> Point3d { return Point3d { x, y, z }; }
+auto OutpostModel::State::get_direction() const -> Point3d { return Point3d { x, y, z }; }
 
-auto OutpostModel::State::aimpoints() const -> std::vector<Point3d> {
+auto OutpostModel::State::get_rotation_speed() const -> double { return rotation_speed; }
+
+auto OutpostModel::State::get_aimpoints() const -> std::vector<Point3d> {
     const auto& [ref_yaw_off, ref_h_off] = kOffsetTable[index];
 
     auto result = std::vector<Point3d> { };
@@ -38,7 +40,7 @@ auto OutpostModel::State::aimpoints() const -> std::vector<Point3d> {
         const auto py = y + kRadius * std::sin(pa);
         const auto pz = z + (h_off - ref_h_off);
 
-        result.emplace_back(px, py, pz);
+        result.push_back(Point3d { px, py, pz });
     }
     return result;
 }

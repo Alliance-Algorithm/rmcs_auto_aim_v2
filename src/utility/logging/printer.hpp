@@ -13,15 +13,15 @@ public:
     Printer& operator=(const Printer&) = delete;
 
     template <typename... Args>
-    auto info(std::format_string<Args...> fmt, Args&&... args) {
+    auto info(std::format_string<Args...> fmt, Args&&... args) const {
         log(std::format(fmt, std::forward<Args>(args)...), Level::INFO);
     }
     template <typename... Args>
-    auto warn(std::format_string<Args...> fmt, Args&&... args) {
+    auto warn(std::format_string<Args...> fmt, Args&&... args) const {
         log(std::format(fmt, std::forward<Args>(args)...), Level::WARN);
     }
     template <typename... Args>
-    auto error(std::format_string<Args...> fmt, Args&&... args) {
+    auto error(std::format_string<Args...> fmt, Args&&... args) const {
         log(std::format(fmt, std::forward<Args>(args)...), Level::ERROR);
     }
 
@@ -30,7 +30,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> pimpl;
 
-    auto log(const std::string&, Level) noexcept -> void;
+    auto log(const std::string&, Level) const noexcept -> void;
 };
 
 }

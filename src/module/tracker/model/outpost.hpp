@@ -23,8 +23,9 @@ public:
 
         auto transition(double seconds) -> void;
 
-        auto direction() const -> Point3d;
-        auto aimpoints() const -> std::vector<Point3d>;
+        auto get_direction() const -> Point3d;
+        auto get_aimpoints() const -> std::vector<Point3d>;
+        auto get_rotation_speed() const -> double;
     };
 
     struct Config {

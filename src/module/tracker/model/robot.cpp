@@ -21,9 +21,11 @@ auto RobotModel::State::transition(double seconds) -> void {
     rotation_angle = util::normalize_angle(rotation_angle + rotation_speed * seconds);
 }
 
-auto RobotModel::State::direction() const -> Point3d { return Point3d { x, y, z }; }
+auto RobotModel::State::get_direction() const -> Point3d { return Point3d { x, y, z }; }
 
-auto RobotModel::State::aimpoints() const -> std::vector<Point3d> {
+auto RobotModel::State::get_rotation_speed() const -> double { return rotation_speed; }
+
+auto RobotModel::State::get_aimpoints() const -> std::vector<Point3d> {
     auto solution = RobotSolution { };
 
     solution.input.center = Eigen::Vector3d { x, y, z };
@@ -34,12 +36,11 @@ auto RobotModel::State::aimpoints() const -> std::vector<Point3d> {
     solution.input.height_lateral = height_lateral;
 
     const auto armors = solution.solve_armors();
-    return {
-        armors[0].translation,
-        armors[1].translation,
-        armors[2].translation,
-        armors[3].translation,
-    };
+    auto result       = std::vector<Point3d> { };
+    for (int i = 0; i < 4; ++i) {
+        result.push_back(Point3d { armors[i].translation });
+    }
+    return result;
 }
 
 struct RobotModel::Impl {

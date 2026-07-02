@@ -78,9 +78,7 @@ struct AutoAim::Impl {
             /// 1. Identify Armor
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
-            {
-                auto result = identifier.sync_identify(image->mat);
-                if (!result.has_value()) continue;
+            if (auto result = identifier.sync_identify(image->mat)) {
 
                 for (const auto& roi : result->areas) {
                     visual.draw_later(roi);
@@ -148,6 +146,14 @@ struct AutoAim::Impl {
                         .color    = kYellow,
                     });
                 }
+                for (const auto& info : addition.infos) {
+                    if (auto p = estimator.make_point2d(info.point)) {
+                        visual.draw_later(Canvas::Text {
+                            .content  = info.text,
+                            .top_left = p->make<cv::Point2i>(),
+                        });
+                    }
+                }
                 visual.publish(addition.tracked3d, "trackable");
             }
 
@@ -159,21 +165,23 @@ struct AutoAim::Impl {
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;
                     cmd.should_shoot = aimed->shoot;
-                    cmd.yaw          = aimed->aim_yaw;
+                    cmd.yaw          = aimed->yaw;
                     cmd.pitch        = aimed->pitch;
                     cmd.robot_center = aimed->center;
 
                     visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                    visual.publish(aimed->aim_yaw, "aim_yaw");
-                    visual.publish(aimed->raw_yaw, "raw_yaw");
+                    visual.publish(aimed->yaw, "aim_yaw");
 
                     if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
+                        const auto color = aimed->shoot ? kRed : aimed->pre_aim ? kYellow : kGreen;
                         visual.draw_later(Canvas::Point {
                             .origin = aim_2d->make<cv::Point2i>(),
                             .radius = 3,
-                            .color  = aimed->shoot ? kRed : kGreen,
+                            .color  = color,
                         });
                     }
+                    visual.draw_later(
+                        Canvas::Text { "PREAIM", { 10, 620 }, aimed->pre_aim ? kRed : kWhite });
                 }
             }
             visual.draw_later(

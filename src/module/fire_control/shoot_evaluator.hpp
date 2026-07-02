@@ -1,10 +1,9 @@
 #pragma once
 
+#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
-#include <eigen3/Eigen/Core>
-#include <limits>
 
-namespace rmcs::fire_control {
+namespace rmcs {
 
 class ShootEvaluator {
     RMCS_PIMPL_DEFINITION(ShootEvaluator)
@@ -18,10 +17,10 @@ public:
     };
 
     struct Command {
-        double yaw { std::numeric_limits<double>::quiet_NaN() };
-        double pitch { std::numeric_limits<double>::quiet_NaN() };
-        Eigen::Vector3d center { Eigen::Vector3d::Zero() };
-        Eigen::Vector3d attack { Eigen::Vector3d::Zero() };
+        double yaw   = kNaN;
+        double pitch = kNaN;
+        Point3d center;
+        Point3d armor;
     };
 
     explicit ShootEvaluator(const Config& config);
@@ -29,4 +28,4 @@ public:
     auto evaluate(Command const& command, double yaw, double pitch) noexcept -> bool;
 };
 
-} // namespace rmcs::fire_control
+} // namespace rmcs

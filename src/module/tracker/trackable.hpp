@@ -11,11 +11,13 @@ struct Trackable {
 
     virtual ~Trackable() = default;
 
-    virtual auto aimpoints() const -> Points  = 0;
-    virtual auto direction() const -> Point3d = 0;
+    virtual auto get_aimpoints() const -> Points  = 0;
+    virtual auto get_direction() const -> Point3d = 0;
 
-    virtual auto timestamp() const -> TimePoint    = 0;
-    virtual auto jump_into(double seconds) -> void = 0;
+    virtual auto get_rotation_speed() const -> double = 0;
+
+    virtual auto get_timestamp() const -> TimePoint = 0;
+    virtual auto jump_into(double seconds) -> void  = 0;
 
     virtual auto clone() const -> Unique = 0;
 };
@@ -28,22 +30,30 @@ struct Ins : public Trackable {
 
     ~Ins() override = default;
 
-    auto aimpoints() const -> Points override {
+    auto get_aimpoints() const -> std::vector<Point3d> override {
         constexpr auto kHasAimpoints = requires {
-            { state.aimpoints() };
+            { state.get_aimpoints() };
         };
-        static_assert(kHasAimpoints, "State::aimpoint()");
-        return state.aimpoints();
+        static_assert(kHasAimpoints, "State::get_aimpoints()");
+        return state.get_aimpoints();
     }
-    auto direction() const -> Point3d override {
+    auto get_direction() const -> Point3d override {
         constexpr auto kHasDirection = requires {
-            { state.direction() };
+            { state.get_direction() };
         };
-        static_assert(kHasDirection, "State::direction()");
-        return state.direction();
+        static_assert(kHasDirection, "State::get_direction()");
+        return state.get_direction();
     }
 
-    auto timestamp() const -> TimePoint override { return stamp; }
+    auto get_rotation_speed() const -> double override {
+        constexpr auto kHasRotationSpeed = requires {
+            { state.get_rotation_speed() };
+        };
+        static_assert(kHasRotationSpeed, "State::get_rotation_speed()");
+        return state.get_rotation_speed();
+    }
+
+    auto get_timestamp() const -> TimePoint override { return stamp; }
     auto jump_into(double seconds) -> void override {
         constexpr auto kHasTransition = requires {
             { state.transition(0.) };
