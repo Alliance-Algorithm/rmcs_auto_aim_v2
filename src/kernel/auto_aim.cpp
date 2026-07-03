@@ -43,17 +43,21 @@ struct AutoAim::Impl {
     FramerateCounter counter;
 
     auto run(const std::stop_token& stop) -> void {
-
         while (util::get_running() && !stop.stop_requested()) {
+            using namespace rmcs_msgs;
+
             node.spin_once();
 
             auto image = cap.fetch_image();
             if (!image) continue;
 
+            auto max_yaw_vel = 10.0;
+            auto max_yaw_acc = 200.0;
+
             auto iso   = Transform::kIdentity();
             auto yaw   = 0.0;
             auto pitch = 0.0;
-            auto id    = rmcs_msgs::RobotId { };
+            auto id    = RobotId { RobotId::UNKNOWN };
             {
                 using namespace std::chrono_literals;
 
@@ -61,6 +65,9 @@ struct AutoAim::Impl {
                 auto& context = self.current_context;
 
                 id = context.id;
+
+                max_yaw_vel = context.max_yaw_vel;
+                max_yaw_acc = context.max_yaw_acc;
 
                 const auto time = image->timestamp - 8ms;
                 const auto best = std::ranges::min_element(
@@ -78,7 +85,8 @@ struct AutoAim::Impl {
             visual.publish(yaw, "yaw");
 
             if (counter.tick()) {
-                node.info("Autoaim Framerate: {}", counter.fps());
+                node.info("fps: {:03} mya: {:03.1f} myv: {:02.2f}", counter.fps(), max_yaw_acc,
+                    max_yaw_vel);
             }
 
             [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
@@ -170,8 +178,13 @@ struct AutoAim::Impl {
             /// 3. 弹道解算
             auto cmd = Command::kInvalid();
             if (trackable) {
-                fire_v2->update(image->timestamp, yaw, pitch);
-
+                fire_v2->update({
+                    .timestamp   = image->timestamp,
+                    .yaw         = yaw,
+                    .pitch       = pitch,
+                    .max_yaw_vel = max_yaw_vel,
+                    .max_yaw_acc = max_yaw_acc,
+                });
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;
                     cmd.should_shoot = aimed->shoot;

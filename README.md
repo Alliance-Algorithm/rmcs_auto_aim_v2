@@ -79,6 +79,7 @@ ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
 |----------|------|------|
 | `/auto_aim/camera_transform` | `Eigen::Isometry3d` | 相机在 OdomImu 坐标系下的位姿 |
 | `/auto_aim/barrel_direction` | `Eigen::Vector3d` | 枪口在 OdomImu 坐标系下的方向 |
+| `/auto_aim/yaw_velocity` | `double` | 云台 yaw 角速度，单位 rad/s，用于估计极限射击窗口 |
 | `/referee/id` | `rmcs_msgs::RobotId` | 机器人 ID，用于判断敌方颜色 |
 
 通过类似下面的方式获取需要的变换：

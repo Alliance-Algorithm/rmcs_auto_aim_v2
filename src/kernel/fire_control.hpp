@@ -12,6 +12,16 @@ class FireControllerV2 {
     RMCS_PIMPL_DEFINITION(FireControllerV2)
 
 public:
+    struct State {
+        Timestamp timestamp = { };
+
+        double yaw   = 0.;
+        double pitch = 0.;
+
+        double max_yaw_vel = 10.0;
+        double max_yaw_acc = 200.0;
+    };
+
     struct Aimed {
         double yaw   = 0;
         double pitch = 0;
@@ -25,7 +35,7 @@ public:
 
     explicit FireControllerV2(const YAML::Node&);
 
-    auto update(Timestamp timestamp, double yaw, double pitch) -> void;
+    auto update(State state) -> void;
 
     auto aim(const Trackable&) -> std::optional<Aimed>;
 };

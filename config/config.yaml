@@ -96,8 +96,6 @@ fire_control:
   offset_pitch: +0.0 # degree
 
   attack_window: [60.0, 60.0] # degree [left, right]
-  max_acc: 15000 # deg/s²
-  max_vel: 720 # deg/s
 
   is_lazy_gimbal: false
   require_stable_command: true

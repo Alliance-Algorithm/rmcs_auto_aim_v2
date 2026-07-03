@@ -20,8 +20,8 @@ public:
     struct Command {
         TimePoint timestamp { };
 
-        bool should_track { false };
-        bool should_shoot = { false };
+        bool should_track = false;
+        bool should_shoot = false;
 
         double yaw { kNaN };
         double pitch { kNaN };
@@ -51,6 +51,9 @@ public:
             double pitch = kNaN;
         };
         std::deque<TransformFrame> transforms;
+
+        double max_yaw_vel = 10.0;
+        double max_yaw_acc = 200.0;
 
         DeviceIds invincible = DeviceIds::None();
 

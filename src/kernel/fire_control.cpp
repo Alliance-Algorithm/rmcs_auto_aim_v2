@@ -26,9 +26,6 @@ struct FireControllerV2::Impl {
 
         std::array<double, 2> attack_window { 20.0, 20.0 };
 
-        double max_vel { 0.0 };
-        double max_acc { 0.0 };
-
         double yaw_tolerance { 0.07 };
         double pitch_tolerance { 0.04 };
         bool require_stable_command { true };
@@ -41,8 +38,6 @@ struct FireControllerV2::Impl {
             &Config::offset_yaw, "offset_yaw",
             &Config::offset_pitch, "offset_pitch",
             &Config::attack_window, "attack_window",
-            &Config::max_vel, "max_vel",
-            &Config::max_acc, "max_acc",
             &Config::yaw_tolerance, "yaw_tolerance",
             &Config::pitch_tolerance, "pitch_tolerance",
             &Config::require_stable_command, "require_stable_command",
@@ -53,9 +48,7 @@ struct FireControllerV2::Impl {
 
     std::unique_ptr<ShootEvaluator> shoot_evaluator;
 
-    double cached_yaw   = kNaN;
-    double cached_pitch = kNaN;
-    Timestamp cached_stamp;
+    State state;
 
     std::int8_t last_armor_idx = -1;
 
@@ -107,8 +100,6 @@ struct FireControllerV2::Impl {
         config.offset_pitch     = util::deg2rad(config.offset_pitch);
         config.attack_window[0] = util::deg2rad(config.attack_window[0]);
         config.attack_window[1] = util::deg2rad(config.attack_window[1]);
-        config.max_vel          = util::deg2rad(config.max_vel);
-        config.max_acc          = util::deg2rad(config.max_acc);
 
         shoot_evaluator = std::make_unique<ShootEvaluator>(ShootEvaluator::Config {
             .yaw_tolerance          = config.yaw_tolerance,
@@ -166,7 +157,7 @@ struct FireControllerV2::Impl {
     }
 
     auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, double> {
-        if (config.max_vel <= 0.0 || config.max_acc <= 0.0) {
+        if (state.max_yaw_vel <= 0.0 || state.max_yaw_acc <= 0.0) {
             return { config.attack_window[0], config.attack_window[1] };
         }
 
@@ -176,9 +167,9 @@ struct FireControllerV2::Impl {
         }
 
         // 正弦拟合区间
-        const auto vel_limit = config.max_vel * cycle_time / (2.0 * std::numbers::pi);
-        const auto acc_limit =
-            config.max_acc * cycle_time * cycle_time / (4.0 * std::numbers::pi * std::numbers::pi);
+        const auto vel_limit = state.max_yaw_vel * cycle_time / (2.0 * std::numbers::pi);
+        const auto acc_limit = state.max_yaw_acc * cycle_time * cycle_time
+            / (4.0 * std::numbers::pi * std::numbers::pi);
         const auto min_limit = std::min(vel_limit, acc_limit);
 
         return {
@@ -195,7 +186,7 @@ struct FireControllerV2::Impl {
 
         const auto fly_time  = distance / config.bullet_speed;
         const auto increment = config.shoot_delay
-            + std::chrono::duration<double>(cached_stamp - trackable.get_timestamp()).count();
+            + std::chrono::duration<double>(state.timestamp - trackable.get_timestamp()).count();
 
         auto selected = std::int8_t { -1 };
         auto pre_aim  = false;
@@ -256,7 +247,7 @@ struct FireControllerV2::Impl {
                     .center = center,
                     .armor  = attack,
                 },
-                cached_yaw, cached_pitch);
+                state.yaw, state.pitch);
 
             return Aimed {
                 .yaw     = yaw,
@@ -276,11 +267,7 @@ FireControllerV2::FireControllerV2(const YAML::Node& yaml)
 
 FireControllerV2::~FireControllerV2() noexcept = default;
 
-auto FireControllerV2::update(Timestamp timestamp, double yaw, double pitch) -> void {
-    pimpl->cached_stamp = timestamp;
-    pimpl->cached_yaw   = yaw;
-    pimpl->cached_pitch = pitch;
-}
+auto FireControllerV2::update(State state) -> void { pimpl->state = state; }
 
 auto FireControllerV2::aim(const Trackable& trackable) -> std::optional<Aimed> {
     return pimpl->aim(trackable);
