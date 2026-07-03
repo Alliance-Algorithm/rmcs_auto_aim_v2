@@ -1,5 +1,7 @@
 #include "kernel/auto_aim.hpp"
 
+#include <algorithm>
+
 #include <eigen3/Eigen/Geometry>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/robot_id.hpp>
@@ -15,6 +17,7 @@ private:
     InputInterface<Eigen::Isometry3d> camera_transform;
     InputInterface<Eigen::Vector3d> barrel_direction;
     InputInterface<rmcs_msgs::RobotId> robot_id;
+    InputInterface<double> yaw_velocity;
 
     OutputInterface<bool> should_control;
     OutputInterface<bool> should_shoot;
@@ -25,12 +28,16 @@ private:
     OutputInterface<double> yaw_acc;
     OutputInterface<double> pitch_acc;
 
-    std::chrono::steady_clock::time_point last_command_timestamp;
+    Timestamp last_yaw_vel_timestamp;
+    double last_yaw_velocity = kNaN;
+
+    Timestamp last_command_timestamp;
 
 public:
     AutoAimComponent() noexcept {
         register_input("/auto_aim/camera_transform", camera_transform, false);
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
+        register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
         register_input("/referee/id", robot_id, false);
 
         register_output("/auto_aim/should_control", should_control, false);
@@ -57,13 +64,31 @@ public:
     }
 
     auto update() -> void override {
-        auto_aim.with_context([this](AutoAim::Context& ctx) {
-            auto frame = AutoAim::Context::TransformFrame {};
+        auto max_yaw_vel = double { 10.0 };
+        auto max_yaw_acc = double { 200.0 };
+        if (yaw_velocity.ready() && std::isfinite(*yaw_velocity)) {
+            const auto now      = Clock::now();
+            const auto velocity = *yaw_velocity;
+
+            max_yaw_vel = std::max(max_yaw_vel, std::abs(velocity));
+            if (std::isfinite(last_yaw_velocity)) {
+                const auto dt = std::chrono::duration<double>(now - last_yaw_vel_timestamp).count();
+                if (dt > 1e-6) {
+                    max_yaw_acc =
+                        std::max(max_yaw_acc, std::abs((velocity - last_yaw_velocity) / dt));
+                }
+            }
+            last_yaw_vel_timestamp = now;
+            last_yaw_velocity      = velocity;
+        }
+
+        auto_aim.with_context([this, max_yaw_vel, max_yaw_acc](AutoAim::Context& ctx) {
+            auto frame      = AutoAim::Context::TransformFrame { };
             frame.timestamp = Clock::now();
 
             const auto& dir = *barrel_direction;
-            frame.yaw   = std::atan2(dir.y(), dir.x());
-            frame.pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
+            frame.yaw       = std::atan2(dir.y(), dir.x());
+            frame.pitch     = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
             const auto& iso             = *camera_transform;
             frame.transform.translation = Translation { iso.translation() };
@@ -73,6 +98,9 @@ public:
             if (ctx.transforms.size() > 100) {
                 ctx.transforms.pop_front();
             }
+
+            ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
+            ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
 
             ctx.id = *robot_id;
         });
