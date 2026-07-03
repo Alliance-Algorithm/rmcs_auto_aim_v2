@@ -133,7 +133,6 @@ struct FireControllerV2::Impl {
         if (!(config.yaw_tolerance > 0.0)) {
             throw std::runtime_error { "FireControllerV2: yaw_tolerance must be > 0" };
         }
-
         if (!(config.pitch_tolerance > 0.0)) {
             throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
         }
@@ -164,9 +163,8 @@ struct FireControllerV2::Impl {
         }
 
         const auto period    = cycle_time;
-        const auto vel_limit = config.max_vel * period / (2.0 * std::numbers::pi);
-        const auto acc_limit =
-            config.max_acc * period * period / (4.0 * std::numbers::pi * std::numbers::pi);
+        const auto vel_limit = config.max_vel * period;
+        const auto acc_limit = config.max_acc * period * period / 4.0;
 
         const auto physical_limit = std::min(vel_limit, acc_limit);
 

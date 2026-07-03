@@ -1,9 +1,5 @@
 #include "shoot_evaluator.hpp"
-#include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
-
-#include <cmath>
-#include <optional>
 
 using namespace rmcs;
 
@@ -134,12 +130,8 @@ struct ShootEvaluator::Impl {
         auto command_stable = false;
         if (last_command.has_value()) {
             command_stable = in_yaw_window(last_command->yaw, command.yaw, yaw_win)
-                && in_pitch_window(pitch, command.pitch, pitch_win);
+                && in_pitch_window(last_command->pitch, command.pitch, pitch_win);
         }
-
-        // static Printer logging { "evaluate" };
-        // logging.info("{:.3f} -> {:.3f} {:.3f} -> {:.3f} {:.3f} * [{:.3f}, {:.3f}] {}", pitch,
-        //     command.pitch, yaw, command.yaw, scale, yaw_win.left, yaw_win.right, aim_aligned);
 
         last_command = command;
         return aim_aligned && (!config.require_stable_command || command_stable);

@@ -23,7 +23,7 @@ cmake --build build -j
 clangd --check=<修改的文件路径>
 ```
 ```zsh
-clang-tidy -p `<构建目录>` <修改的文件路径>
+clang-tidy -p <构建目录> <修改的文件路径>
 ```
 只有在 clang-tidy 检查通过后，才进行编译验证。
 
