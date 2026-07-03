@@ -58,15 +58,21 @@ public:
 
     auto update() -> void override {
         auto_aim.with_context([this](AutoAim::Context& ctx) {
-            ctx.timestamp = Clock::now();
+            auto frame = AutoAim::Context::TransformFrame {};
+            frame.timestamp = Clock::now();
 
             const auto& dir = *barrel_direction;
-            ctx.yaw         = std::atan2(dir.y(), dir.x());
-            ctx.pitch       = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
+            frame.yaw   = std::atan2(dir.y(), dir.x());
+            frame.pitch = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
-            const auto& iso                  = *camera_transform;
-            ctx.camera_transform.translation = Translation { iso.translation() };
-            ctx.camera_transform.orientation = Orientation { Eigen::Quaterniond(iso.rotation()) };
+            const auto& iso             = *camera_transform;
+            frame.transform.translation = Translation { iso.translation() };
+            frame.transform.orientation = Orientation { Eigen::Quaterniond(iso.rotation()) };
+
+            ctx.transforms.push_back(frame);
+            if (ctx.transforms.size() > 100) {
+                ctx.transforms.pop_front();
+            }
 
             ctx.id = *robot_id;
         });

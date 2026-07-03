@@ -15,6 +15,7 @@
 #include "utility/rclcpp/parameters.hpp"
 #include "utility/singleton/running.hpp"
 
+#include <algorithm>
 #include <csignal>
 #include <experimental/scope>
 #include <filesystem>
@@ -39,13 +40,9 @@ struct AutoAim::Impl {
 
     std::jthread worker;
 
+    FramerateCounter counter;
+
     auto run(const std::stop_token& stop) -> void {
-        using namespace std::chrono_literals;
-
-        node.set_pub_topic_prefix("/rmcs/auto_aim/");
-
-        auto framerate = FramerateCounter { };
-        framerate.set_interval(std::chrono::seconds { 5 });
 
         while (util::get_running() && !stop.stop_requested()) {
             node.spin_once();
@@ -53,32 +50,42 @@ struct AutoAim::Impl {
             auto image = cap.fetch_image();
             if (!image) continue;
 
-            auto timestamp = Timestamp { };
-            auto yaw       = 0.0;
-            auto pitch     = 0.0;
-            auto transform = Transform::kIdentity();
-            auto id        = rmcs_msgs::RobotId { };
+            auto iso   = Transform::kIdentity();
+            auto yaw   = 0.0;
+            auto pitch = 0.0;
+            auto id    = rmcs_msgs::RobotId { };
             {
-                std::lock_guard lock { self.context_mutex };
+                using namespace std::chrono_literals;
 
-                timestamp = self.current_context.timestamp;
-                yaw       = self.current_context.yaw;
-                pitch     = self.current_context.pitch;
-                transform = self.current_context.camera_transform;
-                id        = self.current_context.id;
+                std::lock_guard lock { self.context_mutex };
+                auto& context = self.current_context;
+
+                id = context.id;
+
+                const auto time = image->timestamp - 8ms;
+                const auto best = std::ranges::min_element(
+                    context.transforms, [time](const auto& lhs, const auto& rhs) {
+                        return std::chrono::abs(lhs.timestamp - time)
+                            < std::chrono::abs(rhs.timestamp - time);
+                    });
+                if (best != context.transforms.end()) {
+                    iso   = best->transform;
+                    yaw   = best->yaw;
+                    pitch = best->pitch;
+                }
             }
-            visual.publish(transform, "camera_link");
+            visual.publish(iso, "camera_link");
             visual.publish(yaw, "yaw");
 
-            if (framerate.tick()) {
-                node.info("Autoaim Framerate: {}", framerate.fps());
+            if (counter.tick()) {
+                node.info("Autoaim Framerate: {}", counter.fps());
             }
 
             [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
                 visual.draw_later( // 录制开关
                     Canvas::Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
                 visual.draw_later( // 自瞄帧率
-                    Canvas::Text { std::format("FPS: {}", framerate.fps()), { 10, 680 } });
+                    Canvas::Text { std::format("FPS: {}", counter.fps()), { 10, 680 } });
                 visual.update_image(image->mat);
             } };
 
@@ -100,7 +107,7 @@ struct AutoAim::Impl {
             /// 2. Transform 2d to 3d
             auto armor3ds = Armor3ds { };
             {
-                estimator.update_camera_transform(transform);
+                estimator.update_camera_transform(iso);
 
                 auto result = estimator.estimate_armor(armor2ds, image->mat);
 
@@ -126,7 +133,7 @@ struct AutoAim::Impl {
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
                 tracker_v2->update_track_genre(DeviceIds::Full());
-                tracker_v2->update_camera(transform);
+                tracker_v2->update_camera(iso);
 
                 tracker_v2->clean();
                 tracker_v2->store(armor2ds);
@@ -163,7 +170,7 @@ struct AutoAim::Impl {
             /// 3. 弹道解算
             auto cmd = Command::kInvalid();
             if (trackable) {
-                fire_v2->update(timestamp, yaw, pitch);
+                fire_v2->update(image->timestamp, yaw, pitch);
 
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;
@@ -202,6 +209,11 @@ struct AutoAim::Impl {
 
     explicit Impl(AutoAim& self)
         : self { self } {
+
+        node.set_pub_topic_prefix("/rmcs/auto_aim/");
+
+        using namespace std::chrono_literals;
+        counter.set_interval(5s);
 
         const auto configs           = util::configs();
         const auto camera_matrix     = configs["camera_matrix"].as<std::array<double, 9>>();

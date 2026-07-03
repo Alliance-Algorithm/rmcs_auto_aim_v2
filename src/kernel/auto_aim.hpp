@@ -8,6 +8,7 @@
 #include <rmcs_msgs/robot_id.hpp>
 
 #include <atomic>
+#include <deque>
 #include <mutex>
 
 namespace rmcs {
@@ -42,36 +43,18 @@ public:
     struct Context {
         using RobotId = rmcs_msgs::RobotId;
 
-        /// Dynamic Context
-        ///
-        TimePoint timestamp { };
+        struct TransformFrame {
+            Timestamp timestamp = { };
+            Transform transform = Transform::kIdentity();
 
-        double yaw { kNaN };
-        double pitch { kNaN };
+            double yaw   = kNaN;
+            double pitch = kNaN;
+        };
+        std::deque<TransformFrame> transforms;
 
-        Transform camera_transform = Transform::kIdentity();
-
-        /// Lazy Context
-        ///
-        DeviceIds invincible_devices = DeviceIds::None();
+        DeviceIds invincible = DeviceIds::None();
 
         RobotId id = RobotId::UNKNOWN;
-
-        /// Template Context
-        ///
-        static auto kInvalid() {
-            return Context {
-                .timestamp = Clock::now(),
-            };
-        }
-        static auto kIdentity() {
-            return Context {
-                .timestamp        = Clock::now(),
-                .yaw              = 0,
-                .pitch            = 0,
-                .camera_transform = Transform::kIdentity(),
-            };
-        }
     };
 
     template <typename WithFunc>
