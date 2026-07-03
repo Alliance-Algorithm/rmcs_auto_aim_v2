@@ -8,7 +8,6 @@
 namespace rmcs {
 
 class AutoAimComponent final : public rmcs_executor::Component {
-    static inline const auto kNaN  = std::numeric_limits<double>::quiet_NaN();
     static inline const auto kTNaN = Eigen::Vector3d { kNaN, kNaN, kNaN };
 
 private:
@@ -30,7 +29,7 @@ private:
     std::chrono::steady_clock::time_point last_command_timestamp;
 
 public:
-    explicit AutoAimComponent() noexcept {
+    AutoAimComponent() noexcept {
         register_input("/auto_aim/camera_transform", camera_transform, false);
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
         register_input("/referee/id", robot_id, false);

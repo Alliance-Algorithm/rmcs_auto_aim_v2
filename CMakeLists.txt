@@ -116,6 +116,10 @@ target_link_libraries(
 )
 
 ## 组件构建: component
+set_source_files_properties(
+    src/component.cpp
+    PROPERTIES COMPILE_OPTIONS "-Wno-deprecated-declarations"
+)
 add_library(
     ${PROJECT_NAME}_component SHARED
     ${PROJECT_SOURCE_DIR}/src/component.cpp

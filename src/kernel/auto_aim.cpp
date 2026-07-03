@@ -53,15 +53,22 @@ struct AutoAim::Impl {
             auto image = cap.fetch_image();
             if (!image) continue;
 
-            // @TODO:
-            //  避免拷贝，而是把需要的具体量拿出来
-            auto context = SystemContext::kIdentity();
+            auto timestamp = Timestamp { };
+            auto yaw       = 0.0;
+            auto pitch     = 0.0;
+            auto transform = Transform::kIdentity();
+            auto id        = rmcs_msgs::RobotId { };
             {
                 std::lock_guard lock { self.context_mutex };
-                context = self.current_context;
+
+                timestamp = self.current_context.timestamp;
+                yaw       = self.current_context.yaw;
+                pitch     = self.current_context.pitch;
+                transform = self.current_context.camera_transform;
+                id        = self.current_context.id;
             }
-            visual.publish(context.camera_transform, "camera_link");
-            visual.publish(context.yaw, "yaw");
+            visual.publish(transform, "camera_link");
+            visual.publish(yaw, "yaw");
 
             if (framerate.tick()) {
                 node.info("Autoaim Framerate: {}", framerate.fps());
@@ -91,10 +98,9 @@ struct AutoAim::Impl {
             }
 
             /// 2. Transform 2d to 3d
-            /// @NOTE: 即将废弃，现在是 2d 观测直接输入 EKF 的时代了
             auto armor3ds = Armor3ds { };
             {
-                estimator.update_camera_transform(context.camera_transform);
+                estimator.update_camera_transform(transform);
 
                 auto result = estimator.estimate_armor(armor2ds, image->mat);
 
@@ -112,18 +118,15 @@ struct AutoAim::Impl {
             }
             visual.publish(armor3ds, "visible_armors");
 
-            /// @NOTE:
-            ///  🚧 施工中...... 新的跟踪器即将到来
-            ///  期待新的 EKF 的表现吧！
             auto trackable = Trackable::Unique { };
             {
                 using namespace rmcs_msgs;
-                if (context.id != RobotId::UNKNOWN) {
+                if (id != RobotId::UNKNOWN) {
                     tracker_v2->update_track_color(
-                        (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                        (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
                 tracker_v2->update_track_genre(DeviceIds::Full());
-                tracker_v2->update_camera(context.camera_transform);
+                tracker_v2->update_camera(transform);
 
                 tracker_v2->clean();
                 tracker_v2->store(armor2ds);
@@ -160,7 +163,7 @@ struct AutoAim::Impl {
             /// 3. 弹道解算
             auto cmd = AutoAimState::kInvalid();
             if (trackable) {
-                fire_v2->update(context.timestamp, context.yaw, context.pitch);
+                fire_v2->update(timestamp, yaw, pitch);
 
                 if (auto aimed = fire_v2->aim(*trackable)) {
                     cmd.should_track = true;

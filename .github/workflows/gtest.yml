@@ -1,22 +1,14 @@
 name: Run Test
 
 on:
-  push:
-    paths:
-      - 'src/**'
-      - 'test/**'
-      - 'tool/**'
-      - 'CMakeLists.txt'
-      - 'package.xml'
-      - '.github/workflows/gtest.yml'
   pull_request:
     paths:
-      - 'src/**'
-      - 'test/**'
-      - 'tool/**'
-      - 'CMakeLists.txt'
-      - 'package.xml'
-      - '.github/workflows/gtest.yml'
+      - "src/**"
+      - "test/**"
+      - "tool/**"
+      - "CMakeLists.txt"
+      - "package.xml"
+      - ".github/workflows/gtest.yml"
   workflow_dispatch:
 
 concurrency:
