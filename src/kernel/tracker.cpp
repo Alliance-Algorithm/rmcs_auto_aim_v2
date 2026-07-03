@@ -110,6 +110,7 @@ struct TrackerV2::Impl {
         addition.tracked2d.clear();
         addition.tracked3d.clear();
         addition.lightbars.clear();
+        addition.infos.clear();
 
         { // 前哨站观测超时
             const auto dt = std::chrono::duration<double> {
@@ -236,11 +237,9 @@ struct TrackerV2::Impl {
         auto result = Trackable::Unique { };
         auto better = std::numeric_limits<double>::max();
         {
-            /// @FIXME:
-            ///  1. 误识别的机器人，也会被认为是收敛的，因为只进行了一帧 init
             if (outpost && outpost->converge()) {
                 const auto state = outpost->state();
-                const auto score = calculate(DeviceId::OUTPOST, state.direction());
+                const auto score = calculate(DeviceId::OUTPOST, state.get_direction());
                 if (better > score) {
                     better = score;
                     result = make_trackable(timestamp, state);
@@ -248,11 +247,18 @@ struct TrackerV2::Impl {
                     track_genre = DeviceId::OUTPOST;
                 }
                 std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
+
+                const auto a = state.rotation_angle;
+                const auto v = state.rotation_speed;
+                addition.infos.push_back({
+                    .text  = std::format("a: {:+.1f} | v: {:+2.2f}", a, v),
+                    .point = Point3d { state.x, state.y, state.z },
+                });
             }
             for (const auto& [id, model] : robot_models) {
                 if (model.converge()) {
                     const auto state = model.state();
-                    const auto score = calculate(id, state.direction());
+                    const auto score = calculate(id, state.get_direction());
                     if (better > score) {
                         better = score;
                         result = make_trackable(timestamp, state);
@@ -268,6 +274,14 @@ struct TrackerV2::Impl {
                             return Addition::Lightbar { item.lightbar_id, item.point };
                         }),
                         std::back_inserter(addition.lightbars));
+
+                    const auto rv = state.rotation_speed;
+                    const auto vx = state.vx;
+                    const auto vy = state.vy;
+                    addition.infos.push_back({
+                        .text  = std::format("rv: {:+2.2f} | v: {:+2.2f}, {:+2.2f}", rv, vx, vy),
+                        .point = Point3d { state.x, state.y, state.z },
+                    });
                 }
             }
         }

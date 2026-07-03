@@ -32,8 +32,9 @@ public:
 
         auto transition(double seconds) -> void;
 
-        auto aimpoints() const -> std::vector<Point3d>;
-        auto direction() const -> Point3d;
+        auto get_aimpoints() const -> std::vector<Point3d>;
+        auto get_direction() const -> Point3d;
+        auto get_rotation_speed() const -> double;
     };
     struct Config {
         static constexpr double kRadiusMin = 0.1;
@@ -57,14 +58,14 @@ public:
         // 过程噪声
         double noise_x = 1e-4;
         double noise_y = 1e-4;
-        double noise_z = 1e-6;
+        double noise_z = 1e-8;
 
-        double noise_vx = 2e-4;
-        double noise_vy = 2e-4;
-        double noise_vz = 1e-6;
+        double noise_vx = 1e-2;
+        double noise_vy = 1e-2;
+        double noise_vz = 1e-8;
 
         double noise_rotation_angle = 1e-3;
-        double noise_rotation_speed = 0.50;
+        double noise_rotation_speed = 1e-0;
 
         double noise_radius_forward = 1e-8;
         double noise_radius_lateral = 1e-8;

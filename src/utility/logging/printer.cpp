@@ -30,4 +30,6 @@ Printer::Printer(const std::string& name) noexcept
 
 Printer::~Printer() noexcept = default;
 
-auto Printer::log(const std::string& msg, Level level) noexcept -> void { pimpl->log(msg, level); }
+auto Printer::log(const std::string& msg, Level level) const noexcept -> void {
+    pimpl->log(msg, level);
+}

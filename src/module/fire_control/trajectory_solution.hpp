@@ -1,16 +1,15 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
+#include "utility/math/linear.hpp"
 
 #include <optional>
-#include <tuple>
 
-namespace rmcs::fire_control {
+namespace rmcs {
 
 struct TrajectorySolution {
     struct Input {
         double v0 { 0. };
-        Eigen::Vector3d point { 0.0, 0.0, 0.0 };
+        Point3d point;
     } input;
 
     struct Output {
@@ -20,19 +19,6 @@ struct TrajectorySolution {
     } result;
 
     auto solve() const -> std::optional<Output>;
-
-private:
-    auto estimate(double v0, double pitch, double d, double air_resistance) const
-        -> std::tuple<double, double>;
-
-    const int kMaxIterateCount { 10 };
-    const double kMaxPitchThreold { 80.0 / 57.3 };
-    const double kEstimateDeltaTime { 0.005 };
-    const double kHeightErrorThreold { 0.001 };
-    const double kEstimateTimeOutThreold { 4.0 };
-    const double kMinVelocityX { 0.1 };
-    const double kGravity { 9.81 };
-    const double kAirResistanceCoefficient { 0.003 };
 };
 
-} // namespace rmcs::fire_control
+}

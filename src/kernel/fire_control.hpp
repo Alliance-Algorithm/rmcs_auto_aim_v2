@@ -13,12 +13,11 @@ class FireControllerV2 {
 
 public:
     struct Aimed {
-        double aim_yaw = 0;
-        double raw_yaw = 0;
-
+        double yaw   = 0;
         double pitch = 0;
 
-        bool shoot = false;
+        bool shoot   = false;
+        bool pre_aim = false;
 
         Point3d center = { };
         Point3d attack = { };
@@ -26,8 +25,7 @@ public:
 
     explicit FireControllerV2(const YAML::Node&);
 
-    auto update(double yaw, double pitch) -> void;
-    auto update(Timestamp timestamp) -> void;
+    auto update(Timestamp timestamp, double yaw, double pitch) -> void;
 
     auto aim(const Trackable&) -> std::optional<Aimed>;
 };

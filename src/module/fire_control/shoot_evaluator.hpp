@@ -1,33 +1,31 @@
 #pragma once
 
-#include <eigen3/Eigen/Core>
-
-#include <expected>
-#include <limits>
-#include <string>
-
-#include <yaml-cpp/yaml.h>
-
-#include "module/fire_control/gimbal_state.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 
-namespace rmcs::fire_control {
+namespace rmcs {
 
 class ShootEvaluator {
     RMCS_PIMPL_DEFINITION(ShootEvaluator)
 
 public:
-    struct Command {
-        double yaw { std::numeric_limits<double>::quiet_NaN() };
-        double pitch { std::numeric_limits<double>::quiet_NaN() };
-        Eigen::Vector3d center { Eigen::Vector3d::Zero() };
-        Eigen::Vector3d attack { Eigen::Vector3d::Zero() };
+    struct Config {
+        double yaw_tolerance { 0.07 };
+        double pitch_tolerance { 0.04 };
+        bool require_stable_command { true };
+        bool is_lazy_gimbal { false };
     };
 
-    auto initialize(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
-    auto configure_yaml(const YAML::Node& yaml) noexcept -> std::expected<void, std::string>;
+    struct Command {
+        double yaw   = kNaN;
+        double pitch = kNaN;
+        Point3d center;
+        Point3d armor;
+    };
 
-    auto evaluate(Command const& command, GimbalState const& state) noexcept -> bool;
+    explicit ShootEvaluator(const Config& config);
+
+    auto evaluate(Command const& command, double yaw, double pitch) noexcept -> bool;
 };
 
-} // namespace rmcs::fire_control
+} // namespace rmcs
