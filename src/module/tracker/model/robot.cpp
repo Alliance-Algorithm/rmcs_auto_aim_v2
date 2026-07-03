@@ -38,7 +38,7 @@ auto RobotModel::State::get_aimpoints() const -> std::vector<Point3d> {
     const auto armors = solution.solve_armors();
     auto result       = std::vector<Point3d> { };
     for (int i = 0; i < 4; ++i) {
-        result.push_back(Point3d { armors[i].translation });
+        result.emplace_back(armors[i].translation);
     }
     return result;
 }

@@ -40,7 +40,7 @@ auto OutpostModel::State::get_aimpoints() const -> std::vector<Point3d> {
         const auto py = y + kRadius * std::sin(pa);
         const auto pz = z + (h_off - ref_h_off);
 
-        result.push_back(Point3d { px, py, pz });
+        result.emplace_back(px, py, pz);
     }
     return result;
 }
