@@ -23,10 +23,6 @@ private:
     OutputInterface<bool> should_shoot;
     OutputInterface<Eigen::Vector3d> target_direction;
     OutputInterface<Eigen::Vector3d> robot_center;
-    OutputInterface<double> yaw_rate;
-    OutputInterface<double> pitch_rate;
-    OutputInterface<double> yaw_acc;
-    OutputInterface<double> pitch_acc;
 
     Timestamp last_yaw_vel_timestamp;
     double last_yaw_velocity = kNaN;
@@ -44,10 +40,6 @@ public:
         register_output("/auto_aim/control_direction", target_direction, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
         register_output("/auto_aim/should_shoot", should_shoot, false);
-        register_output("/auto_aim/yaw_rate", yaw_rate, kNaN);
-        register_output("/auto_aim/pitch_rate", pitch_rate, kNaN);
-        register_output("/auto_aim/yaw_acc", yaw_acc, kNaN);
-        register_output("/auto_aim/pitch_acc", pitch_acc, kNaN);
     }
 
     auto before_updating() -> void override {
@@ -113,10 +105,6 @@ public:
 
                 *should_control = cmd.should_track;
                 *should_shoot   = cmd.should_shoot;
-                *yaw_rate       = cmd.yaw_rate;
-                *pitch_rate     = cmd.pitch_rate;
-                *yaw_acc        = cmd.yaw_acc;
-                *pitch_acc      = cmd.pitch_acc;
                 *robot_center   = {
                     cmd.robot_center.x,
                     cmd.robot_center.y,

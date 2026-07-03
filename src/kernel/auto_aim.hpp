@@ -25,10 +25,6 @@ public:
 
         double yaw { kNaN };
         double pitch { kNaN };
-        double yaw_rate { kNaN };
-        double pitch_rate { kNaN };
-        double yaw_acc { kNaN };
-        double pitch_acc { kNaN };
         Translation robot_center { kNaN, kNaN, kNaN };
 
         DeviceId target { DeviceId::UNKNOWN };

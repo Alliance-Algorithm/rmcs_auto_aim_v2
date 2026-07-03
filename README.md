@@ -105,10 +105,7 @@ auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
 | `/auto_aim/should_shoot` | `bool` | 是否可以发弹 |
 | `/auto_aim/control_direction` | `Eigen::Vector3d` | 目标方向向量 |
 | `/auto_aim/robot_center` | `Eigen::Vector3d` | 目标机器人中心位置 |
-| `/auto_aim/yaw_rate` | `double` | yaw 角速度 |
-| `/auto_aim/pitch_rate` | `double` | pitch 角速度 |
-| `/auto_aim/yaw_acc` | `double` | yaw 角加速度 |
-| `/auto_aim/pitch_acc` | `double` | pitch 角加速度 |
+
 
 ## 项目架构
 

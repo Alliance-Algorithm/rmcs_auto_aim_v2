@@ -14,7 +14,7 @@ using namespace rmcs::kernel;
 using namespace rmcs::util;
 
 struct TrackerV2::Impl {
-    struct Config : util::Serializable {
+    struct Config : Serializable {
         std::string fallback_color = "RED";
         double timeout_seconds     = 1.5;
         double image_margin        = 20.0;
@@ -28,6 +28,37 @@ struct TrackerV2::Impl {
         };
     } config;
 
+    struct RobotConfig : RobotModel::Config, Serializable {
+        static constexpr std::tuple metas {
+            // clang-format off
+            &RobotConfig::noise_x, "noise_x",
+            &RobotConfig::noise_y, "noise_y",
+            &RobotConfig::noise_z, "noise_z",
+            &RobotConfig::noise_vx, "noise_vx",
+            &RobotConfig::noise_vy, "noise_vy",
+            &RobotConfig::noise_vz, "noise_vz",
+            &RobotConfig::noise_rotation_angle, "noise_rotation_angle",
+            &RobotConfig::noise_rotation_speed, "noise_rotation_speed",
+            &RobotConfig::noise_observation, "noise_observation",
+            // clang-format on
+        };
+    } robot_config;
+
+    struct OutpostConfig : OutpostModel::Config, Serializable {
+        static constexpr std::tuple metas {
+            // clang-format off
+            &OutpostConfig::process_noise_xy, "process_noise_xy",
+            &OutpostConfig::process_noise_z, "process_noise_z",
+            &OutpostConfig::process_noise_speed, "process_noise_speed",
+            &OutpostConfig::process_noise_angle, "process_noise_angle",
+            &OutpostConfig::observation_noise_xy, "observation_noise_xy",
+            &OutpostConfig::observation_noise_z, "observation_noise_z",
+            &OutpostConfig::observation_noise_yaw, "observation_noise_yaw",
+            &OutpostConfig::plate_switch_yaw_min, "plate_switch_yaw_min",
+            // clang-format on
+        };
+    } outpost_config;
+
     struct {
         Armor2ds armor2ds;
         Armor3ds armor3ds;
@@ -39,11 +70,9 @@ struct TrackerV2::Impl {
     DeviceIds track_device = DeviceIds::Full();
     CameraFeature camera;
 
-    RobotModel::Config robot_config;
     std::unordered_map<ArmorGenre, Timestamp> robot_stamps;
     std::unordered_map<ArmorGenre, RobotModel> robot_models;
 
-    OutpostModel::Config outpost_config;
     Timestamp outpost_stamp;
     std::unique_ptr<OutpostModel> outpost;
 
@@ -56,6 +85,14 @@ struct TrackerV2::Impl {
         if (auto ret = config.serialize(yaml); !ret) {
             logging.error("TrackerV2 初始化错误: {}", ret.error());
             throw std::runtime_error { "无法构造 TrackerV2" };
+        }
+        if (auto ret = robot_config.serialize(yaml["robot"]); !ret) {
+            logging.error("RobotModel config error: {}", ret.error());
+            throw std::runtime_error { "无法构造 RobotModel Config" };
+        }
+        if (auto ret = outpost_config.serialize(yaml["outpost"]); !ret) {
+            logging.error("OutpostModel config error: {}", ret.error());
+            throw std::runtime_error { "无法构造 OutpostModel Config" };
         }
 
         /*^^*/ if (config.fallback_color == "RED") {
