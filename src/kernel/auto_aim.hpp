@@ -1,7 +1,11 @@
 #pragma once
 
+#include "utility/clock.hpp"
+#include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
-#include "utility/shared/context.hpp"
+#include "utility/robot/id.hpp"
+
+#include <rmcs_msgs/robot_id.hpp>
 
 #include <atomic>
 #include <mutex>
@@ -12,15 +16,73 @@ class AutoAim {
     RMCS_PIMPL_DEFINITION(AutoAim)
 
 public:
+    struct Command {
+        TimePoint timestamp { };
+
+        bool should_track { false };
+        bool should_shoot = { false };
+
+        double yaw { kNaN };
+        double pitch { kNaN };
+        double yaw_rate { kNaN };
+        double pitch_rate { kNaN };
+        double yaw_acc { kNaN };
+        double pitch_acc { kNaN };
+        Translation robot_center { kNaN, kNaN, kNaN };
+
+        DeviceId target { DeviceId::UNKNOWN };
+
+        static auto kInvalid() {
+            return Command {
+                .timestamp = Clock::now(),
+            };
+        }
+    };
+
+    struct Context {
+        using RobotId = rmcs_msgs::RobotId;
+
+        /// Dynamic Context
+        ///
+        TimePoint timestamp { };
+
+        double yaw { kNaN };
+        double pitch { kNaN };
+
+        Transform camera_transform = Transform::kIdentity();
+
+        /// Lazy Context
+        ///
+        DeviceIds invincible_devices = DeviceIds::None();
+
+        RobotId id = RobotId::UNKNOWN;
+
+        /// Template Context
+        ///
+        static auto kInvalid() {
+            return Context {
+                .timestamp = Clock::now(),
+            };
+        }
+        static auto kIdentity() {
+            return Context {
+                .timestamp        = Clock::now(),
+                .yaw              = 0,
+                .pitch            = 0,
+                .camera_transform = Transform::kIdentity(),
+            };
+        }
+    };
+
     template <typename WithFunc>
-        requires std::invocable<WithFunc, SystemContext&>
+        requires std::invocable<WithFunc, Context&>
     auto with_context(WithFunc&& func) {
         std::lock_guard lock(context_mutex);
         func(current_context);
     }
 
     template <typename WithFunc>
-        requires std::invocable<WithFunc, const AutoAimState&>
+        requires std::invocable<WithFunc, const Command&>
     auto with_command(WithFunc&& func) {
         std::lock_guard lock(command_mutex);
         func(current_command);
@@ -32,11 +94,11 @@ public:
 
 private:
     std::mutex context_mutex;
-    SystemContext current_context { SystemContext::kIdentity() };
+    Context current_context;
 
-    std::mutex command_mutex;
     std::atomic<bool> unread_command = false;
-    AutoAimState current_command { AutoAimState::kInvalid() };
+    std::mutex command_mutex;
+    Command current_command;
 };
 
 }

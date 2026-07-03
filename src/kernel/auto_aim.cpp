@@ -161,7 +161,7 @@ struct AutoAim::Impl {
             }
 
             /// 3. 弹道解算
-            auto cmd = AutoAimState::kInvalid();
+            auto cmd = Command::kInvalid();
             if (trackable) {
                 fire_v2->update(timestamp, yaw, pitch);
 

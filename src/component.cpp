@@ -1,5 +1,4 @@
 #include "kernel/auto_aim.hpp"
-#include "utility/shared/context.hpp"
 
 #include <eigen3/Eigen/Geometry>
 #include <rmcs_executor/component.hpp>
@@ -58,7 +57,7 @@ public:
     }
 
     auto update() -> void override {
-        auto_aim.with_context([this](SystemContext& ctx) {
+        auto_aim.with_context([this](AutoAim::Context& ctx) {
             ctx.timestamp = Clock::now();
 
             const auto& dir = *barrel_direction;
@@ -74,7 +73,7 @@ public:
 
         const auto now = std::chrono::steady_clock::now();
         if (auto_aim.command_updated()) {
-            auto_aim.with_command([this](const AutoAimState& cmd) {
+            auto_aim.with_command([this](const AutoAim::Command& cmd) {
                 using namespace std::chrono_literals;
                 if (Clock::now() - cmd.timestamp > 100ms) return;
 
