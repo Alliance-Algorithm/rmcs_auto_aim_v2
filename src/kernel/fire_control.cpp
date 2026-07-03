@@ -110,10 +110,15 @@ struct FireControllerV2::Impl {
     }
 
     // @return 序号, 是否预瞄
-    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window) const {
+    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window) const
+        -> std::tuple<std::int8_t, bool> {
 
         const auto aimpoints = trackable.get_aimpoints();
         const auto omega     = trackable.get_rotation_speed();
+
+        if (aimpoints.size() == 1) {
+            return { std::int8_t { 0 }, false };
+        }
 
         { // 倾向于使用上一帧的有效装甲板
             const auto length = static_cast<std::int8_t>(aimpoints.size());

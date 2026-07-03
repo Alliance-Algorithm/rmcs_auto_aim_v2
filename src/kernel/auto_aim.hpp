@@ -48,8 +48,8 @@ public:
         };
         std::deque<TransformFrame> transforms;
 
-        double max_yaw_vel = 10.0;
-        double max_yaw_acc = 200.0;
+        double max_yaw_vel = 3.0;
+        double max_yaw_acc = 100.0;
 
         DeviceIds invincible = DeviceIds::None();
 

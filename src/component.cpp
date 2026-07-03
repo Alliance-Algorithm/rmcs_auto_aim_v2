@@ -56,8 +56,8 @@ public:
     }
 
     auto update() -> void override {
-        auto max_yaw_vel = double { 10.0 };
-        auto max_yaw_acc = double { 200.0 };
+        auto max_yaw_vel = double { 0.0 };
+        auto max_yaw_acc = double { 0.0 };
         if (yaw_velocity.ready() && std::isfinite(*yaw_velocity)) {
             const auto now      = Clock::now();
             const auto velocity = *yaw_velocity;
@@ -74,7 +74,7 @@ public:
             last_yaw_velocity      = velocity;
         }
 
-        auto_aim.with_context([this, max_yaw_vel, max_yaw_acc](AutoAim::Context& ctx) {
+        auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             auto frame      = AutoAim::Context::TransformFrame { };
             frame.timestamp = Clock::now();
 
