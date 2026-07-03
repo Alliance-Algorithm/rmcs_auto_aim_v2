@@ -56,7 +56,8 @@ struct FireControllerV2::Impl {
     double cached_yaw   = kNaN;
     double cached_pitch = kNaN;
     Timestamp cached_stamp;
-    std::optional<std::size_t> last_armor_idx;
+
+    std::int8_t last_armor_idx = -1;
 
     Printer logging { "fire" };
 
@@ -78,41 +79,6 @@ struct FireControllerV2::Impl {
         const auto cross_z   = v1_x * v2_y - v1_y * v2_x;
 
         return (cross_z >= 0.0) ? abs_angle : -abs_angle;
-    }
-
-    // @return 序号, 是否预瞄
-    static auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window)
-        -> std::tuple<std::int8_t, bool> {
-
-        const auto aimpoints = trackable.get_aimpoints();
-        const auto omega     = trackable.get_rotation_speed();
-
-        auto best_idx   = std::optional<std::size_t> { };
-        auto best_delta = std::numeric_limits<double>::max();
-        auto next_idx   = std::optional<std::size_t> { };
-        auto next_delta = std::numeric_limits<double>::max();
-
-        for (std::size_t i = 0; i < aimpoints.size(); ++i) {
-            const auto delta =
-                util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[i]));
-            const auto abs_delta = std::abs(delta);
-
-            // 窗口内：找最接近中心的
-            const auto threshold = (delta > 0) ? std::get<0>(window) : std::get<1>(window);
-            if (abs_delta <= threshold && abs_delta < best_delta) {
-                best_delta = abs_delta;
-                best_idx   = i;
-            }
-
-            // 窗口外：根据旋转方向选下一个即将进入的
-            const auto dominated = (omega < 0) ? (delta > 0) : (delta < 0);
-            if (dominated && abs_delta < next_delta) {
-                next_delta = abs_delta;
-                next_idx   = i;
-            }
-        }
-
-        return { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
     }
 
     static auto get_cycle_time(const Trackable& trackable) {
@@ -152,6 +118,53 @@ struct FireControllerV2::Impl {
         });
     }
 
+    // @return 序号, 是否预瞄
+    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window) const {
+
+        const auto aimpoints = trackable.get_aimpoints();
+        const auto omega     = trackable.get_rotation_speed();
+
+        { // 倾向于使用上一帧的有效装甲板
+            const auto length = static_cast<std::int8_t>(aimpoints.size());
+            if ((last_armor_idx >= 0) && (last_armor_idx < length)) {
+                const auto idx = last_armor_idx;
+                const auto delta =
+                    util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[idx]));
+                const auto abs_delta = std::abs(delta);
+                const auto threshold = (delta > 0) ? std::get<0>(window) : std::get<1>(window);
+                if (abs_delta <= threshold) {
+                    return std::tuple { last_armor_idx, false };
+                }
+            }
+        }
+
+        auto best_idx   = std::optional<std::int8_t> { };
+        auto best_delta = std::numeric_limits<double>::max();
+        auto next_idx   = std::optional<std::int8_t> { };
+        auto next_delta = std::numeric_limits<double>::max();
+
+        for (std::size_t i = 0; i < aimpoints.size(); ++i) {
+            const auto delta =
+                util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[i]));
+            const auto abs_delta = std::abs(delta);
+
+            // 窗口内：找最接近中心的
+            const auto threshold = (delta > 0) ? std::get<0>(window) : std::get<1>(window);
+            if (abs_delta <= threshold && abs_delta < best_delta) {
+                best_delta = abs_delta;
+                best_idx   = i;
+            }
+
+            // 窗口外：根据旋转方向选下一个即将进入的
+            const auto dominated = (omega < 0) ? (delta > 0) : (delta < 0);
+            if (dominated && abs_delta < next_delta) {
+                next_delta = abs_delta;
+                next_idx   = i;
+            }
+        }
+        return std::tuple { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
+    }
+
     auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, double> {
         if (config.max_vel <= 0.0 || config.max_acc <= 0.0) {
             return { config.attack_window[0], config.attack_window[1] };
@@ -162,15 +175,15 @@ struct FireControllerV2::Impl {
             return { config.attack_window[0], config.attack_window[1] };
         }
 
-        const auto period    = cycle_time;
-        const auto vel_limit = config.max_vel * period;
-        const auto acc_limit = config.max_acc * period * period / 4.0;
-
-        const auto physical_limit = std::min(vel_limit, acc_limit);
+        // 正弦拟合区间
+        const auto vel_limit = config.max_vel * cycle_time / (2.0 * std::numbers::pi);
+        const auto acc_limit =
+            config.max_acc * cycle_time * cycle_time / (4.0 * std::numbers::pi * std::numbers::pi);
+        const auto min_limit = std::min(vel_limit, acc_limit);
 
         return {
-            std::min(config.attack_window[0], physical_limit),
-            std::min(config.attack_window[1], physical_limit),
+            std::min(config.attack_window[0], min_limit),
+            std::min(config.attack_window[1], min_limit),
         };
     }
 
@@ -195,11 +208,10 @@ struct FireControllerV2::Impl {
             std::tie(selected, pre_aim) = get_aimed_id(*future, window);
         }
 
-        if (selected >= 0) {
+        if (selected >= 0) { // 迭代收敛飞行时间
             constexpr auto kMaxIterate = std::size_t { 5 };
             constexpr auto kEpsilon    = 0.001;
 
-            // 迭代收敛飞行时间
             auto attack = Point3d { };
             auto center = Point3d { };
             auto yaw    = double { };
