@@ -58,16 +58,13 @@ struct AutoAim::Impl {
             auto yaw   = 0.0;
             auto pitch = 0.0;
             auto id    = RobotId { RobotId::UNKNOWN };
+
+            auto track_ids = DeviceIds::Full();
             {
                 using namespace std::chrono_literals;
 
                 std::lock_guard lock { self.context_mutex };
                 auto& context = self.current_context;
-
-                id = context.id;
-
-                max_yaw_vel = context.max_yaw_vel;
-                max_yaw_acc = context.max_yaw_acc;
 
                 /// 8ms 是一个经验值，实际是多少延迟得进一步确定，
                 /// 但大部分情况下是有效的对齐
@@ -82,6 +79,12 @@ struct AutoAim::Impl {
                     yaw   = best->yaw;
                     pitch = best->pitch;
                 }
+                max_yaw_vel = context.max_yaw_vel;
+                max_yaw_acc = context.max_yaw_acc;
+
+                id = context.id;
+
+                track_ids = context.track_ids;
             }
             visual.publish(iso, "camera_link");
             visual.publish(yaw, "yaw");
@@ -144,7 +147,7 @@ struct AutoAim::Impl {
                     tracker->update_track_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
-                tracker->update_track_genre(DeviceIds::Full());
+                tracker->update_track_genre(track_ids);
                 tracker->update_camera(iso);
 
                 tracker->clean();

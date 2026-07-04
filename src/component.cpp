@@ -95,6 +95,11 @@ public:
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
 
             ctx.id = *robot_id;
+
+            /// TODO:
+            /// 跟踪目标，用于适配后期可能存在的需求，
+            /// 比如无人机前哨 Only 模式，哨兵滤除特殊兵种等
+            ctx.track_ids = DeviceIds::Full();
         });
 
         const auto now = std::chrono::steady_clock::now();

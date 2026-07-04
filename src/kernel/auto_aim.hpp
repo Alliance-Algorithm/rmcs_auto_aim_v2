@@ -51,7 +51,7 @@ public:
         double max_yaw_vel = 3.0;
         double max_yaw_acc = 100.0;
 
-        DeviceIds invincible = DeviceIds::None();
+        DeviceIds track_ids = DeviceIds::Full();
 
         RobotId id = RobotId::UNKNOWN;
     };
