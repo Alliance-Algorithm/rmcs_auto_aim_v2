@@ -223,6 +223,16 @@ start-streamer                        # 启动串流服务，阻塞在当前终�
 ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
 ```
 
+
+## 效果展示
+
+
+
+https://github.com/user-attachments/assets/59e449b4-ba97-4658-9fb8-02bc45d51d6e
+
+
+
+
 ## 核心概念
 
 ### 0. 依赖隐藏：
