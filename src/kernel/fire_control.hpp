@@ -8,8 +8,8 @@
 
 namespace rmcs::kernel {
 
-class FireControllerV2 {
-    RMCS_PIMPL_DEFINITION(FireControllerV2)
+class FireController {
+    RMCS_PIMPL_DEFINITION(FireController)
 
 public:
     struct State {
@@ -33,7 +33,7 @@ public:
         Point3d attack = { };
     };
 
-    explicit FireControllerV2(const YAML::Node&);
+    explicit FireController(const YAML::Node&);
 
     auto update(State state) -> void;
 

@@ -13,7 +13,7 @@
 using namespace rmcs::kernel;
 using namespace rmcs::util;
 
-struct TrackerV2::Impl {
+struct Tracker::Impl {
     struct Config : Serializable {
         std::string fallback_color = "RED";
         double timeout_seconds     = 1.5;
@@ -65,13 +65,13 @@ struct TrackerV2::Impl {
         Lightbar2ds lightbars;
     } stored;
 
-    ArmorGenre track_genre = ArmorGenre::UNKNOWN;
-    ArmorColor track_color = ArmorColor::DARK;
-    DeviceIds track_device = DeviceIds::Full();
+    DeviceIds track_devices = DeviceIds::Full();
+    DeviceId track_genre    = DeviceId::UNKNOWN;
+    ArmorColor track_color  = ArmorColor::DARK;
     CameraFeature camera;
 
-    std::unordered_map<ArmorGenre, Timestamp> robot_stamps;
-    std::unordered_map<ArmorGenre, RobotModel> robot_models;
+    std::unordered_map<DeviceId, Timestamp> robot_stamps;
+    std::unordered_map<DeviceId, RobotModel> robot_models;
 
     Timestamp outpost_stamp;
     std::unique_ptr<OutpostModel> outpost;
@@ -115,7 +115,7 @@ struct TrackerV2::Impl {
         const auto kHeight = camera.camera_matrix[1][2] * 2.0;
 
         for (const auto& item : items) {
-            if (item.color == track_color && track_device.contains(item.genre)) {
+            if (item.color == track_color && track_devices.contains(item.genre)) {
                 const auto min_x = std::min({ item.tl.x, item.tr.x, item.bl.x, item.br.x });
                 const auto max_x = std::max({ item.tl.x, item.tr.x, item.bl.x, item.br.x });
                 const auto min_y = std::min({ item.tl.y, item.tr.y, item.bl.y, item.br.y });
@@ -130,14 +130,14 @@ struct TrackerV2::Impl {
     }
     auto store(std::span<const Armor3d> items) {
         for (const auto& item : items) {
-            if (item.color == track_color && track_device.contains(item.genre)) {
+            if (item.color == track_color && track_devices.contains(item.genre)) {
                 stored.armor3ds.push_back(item);
             }
         }
     }
     auto store(std::span<const Lightbar2d> items) {
         for (const auto& item : items) {
-            if (item.color == track_color && track_device.contains(item.genre)) {
+            if (item.color == track_color && track_devices.contains(item.genre)) {
                 stored.lightbars.push_back(item);
             }
         }
@@ -177,7 +177,7 @@ struct TrackerV2::Impl {
             std::vector<Armor3d> armor3ds;
             std::vector<Lightbar2d> bars;
         };
-        auto seen = std::unordered_map<ArmorGenre, Target> { };
+        auto seen = std::unordered_map<DeviceId, Target> { };
 
         for (const auto& armor : stored.armor2ds) {
             seen[armor.genre].armor2ds.push_back(armor);
@@ -190,7 +190,7 @@ struct TrackerV2::Impl {
         }
 
         { // 迭代前哨站 Model
-            constexpr auto kId = ArmorGenre::OUTPOST;
+            constexpr auto kId = DeviceId::OUTPOST;
             if (seen.contains(kId)) {
                 const auto& armors = seen[kId].armor3ds;
                 /// @NOTE:
@@ -273,6 +273,7 @@ struct TrackerV2::Impl {
 
         auto result = Trackable::Unique { };
         auto better = std::numeric_limits<double>::max();
+        auto device = DeviceId::UNKNOWN;
         {
             if (outpost && outpost->converge()) {
                 const auto state = outpost->state();
@@ -281,7 +282,7 @@ struct TrackerV2::Impl {
                     better = score;
                     result = make_trackable(timestamp, state);
 
-                    track_genre = DeviceId::OUTPOST;
+                    device = DeviceId::OUTPOST;
                 }
                 std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
 
@@ -300,7 +301,7 @@ struct TrackerV2::Impl {
                         better = score;
                         result = make_trackable(timestamp, state);
 
-                        track_genre = id;
+                        device = id;
                     }
                     std::ranges::copy( // Armor 2d
                         model.addition().armors, std::back_inserter(addition.tracked2d));
@@ -322,16 +323,17 @@ struct TrackerV2::Impl {
                 }
             }
         }
+        track_genre = device;
         return result;
     }
 };
 
-TrackerV2::TrackerV2(const YAML::Node& yaml)
+Tracker::Tracker(const YAML::Node& yaml)
     : pimpl { std::make_unique<Impl>(yaml) } { }
 
-TrackerV2::~TrackerV2() noexcept = default;
+Tracker::~Tracker() noexcept = default;
 
-auto TrackerV2::update_track_color(CampColor camp) -> void {
+auto Tracker::update_track_color(CampColor camp) -> void {
     /*^^*/ if (camp == CampColor::RED) {
         pimpl->track_color = ArmorColor::RED;
     } else if (camp == CampColor::BLUE) {
@@ -339,25 +341,25 @@ auto TrackerV2::update_track_color(CampColor camp) -> void {
     }
     // Do nothing for unknown camp
 }
-auto TrackerV2::update_track_genre(DeviceIds ids) -> void { pimpl->track_device = ids; }
+auto Tracker::update_track_genre(DeviceIds ids) -> void { pimpl->track_devices = ids; }
 
-auto TrackerV2::update_camera(const Transform& t) noexcept -> void {
+auto Tracker::update_camera(const Transform& t) noexcept -> void {
     pimpl->camera.translation = t.translation;
     pimpl->camera.orientation = t.orientation;
 }
-auto TrackerV2::update_camera(const std::array<double, 9>& param) noexcept -> void {
+auto Tracker::update_camera(const std::array<double, 9>& param) noexcept -> void {
     pimpl->camera.from(param);
 }
-auto TrackerV2::update_camera(const std::array<double, 5>& param) noexcept -> void {
+auto Tracker::update_camera(const std::array<double, 5>& param) noexcept -> void {
     pimpl->camera.from(param);
 }
 
-auto TrackerV2::clean() noexcept -> void { pimpl->clean(); }
+auto Tracker::clean() noexcept -> void { pimpl->clean(); }
 
-auto TrackerV2::store(std::span<const Armor2d> item) -> void { pimpl->store(item); }
-auto TrackerV2::store(std::span<const Armor3d> item) -> void { pimpl->store(item); }
-auto TrackerV2::store(std::span<const Lightbar2d> item) -> void { pimpl->store(item); }
+auto Tracker::store(std::span<const Armor2d> item) -> void { pimpl->store(item); }
+auto Tracker::store(std::span<const Armor3d> item) -> void { pimpl->store(item); }
+auto Tracker::store(std::span<const Lightbar2d> item) -> void { pimpl->store(item); }
 
-auto TrackerV2::execute(Timestamp stamp) -> Trackable::Unique { return pimpl->execute(stamp); }
+auto Tracker::execute(Timestamp stamp) -> Trackable::Unique { return pimpl->execute(stamp); }
 
-auto TrackerV2::addition() const -> const Addition& { return pimpl->addition; }
+auto Tracker::addition() const -> const Addition& { return pimpl->addition; }

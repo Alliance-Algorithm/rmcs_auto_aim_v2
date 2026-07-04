@@ -10,8 +10,8 @@
 
 namespace rmcs::kernel {
 
-class TrackerV2 {
-    RMCS_PIMPL_DEFINITION(TrackerV2)
+class Tracker {
+    RMCS_PIMPL_DEFINITION(Tracker)
 
 public:
     struct Addition {
@@ -31,7 +31,7 @@ public:
         std::vector<Info> infos;
     };
 
-    explicit TrackerV2(const YAML::Node&);
+    explicit Tracker(const YAML::Node&);
 
     auto update_track_color(CampColor) -> void;
     auto update_track_genre(DeviceIds) -> void;

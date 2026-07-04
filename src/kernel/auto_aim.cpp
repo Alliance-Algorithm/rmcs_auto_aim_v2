@@ -35,8 +35,8 @@ struct AutoAim::Impl {
     PoseEstimator estimator { };
     Visualization visual { };
 
-    std::unique_ptr<TrackerV2> tracker_v2;
-    std::unique_ptr<FireControllerV2> fire_v2;
+    std::unique_ptr<Tracker> tracker;
+    std::unique_ptr<FireController> fire;
 
     std::jthread worker;
 
@@ -51,8 +51,8 @@ struct AutoAim::Impl {
             auto image = cap.fetch_image();
             if (!image) continue;
 
-            auto max_yaw_vel = 10.0;
-            auto max_yaw_acc = 200.0;
+            auto max_yaw_vel = 0.0;
+            auto max_yaw_acc = 0.0;
 
             auto iso   = Transform::kIdentity();
             auto yaw   = 0.0;
@@ -69,6 +69,8 @@ struct AutoAim::Impl {
                 max_yaw_vel = context.max_yaw_vel;
                 max_yaw_acc = context.max_yaw_acc;
 
+                /// 8ms 是一个经验值，实际是多少延迟得进一步确定，
+                /// 但大部分情况下是有效的对齐
                 const auto time = image->timestamp - 8ms;
                 const auto best = std::ranges::min_element(
                     context.transforms, [time](const auto& lhs, const auto& rhs) {
@@ -97,7 +99,7 @@ struct AutoAim::Impl {
                 visual.update_image(image->mat);
             } };
 
-            /// 1. Identify Armor
+            /// [] 识别装甲板，灯条，大符页等元素
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
             if (auto result = identifier.sync_identify(image->mat)) {
@@ -112,7 +114,8 @@ struct AutoAim::Impl {
                 lightbar2ds = std::move(result->lightbars);
             }
 
-            /// 2. Transform 2d to 3d
+            /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
+            ///    三维装甲板仅作可视化用途
             auto armor3ds = Armor3ds { };
             {
                 estimator.update_camera_transform(iso);
@@ -133,24 +136,25 @@ struct AutoAim::Impl {
             }
             visual.publish(armor3ds, "visible_armors");
 
+            /// [] 跟踪目标，跟踪器里面维护了可见机器人的 EKF 状态
             auto trackable = Trackable::Unique { };
             {
                 using namespace rmcs_msgs;
                 if (id != RobotId::UNKNOWN) {
-                    tracker_v2->update_track_color(
+                    tracker->update_track_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
-                tracker_v2->update_track_genre(DeviceIds::Full());
-                tracker_v2->update_camera(iso);
+                tracker->update_track_genre(DeviceIds::Full());
+                tracker->update_camera(iso);
 
-                tracker_v2->clean();
-                tracker_v2->store(armor2ds);
-                tracker_v2->store(armor3ds);
-                tracker_v2->store(lightbar2ds);
+                tracker->clean();
+                tracker->store(armor2ds);
+                tracker->store(armor3ds);
+                tracker->store(lightbar2ds);
 
-                trackable = tracker_v2->execute(image->timestamp);
+                trackable = tracker->execute(image->timestamp);
 
-                const auto& addition = tracker_v2->addition();
+                const auto& addition = tracker->addition();
                 for (const auto& item : addition.tracked2d) {
                     visual.draw_later(Canvas::ArmorShape {
                         .shape = item,
@@ -175,17 +179,17 @@ struct AutoAim::Impl {
                 visual.publish(addition.tracked3d, "trackable");
             }
 
-            /// 3. 弹道解算
+            /// [] 根据跟踪目标求解弹道及控制指令，下发控制层
             auto cmd = Command::kInvalid();
             if (trackable) {
-                fire_v2->update({
+                fire->update({
                     .timestamp   = image->timestamp,
                     .yaw         = yaw,
                     .pitch       = pitch,
                     .max_yaw_vel = max_yaw_vel,
                     .max_yaw_acc = max_yaw_acc,
                 });
-                if (auto aimed = fire_v2->aim(*trackable)) {
+                if (auto aimed = fire->aim(*trackable)) {
                     cmd.should_track = true;
                     cmd.should_shoot = aimed->shoot;
                     cmd.yaw          = aimed->yaw;
@@ -262,11 +266,11 @@ struct AutoAim::Impl {
             handle_result("visualization", visual.initialize(config));
         }
 
-        tracker_v2 = std::make_unique<TrackerV2>(configs["tracker"]);
-        tracker_v2->update_camera(camera_matrix);
-        tracker_v2->update_camera(distort_coeff);
+        tracker = std::make_unique<Tracker>(configs["tracker"]);
+        tracker->update_camera(camera_matrix);
+        tracker->update_camera(distort_coeff);
 
-        fire_v2 = std::make_unique<FireControllerV2>(configs["fire_control"]);
+        fire = std::make_unique<FireController>(configs["fire_control"]);
 
         worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }

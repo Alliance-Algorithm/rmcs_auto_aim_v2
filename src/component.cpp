@@ -19,7 +19,7 @@ private:
     InputInterface<rmcs_msgs::RobotId> robot_id;
     InputInterface<double> yaw_velocity;
 
-    OutputInterface<bool> should_control;
+    OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
     OutputInterface<Eigen::Vector3d> target_direction;
     OutputInterface<Eigen::Vector3d> robot_center;
@@ -36,10 +36,10 @@ public:
         register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
         register_input("/referee/id", robot_id, false);
 
-        register_output("/auto_aim/should_control", should_control, false);
+        register_output("/auto_aim/should_control", should_track, false);
+        register_output("/auto_aim/should_shoot", should_shoot, false);
         register_output("/auto_aim/control_direction", target_direction, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
-        register_output("/auto_aim/should_shoot", should_shoot, false);
     }
 
     auto before_updating() -> void override {
@@ -83,8 +83,8 @@ public:
             frame.pitch     = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
 
             const auto& iso             = *camera_transform;
-            frame.transform.translation = Translation { iso.translation() };
-            frame.transform.orientation = Orientation { Eigen::Quaterniond(iso.rotation()) };
+            frame.transform.translation = iso.translation();
+            frame.transform.orientation = Eigen::Quaterniond { iso.rotation() };
 
             ctx.transforms.push_back(frame);
             if (ctx.transforms.size() > 100) {
@@ -103,21 +103,17 @@ public:
                 using namespace std::chrono_literals;
                 if (Clock::now() - cmd.timestamp > 100ms) return;
 
-                *should_control = cmd.should_track;
-                *should_shoot   = cmd.should_shoot;
-                *robot_center   = {
-                    cmd.robot_center.x,
-                    cmd.robot_center.y,
-                    cmd.robot_center.z,
-                };
+                *should_track = cmd.should_track;
+                *should_shoot = cmd.should_shoot;
+                *robot_center = cmd.robot_center.make<Eigen::Vector3d>();
 
                 if (!cmd.should_track) return;
 
                 const auto pitch  = cmd.pitch;
                 const auto yaw    = cmd.yaw;
                 *target_direction = Eigen::Vector3d {
-                    std::cos(pitch) * std::cos(yaw),
-                    std::cos(pitch) * std::sin(yaw),
+                    +std::cos(pitch) * std::cos(yaw),
+                    +std::cos(pitch) * std::sin(yaw),
                     -std::sin(pitch),
                 };
             });
@@ -126,7 +122,7 @@ public:
 
         using namespace std::chrono_literals;
         if (now - last_command_timestamp > 100ms) {
-            *should_control   = false;
+            *should_track     = false;
             *should_shoot     = false;
             *target_direction = kTNaN;
         }

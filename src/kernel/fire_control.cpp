@@ -16,7 +16,7 @@
 using namespace rmcs::kernel;
 using namespace rmcs::util;
 
-struct FireControllerV2::Impl {
+struct FireController::Impl {
 
     struct Config : Serializable {
         double bullet_speed;
@@ -245,14 +245,15 @@ struct FireControllerV2::Impl {
             pitch = pitch + config.offset_pitch;
 
             // 射击评估
-            const auto shoot = shoot_evaluator->evaluate(
-                ShootEvaluator::Command {
-                    .yaw    = yaw,
-                    .pitch  = pitch,
-                    .center = center,
-                    .armor  = attack,
-                },
-                state.yaw, state.pitch);
+            const auto shoot = !pre_aim
+                && shoot_evaluator->evaluate(
+                    {
+                        .yaw    = yaw,
+                        .pitch  = pitch,
+                        .center = center,
+                        .armor  = attack,
+                    },
+                    state.yaw, state.pitch);
 
             return Aimed {
                 .yaw     = yaw,
@@ -267,13 +268,13 @@ struct FireControllerV2::Impl {
     }
 };
 
-FireControllerV2::FireControllerV2(const YAML::Node& yaml)
+FireController::FireController(const YAML::Node& yaml)
     : pimpl { std::make_unique<Impl>(yaml) } { }
 
-FireControllerV2::~FireControllerV2() noexcept = default;
+FireController::~FireController() noexcept = default;
 
-auto FireControllerV2::update(State state) -> void { pimpl->state = state; }
+auto FireController::update(State state) -> void { pimpl->state = state; }
 
-auto FireControllerV2::aim(const Trackable& trackable) -> std::optional<Aimed> {
+auto FireController::aim(const Trackable& trackable) -> std::optional<Aimed> {
     return pimpl->aim(trackable);
 }
