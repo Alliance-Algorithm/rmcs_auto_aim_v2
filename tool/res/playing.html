@@ -219,6 +219,15 @@
             transform: none;
         }
 
+        .playback-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .playback-row > button {
+            flex: 1;
+        }
+
         @media (prefers-reduced-motion: reduce) {
 
             *,
@@ -311,6 +320,18 @@
                 </div>
             </section>
             <button id="backend-record-button" class="record-button" type="button" disabled>等待录制状态</button>
+
+            <div style="height: 10px; flex: 0 0 auto;" aria-hidden="true"></div>
+
+            <section class="panel-group">
+                <h2>本地视频控制</h2>
+                <p>仅本地视频源可用</p>
+                <div class="playback-row">
+                    <button id="prev-btn" class="capture-button" type="button" disabled>-1</button>
+                    <button id="play-pause-btn" class="capture-button" type="button" disabled>暂停</button>
+                    <button id="next-btn" class="capture-button" type="button" disabled>+1</button>
+                </div>
+            </section>
         </aside>
     </main>
 
@@ -349,6 +370,12 @@
         const recordButtonLabel = document.querySelector('.record-button-label');
         /** @type {HTMLButtonElement} */
         const backendRecordButton = document.getElementById('backend-record-button');
+        /** @type {HTMLButtonElement} */
+        const prevButton = document.getElementById('prev-btn');
+        /** @type {HTMLButtonElement} */
+        const playPauseButton = document.getElementById('play-pause-btn');
+        /** @type {HTMLButtonElement} */
+        const nextButton = document.getElementById('next-btn');
         /** @type {HTMLSpanElement} */
         const backendRecordOnValue = document.getElementById('backend-record-on-value');
         /** @type {HTMLSpanElement} */
@@ -374,6 +401,9 @@
         });
         captureButton.addEventListener('click', captureFrame);
         backendRecordButton.addEventListener('click', toggleBackendRecording);
+        prevButton.addEventListener('click', () => sendPlaybackCommand('/api/step_backward'));
+        playPauseButton.addEventListener('click', () => sendPlaybackCommand('/api/play_pause'));
+        nextButton.addEventListener('click', () => sendPlaybackCommand('/api/step_forward'));
 
         function updateLocalActionButtons() {
             const hasStream = Boolean(currentStream);
@@ -402,6 +432,27 @@
             backendRecordButton.disabled = false;
         }
 
+        /** @type {boolean} */
+        let isLocalVideo = false;
+        /** @type {boolean} */
+        let isPlaying = true;
+
+        function updatePlaybackButtons() {
+            const enabled = isLocalVideo;
+            prevButton.disabled = !enabled || isPlaying;
+            playPauseButton.disabled = !enabled;
+            nextButton.disabled = !enabled || isPlaying;
+            playPauseButton.textContent = isPlaying ? '暂停' : '播放';
+        }
+
+        async function sendPlaybackCommand(url) {
+            try {
+                await fetch(url, { method: 'POST', body: '1' });
+            } catch (error) {
+                console.error('Playback command failed:', error);
+            }
+        }
+
         async function fetchRecordContext() {
             try {
                 const response = await fetch('/api/context', {cache: 'no-store'});
@@ -415,15 +466,20 @@
                 backendRecordOnValue.textContent = backendRecordOn ? '开启' : '关闭';
                 backendStatusValue.textContent = recordContext.recordStatus || '-';
                 backendFilenameValue.textContent = recordContext.filename || '-';
+                isLocalVideo = recordContext.source === 'local_video';
+                isPlaying = Boolean(recordContext.playing);
             } catch (error) {
                 backendRecordOn = null;
                 backendRecordOnValue.textContent = '未知';
                 backendStatusValue.textContent = '状态不可用';
                 backendFilenameValue.textContent = '-';
+                isLocalVideo = false;
+                isPlaying = true;
                 console.error('Failed to fetch record context:', error);
             }
 
             updateBackendRecordButton();
+            updatePlaybackButtons();
         }
 
         async function sendRecordCommand(value) {

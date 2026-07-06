@@ -23,6 +23,10 @@ playerRoute = "/res/playing.html"
 playerFile = "playing.html"
 fifoRecordPath = "/tmp/autoaim/cap/record"
 contextPath = "/tmp/autoaim/cap/context"
+fifoPlayPause = "/tmp/autoaim/local_video/play_pause"
+fifoStepForward = "/tmp/autoaim/local_video/step_forward"
+fifoStepBackward = "/tmp/autoaim/local_video/step_backward"
+contextLocalVideo = "/tmp/autoaim/local_video/context"
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────────────────
@@ -41,9 +45,18 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
             return
         return super().do_GET()
 
+    localVideoRoutes = {
+        "/api/play_pause": fifoPlayPause,
+        "/api/step_forward": fifoStepForward,
+        "/api/step_backward": fifoStepBackward,
+    }
+
     def do_POST(self) -> None:
         if self.path == "/api/record":
             self.handleRecord()
+            return
+        if self.path in self.localVideoRoutes:
+            self.write_to_fifo(self.localVideoRoutes[self.path], "1")
             return
         self.send_error(404, "Not Found")
 
@@ -56,10 +69,13 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
                 400, {"status": "error", "message": "invalid value"})
             return
 
+        self.write_to_fifo(fifoRecordPath, body)
+
+    def write_to_fifo(self, path: str, value: str) -> None:
         fd = None
         try:
-            fd = os.open(fifoRecordPath, os.O_WRONLY | os.O_NONBLOCK)
-            os.write(fd, body.encode())
+            fd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+            os.write(fd, value.encode())
             self.jsonResponse(200, {"status": "ok"})
         except OSError as e:
             self.jsonResponse(500, {"status": "error", "message": str(e)})
@@ -80,22 +96,35 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
             "filename": "not started",
             "recordStatus": "context not found",
             "recordOn": False,
+            "source": "",
+            "playing": True,
         }
 
-        with open(contextPath, "r") as f:
-            for line in f:
-                name, separator, content = line.partition(":")
-                if not separator:
-                    continue
-                value = content.strip()
-                if name == "filename":
-                    context["filename"] = value
-                elif name == "status":
-                    context["recordStatus"] = value
-                elif name == "record_on":
-                    context["recordOn"] = value in ("1", "true")
+        self.readFileToContext(contextPath, context)
+        self.readFileToContext(contextLocalVideo, context)
 
         return context
+
+    def readFileToContext(self, path: str, context: dict[str, object]) -> None:
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    name, separator, content = line.partition(":")
+                    if not separator:
+                        continue
+                    value = content.strip()
+                    if name == "filename":
+                        context["filename"] = value
+                    elif name == "status":
+                        context["recordStatus"] = value
+                    elif name == "record_on":
+                        context["recordOn"] = value in ("1", "true")
+                    elif name == "playing":
+                        context["playing"] = value == "1"
+                    elif name == "source":
+                        context["source"] = value
+        except OSError:
+            pass
 
     def jsonResponse(self, code: int, data: dict) -> None:
         body = json.dumps(data).encode()
@@ -226,10 +255,7 @@ class StreamServer:
 
     def printStartupInfo(self, host: str) -> None:
         print("AutoAim stream server started.\n")
-        print(f"Player page:\n  http://127.0.0.1:{self.playerPort}/autoaim\n")
-        print(f"Remote page:\n  http://{host}:{self.playerPort}/autoaim\n")
-        print(
-            f"WHEP endpoint:\n  http://127.0.0.1:{self.mediamtxPort}/autoaim/whep\n")
+        print(f"Please access -> http://<ip>:{self.playerPort}/autoaim\n")
         print("Press Ctrl+C to stop.")
 
 
