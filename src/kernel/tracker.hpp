@@ -33,7 +33,17 @@ public:
 
     explicit Tracker(const YAML::Node&);
 
+    /// @brief:
+    ///  设置自瞄意图，当关闭自瞄时，选取距离相机 X 轴最近的
+    ///  机器人锁定，当自瞄开启时，锁定该机器人，即使该机器
+    ///  人离开视野
     auto update_aim_intent(bool intent) -> void;
+
+    /// @brief:
+    ///  设置锁定超时，开启时，锁定对象将会被模型超时所清理，
+    ///  此时会按照正常的优先级选取下一个目标，关闭时，一旦
+    ///  锁定，则永远只瞄准该目标，直到自瞄意图被关闭
+    auto update_aim_cleanup(bool on) -> void;
 
     auto update_track_color(CampColor) -> void;
     auto update_track_genre(DeviceIds) -> void;

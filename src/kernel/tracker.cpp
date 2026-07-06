@@ -65,7 +65,8 @@ struct Tracker::Impl {
         Lightbar2ds lightbars;
     } stored;
 
-    bool aim_intent = false;
+    bool aim_intent  = false;
+    bool aim_cleanup = false;
 
     DeviceIds track_devices = DeviceIds::Full();
     DeviceId track_genre    = DeviceId::UNKNOWN;
@@ -159,7 +160,7 @@ struct Tracker::Impl {
                 outpost       = nullptr;
                 outpost_stamp = timestamp;
 
-                if (aim_intent && track_genre == DeviceId::OUTPOST) {
+                if (track_genre == DeviceId::OUTPOST && aim_intent && aim_cleanup) {
                     track_genre = DeviceId::UNKNOWN;
                 }
             }
@@ -174,7 +175,7 @@ struct Tracker::Impl {
             if (dt.count() > config.timeout_seconds) {
                 robot_models.erase(id);
 
-                if (aim_intent && track_genre == id) {
+                if (track_genre == id && aim_intent && aim_cleanup) {
                     track_genre = DeviceId::UNKNOWN;
                 }
                 return true;
@@ -341,9 +342,10 @@ struct Tracker::Impl {
         }
 
         /// @NOTE:
-        ///  只有在没有自瞄意图时才进行目标的更新，一旦自瞄按键按死，就一直
-        ///  以最高优先级跟随该目标，即使该目标丢失
-        if (track_genre == DeviceId::UNKNOWN || !aim_intent) {
+        ///  未锁定时更新目标；一旦自瞄意图按下且已有锁定目标，就保持该目标
+        ///  最高优先级，即使目标暂时丢失。开启锁定超时清理时，目标超时后会
+        ///  解除锁定并允许重新选择
+        if (!locked) {
             track_genre = device;
         }
         return result;
@@ -356,6 +358,7 @@ Tracker::Tracker(const YAML::Node& yaml)
 Tracker::~Tracker() noexcept = default;
 
 auto Tracker::update_aim_intent(bool intent) -> void { pimpl->aim_intent = intent; }
+auto Tracker::update_aim_cleanup(bool on) -> void { pimpl->aim_cleanup = on; }
 
 auto Tracker::update_track_color(CampColor camp) -> void {
     /*^^*/ if (camp == CampColor::RED) {

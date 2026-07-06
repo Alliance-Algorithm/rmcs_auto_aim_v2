@@ -151,6 +151,9 @@ struct AutoAim::Impl {
                 if (id != RobotId::UNKNOWN) {
                     tracker->update_track_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                    // 哨兵自瞄常开，需要超时检测
+                    tracker->update_aim_cleanup(
+                        id == RobotId::RED_SENTRY || id == RobotId::BLUE_SENTRY);
                 }
                 tracker->update_aim_intent(intent);
                 tracker->update_track_genre(track_ids);
