@@ -1,5 +1,5 @@
 #include "pose_estimator.hpp"
-#include "module/identifier/adjacency_lightbar.hpp"
+#include "module/detector/adjacency_lightbar.hpp"
 
 #include "utility/math/conversion.hpp"
 #include "utility/math/corners_optimizor.hpp"

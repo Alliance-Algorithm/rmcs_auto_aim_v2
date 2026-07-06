@@ -9,7 +9,7 @@
 #include <opencv2/core/types.hpp>
 #include <yaml-cpp/yaml.h>
 
-namespace rmcs::identifier {
+namespace rmcs::detector {
 
 class ArmorDetection {
     RMCS_PIMPL_DEFINITION(ArmorDetection)

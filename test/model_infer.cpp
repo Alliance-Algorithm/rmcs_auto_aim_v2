@@ -1,9 +1,9 @@
 #include "assets_manager.hpp"
 
-#include "module/identifier/armor_detection.hpp"
-#include "module/identifier/models/shenzhen_0526.hpp"
-#include "module/identifier/models/shenzhen_0708.hpp"
-#include "module/identifier/models/tongji_yolov5.hpp"
+#include "module/detector/armor_detection.hpp"
+#include "module/detector/models/shenzhen_0526.hpp"
+#include "module/detector/models/shenzhen_0708.hpp"
+#include "module/detector/models/tongji_yolov5.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -44,12 +44,12 @@ AssetsManager assets_manager;
 
 template <class model_type>
 auto make_detector(YAML::Node yaml = YAML::Load(config))
-    -> std::unique_ptr<identifier::ArmorDetection> {
+    -> std::unique_ptr<detector::ArmorDetection> {
     const auto model_name     = std::string { model_type::kLocation };
     const auto model_location = location / "../models" / model_name;
     yaml["model_location"]    = model_location.string();
 
-    auto detector         = std::make_unique<identifier::ArmorDetection>();
+    auto detector         = std::make_unique<detector::ArmorDetection>();
     auto configure_result = detector->initialize(yaml);
     if (!configure_result.has_value()) {
         throw std::runtime_error(
@@ -201,7 +201,7 @@ TEST(model, initialize_reports_unknown_model) {
     auto yaml              = YAML::Load(config);
     yaml["model_location"] = "unknown-model.bin";
 
-    auto detector         = identifier::ArmorDetection { };
+    auto detector         = detector::ArmorDetection { };
     auto configure_result = detector.initialize(yaml);
 
     ASSERT_FALSE(configure_result.has_value());

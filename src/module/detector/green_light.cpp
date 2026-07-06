@@ -9,7 +9,7 @@
 
 #include <opencv2/imgproc.hpp>
 
-using namespace rmcs::identifier;
+using namespace rmcs::detector;
 
 struct GreenLightFinder::Impl {
     struct Config : util::Serializable {

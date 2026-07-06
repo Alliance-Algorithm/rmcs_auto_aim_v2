@@ -1,5 +1,5 @@
 #include "adjacency_lightbar.hpp"
-#include "module/identifier/lightbar.hpp"
+#include "module/detector/lightbar.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/math/outpost.hpp"
 

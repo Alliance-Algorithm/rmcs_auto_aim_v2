@@ -14,7 +14,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "assets_manager.hpp"
-#include "module/identifier/armor_detection.hpp"
+#include "module/detector/armor_detection.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
 #include "utility/robot/armor.hpp"
@@ -76,7 +76,7 @@ PnpSolution::Input create_test_input(double fx = 1.722231837421459e+03,
 std::array<Point3d, 4> create_small_armor_shape() { return rmcs::kSmallArmorShapeOpenCV; }
 
 std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename) {
-    using namespace rmcs::identifier;
+    using namespace rmcs::detector;
 
     constexpr auto config_yaml = R"(
         model_location: "assets/yolov5.xml"
@@ -91,7 +91,7 @@ std::array<Point2d, 4> infer_armor_detection_from_file(std::string_view filename
         nms_threshold: 0.3
     )";
 
-    auto detector = identifier::ArmorDetection { };
+    auto detector = detector::ArmorDetection { };
     auto yaml     = YAML::Load(config_yaml);
 
     const auto location    = std::filesystem::path { __FILE__ }.parent_path();

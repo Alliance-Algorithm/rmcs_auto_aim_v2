@@ -163,7 +163,6 @@ if(HIKCAMERA_AVAILABLE)
         rotation_estimator
         ${TOOL_DIR}/rotation_estimator.cpp
         ${RMCS_SRC_DIR}/module/perception/rotation_estimator.cpp
-        ${RMCS_SRC_DIR}/utility/image/image.cpp
     )
     target_link_libraries(
         rotation_estimator

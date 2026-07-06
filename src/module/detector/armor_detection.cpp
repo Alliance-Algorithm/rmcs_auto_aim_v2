@@ -1,8 +1,8 @@
 #include "armor_detection.hpp"
 
-#include "module/identifier/models/shenzhen_0526.hpp"
-#include "module/identifier/models/shenzhen_0708.hpp"
-#include "module/identifier/models/tongji_yolov5.hpp"
+#include "module/detector/models/shenzhen_0526.hpp"
+#include "module/detector/models/shenzhen_0708.hpp"
+#include "module/detector/models/tongji_yolov5.hpp"
 
 #include "utility/math/sigmoid.hpp"
 #include "utility/model/common_model.hpp"
@@ -17,7 +17,7 @@
 #include <openvino/runtime/core.hpp>
 #include <openvino/runtime/exception.hpp>
 
-using namespace rmcs::identifier;
+using namespace rmcs::detector;
 
 struct ArmorDetection::Impl {
     struct ExplainInterface {

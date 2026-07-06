@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <numbers>
 #include <print>
 #include <random>
@@ -413,16 +414,15 @@ auto main() -> int {
                 auto rcfg = RobotModel::Config { };
                 model     = std::make_unique<RobotModel>(rcfg);
 
-                const auto& cm = projector.camera.camera_matrix;
-                model->configure_camera({ cm[0][0], cm[0][1], cm[0][2], cm[1][0], cm[1][1],
-                                            cm[1][2], cm[2][0], cm[2][1], cm[2][2] },
+                model->update_camera(
+                    std::bit_cast<std::array<double, 9>>(projector.camera.camera_matrix),
                     projector.camera.distort_coeff);
             }
 
             if (model) {
                 if (frame_index == 0) {
-                    if (!model->start_with(fake_armor2ds)) {
-                        std::println("[test] start_with failed");
+                    if (!model->init(fake_armor2ds)) {
+                        std::println("[test] init failed");
                         frame_index = 0;
                         continue;
                     }

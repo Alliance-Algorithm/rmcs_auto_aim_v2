@@ -2,7 +2,7 @@
 
 #include "kernel/capturer.hpp"
 #include "kernel/fire_control.hpp"
-#include "kernel/identifier.hpp"
+#include "kernel/detector.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
@@ -31,7 +31,7 @@ struct AutoAim::Impl {
     RclcppNode node { "auto_aim" };
 
     Capturer cap { };
-    Identifier identifier { };
+    Detector detector { };
     PoseEstimator estimator { };
     Visualization visual { };
 
@@ -105,7 +105,7 @@ struct AutoAim::Impl {
             /// [] 识别装甲板，灯条，大符页等元素
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
-            if (auto result = identifier.sync_identify(image->mat)) {
+            if (auto result = detector.detect(image->mat)) {
 
                 for (const auto& roi : result->areas) {
                     visual.draw_later(roi);
@@ -253,11 +253,11 @@ struct AutoAim::Impl {
             handle_result("capturer", cap.initialize(config));
         }
         {
-            auto config         = configs["identifier"];
+            auto config         = configs["detector"];
             auto model_location = std::filesystem::path { util::Parameters::share_location() }
                 / std::filesystem::path { config["model_location"].as<std::string>() };
             config["model_location"] = model_location.string();
-            handle_result("identifier", identifier.initialize(config));
+            handle_result("detector", detector.initialize(config));
         }
         {
             auto config = configs["pose_estimator"];

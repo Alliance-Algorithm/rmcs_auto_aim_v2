@@ -12,8 +12,8 @@
 
 namespace rmcs::kernel {
 
-class Identifier {
-    RMCS_PIMPL_DEFINITION(Identifier)
+class Detector {
+    RMCS_PIMPL_DEFINITION(Detector)
 
 public:
     struct Result {
@@ -27,7 +27,7 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto sync_identify(const cv::Mat&) noexcept -> std::optional<Result>;
+    auto detect(const cv::Mat&) noexcept -> std::optional<Result>;
 };
 
 }

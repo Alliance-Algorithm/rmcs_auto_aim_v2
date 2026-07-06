@@ -11,7 +11,7 @@
 #include <opencv2/core/types.hpp>
 #include <yaml-cpp/yaml.h>
 
-namespace rmcs::identifier {
+namespace rmcs::detector {
 
 class GreenLightFinder {
     RMCS_PIMPL_DEFINITION(GreenLightFinder)
