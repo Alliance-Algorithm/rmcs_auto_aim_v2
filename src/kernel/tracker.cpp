@@ -262,40 +262,46 @@ struct Tracker::Impl {
 
         // 选择目标并填充调试信息
         const auto calculate = [&](DeviceId id, const Point3d& p) -> double {
+            std::ignore = id;
             /// @NOTE:
             ///  占位符实现，按照目标中心到摄像机视角光轴的
             ///  距离比较优先级，后续可能会引入更复杂的判断
             ///  标准，也可能不会（
             const auto distance_score =
                 compute_distance2cam_x({ camera.translation, camera.orientation }, p);
-            const auto memory_score = aim_intent ? (id == track_genre ? 0 : 1) : 1;
-
-            return distance_score * memory_score;
+            return distance_score;
         };
+        const auto locked = aim_intent && track_genre != DeviceId::UNKNOWN;
 
         auto result = Trackable::Unique { };
         auto better = std::numeric_limits<double>::max();
         auto device = DeviceId::UNKNOWN;
         {
-            if (outpost && outpost->converge()) {
-                const auto state = outpost->state();
-                const auto score = calculate(DeviceId::OUTPOST, state.get_direction());
-                if (better > score) {
-                    better = score;
-                    result = make_trackable(timestamp, state);
+            if (!locked || DeviceId::OUTPOST == track_genre) {
+                if (outpost && outpost->converge()) {
+                    const auto state = outpost->state();
+                    const auto score = calculate(DeviceId::OUTPOST, state.get_direction());
+                    if (better > score) {
+                        better = score;
+                        result = make_trackable(timestamp, state);
 
-                    device = DeviceId::OUTPOST;
+                        device = DeviceId::OUTPOST;
+                    }
+                    std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
+
+                    const auto a = state.rotation_angle;
+                    const auto v = state.rotation_speed;
+                    addition.infos.push_back({
+                        .text  = std::format("a: {:+.1f} | v: {:+2.2f}", a, v),
+                        .point = Point3d { state.x, state.y, state.z },
+                    });
                 }
-                std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
-
-                const auto a = state.rotation_angle;
-                const auto v = state.rotation_speed;
-                addition.infos.push_back({
-                    .text  = std::format("a: {:+.1f} | v: {:+2.2f}", a, v),
-                    .point = Point3d { state.x, state.y, state.z },
-                });
             }
             for (const auto& [id, model] : robot_models) {
+                // 锁定时，不回传其他的目标
+                if (locked && id != track_genre) {
+                    continue;
+                }
                 if (model.converge()) {
                     const auto state = model.state();
                     const auto score = calculate(id, state.get_direction());
@@ -328,8 +334,7 @@ struct Tracker::Impl {
 
         /// @NOTE:
         ///  只有在没有自瞄意图时才进行目标的更新，一旦自瞄按键按死，就一直
-        ///  以最高优先级跟随该目标，即使该目标丢失，期间可能会瞄准其他机器
-        ///  人，但一旦目标装甲板出现，立刻跟随过去
+        ///  以最高优先级跟随该目标，即使该目标丢失
         if (track_genre == DeviceId::UNKNOWN || !aim_intent) {
             track_genre = device;
         }
