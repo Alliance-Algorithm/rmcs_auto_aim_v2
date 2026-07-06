@@ -158,6 +158,10 @@ struct Tracker::Impl {
             if (dt.count() > config.timeout_seconds) {
                 outpost       = nullptr;
                 outpost_stamp = timestamp;
+
+                if (aim_intent && track_genre == DeviceId::OUTPOST) {
+                    track_genre = DeviceId::UNKNOWN;
+                }
             }
         }
         { // @NOTE: 假装这里有大符的超时处理
@@ -169,6 +173,10 @@ struct Tracker::Impl {
             const auto dt = std::chrono::duration<double> { timestamp - stamp };
             if (dt.count() > config.timeout_seconds) {
                 robot_models.erase(id);
+
+                if (aim_intent && track_genre == id) {
+                    track_genre = DeviceId::UNKNOWN;
+                }
                 return true;
             }
             return false;
