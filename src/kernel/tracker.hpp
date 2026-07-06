@@ -33,6 +33,8 @@ public:
 
     explicit Tracker(const YAML::Node&);
 
+    auto update_aim_intent(bool intent) -> void;
+
     auto update_track_color(CampColor) -> void;
     auto update_track_genre(DeviceIds) -> void;
 

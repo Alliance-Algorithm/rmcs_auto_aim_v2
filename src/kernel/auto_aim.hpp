@@ -48,6 +48,8 @@ public:
         };
         std::deque<TransformFrame> transforms;
 
+        bool aim_intent = false;
+
         double max_yaw_vel = 3.0;
         double max_yaw_acc = 100.0;
 

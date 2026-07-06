@@ -65,6 +65,8 @@ struct Tracker::Impl {
         Lightbar2ds lightbars;
     } stored;
 
+    bool aim_intent = false;
+
     DeviceIds track_devices = DeviceIds::Full();
     DeviceId track_genre    = DeviceId::UNKNOWN;
     ArmorColor track_color  = ArmorColor::DARK;
@@ -266,7 +268,7 @@ struct Tracker::Impl {
             ///  标准，也可能不会（
             const auto distance_score =
                 compute_distance2cam_x({ camera.translation, camera.orientation }, p);
-            const auto memory_score = (id == track_genre) ? 0 : 1;
+            const auto memory_score = aim_intent ? (id == track_genre ? 0 : 1) : 1;
 
             return distance_score * memory_score;
         };
@@ -323,7 +325,14 @@ struct Tracker::Impl {
                 }
             }
         }
-        track_genre = device;
+
+        /// @NOTE:
+        ///  只有在没有自瞄意图时才进行目标的更新，一旦自瞄按键按死，就一直
+        ///  以最高优先级跟随该目标，即使该目标丢失，期间可能会瞄准其他机器
+        ///  人，但一旦目标装甲板出现，立刻跟随过去
+        if (track_genre == DeviceId::UNKNOWN || !aim_intent) {
+            track_genre = device;
+        }
         return result;
     }
 };
@@ -332,6 +341,8 @@ Tracker::Tracker(const YAML::Node& yaml)
     : pimpl { std::make_unique<Impl>(yaml) } { }
 
 Tracker::~Tracker() noexcept = default;
+
+auto Tracker::update_aim_intent(bool intent) -> void { pimpl->aim_intent = intent; }
 
 auto Tracker::update_track_color(CampColor camp) -> void {
     /*^^*/ if (camp == CampColor::RED) {

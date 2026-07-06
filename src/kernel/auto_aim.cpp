@@ -1,8 +1,8 @@
 #include "auto_aim.hpp"
 
 #include "kernel/capturer.hpp"
-#include "kernel/fire_control.hpp"
 #include "kernel/detector.hpp"
+#include "kernel/fire_control.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
@@ -51,6 +51,8 @@ struct AutoAim::Impl {
             auto image = cap.fetch_image();
             if (!image) continue;
 
+            auto intent = bool { false };
+
             auto max_yaw_vel = 0.0;
             auto max_yaw_acc = 0.0;
 
@@ -79,6 +81,9 @@ struct AutoAim::Impl {
                     yaw   = best->yaw;
                     pitch = best->pitch;
                 }
+
+                intent = context.aim_intent;
+
                 max_yaw_vel = context.max_yaw_vel;
                 max_yaw_acc = context.max_yaw_acc;
 
@@ -147,6 +152,7 @@ struct AutoAim::Impl {
                     tracker->update_track_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
+                tracker->update_aim_intent(intent);
                 tracker->update_track_genre(track_ids);
                 tracker->update_camera(iso);
 

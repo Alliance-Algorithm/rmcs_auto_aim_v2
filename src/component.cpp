@@ -1,10 +1,10 @@
 #include "kernel/auto_aim.hpp"
 
-#include <algorithm>
-
 #include <eigen3/Eigen/Geometry>
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/robot_id.hpp>
+#include <rmcs_msgs/switch.hpp>
 
 namespace rmcs {
 
@@ -16,8 +16,10 @@ private:
 
     InputInterface<Eigen::Isometry3d> camera_transform;
     InputInterface<Eigen::Vector3d> barrel_direction;
-    InputInterface<rmcs_msgs::RobotId> robot_id;
     InputInterface<double> yaw_velocity;
+    InputInterface<rmcs_msgs::RobotId> robot_id;
+    InputInterface<rmcs_msgs::Switch> switch_right;
+    InputInterface<rmcs_msgs::Mouse> mouse;
 
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
@@ -35,6 +37,8 @@ public:
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
         register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
         register_input("/referee/id", robot_id, false);
+        register_input("/remote/switch/right", switch_right, false);
+        register_input("/remote/mouse", mouse, false);
 
         register_output("/auto_aim/should_control", should_track, false);
         register_output("/auto_aim/should_shoot", should_shoot, false);
@@ -90,6 +94,10 @@ public:
             if (ctx.transforms.size() > 100) {
                 ctx.transforms.pop_front();
             }
+
+            using namespace rmcs_msgs;
+            ctx.aim_intent = (mouse.ready() && mouse->right)
+                || (switch_right.ready() && *switch_right == Switch::UP);
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
