@@ -111,3 +111,14 @@ ament_add_gtest(
     test_transform_communication
     ${TEST_DIR}/transform_communication.cpp
 )
+
+# Rune
+ament_add_gtest(
+    test_rune
+    ${TEST_DIR}/rune.cpp
+    ${RMCS_SRC_DIR}/module/detector/rune.cpp
+)
+target_link_libraries(
+    test_rune
+    ${OpenCV_LIBRARIES}
+)

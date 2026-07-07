@@ -1,0 +1,63 @@
+#pragma once
+#include "utility/robot/color.hpp"
+#include "utility/robot/rune.hpp"
+
+#include <opencv2/core/mat.hpp>
+
+namespace rmcs {
+
+struct RuneFinder {
+    struct Input {
+        cv::Mat image;
+        CampColor color;
+
+        int red_diff_threshold = 30;
+        int blue_diff_threshold = 30;
+        int min_channel_threshold = 60;
+
+        double min_area = 60.0;
+        double max_area = 10000.0;
+        double min_side_ratio = 0.99;
+        double max_side_ratio = 1.55;
+        double min_area_ratio = 0.80;
+        double max_area_ratio = 1.20;
+        double min_peri_ratio = 0.35;
+        double max_peri_ratio = 0.80;
+
+        double active_max_convex_area_ratio = 0.9;
+        double active_max_convex_peri_ratio = 0.11;
+        double active_min_sub_area_ratio = 0.70;
+        double active_max_tenring_sub_area_ratio = 0.30;
+
+        double gap_min_area_ratio = 0.025;
+        double gap_max_area_ratio = 0.20;
+        double gap_min_side_ratio = 1.55;
+        double gap_max_side_ratio = 8.0;
+        double gap_circle_radius_ratio = 0.7037;
+        double gap_min_distance_ratio = 0.50;
+        double gap_max_distance_ratio = 0.80;
+        double gap_min_open_angle = 60.0;
+        double gap_max_open_angle = 100.0;
+
+        double center_min_area = 10.0;
+        double center_max_area = 1000.0;
+        double center_min_side_ratio = 0.3;
+        double center_max_side_ratio = 2.5;
+        double center_min_roundness = 0.2;
+        double center_max_roundness = 0.9;
+        double center_max_sub_area_ratio = 0.2;
+        double center_min_convex_area_ratio = 0.9;
+        double center_max_defect_area_ratio = 0.3;
+        double center_min_area_for_ratio = 20.0;
+        double center_concentricity_ratio = 0.08;
+    } input;
+
+    struct Result {
+        Point2d icon;
+        std::vector<RunePage> pages;
+    } result;
+
+    auto solve() noexcept -> bool;
+};
+
+}
