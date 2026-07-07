@@ -74,9 +74,6 @@ namespace {
             cv::bitwise_and(mask, minimum_mask, mask);
         }
 
-        const auto kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size { 5, 5 });
-        cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);
-
         return mask;
     }
 
@@ -107,8 +104,18 @@ namespace {
         }
     }
 
-    auto check_ellipse_shape(const std::vector<cv::Point>& contour, const RuneFinder::Input& input,
-        bool active) -> std::optional<cv::RotatedRect> {
+    auto get_all_sub_contour_indices(
+        const std::vector<cv::Vec4i>& hierarchy, size_t index, std::vector<int>& result) -> void {
+        std::vector<int> direct_children;
+        get_direct_sub_contour_indices(hierarchy, index, direct_children);
+        for (const auto child : direct_children) {
+            result.push_back(child);
+            get_all_sub_contour_indices(hierarchy, child, result);
+        }
+    }
+
+    auto check_ellipse_shape(const std::vector<cv::Point>& contour, const RuneFinder::Input& input)
+        -> std::optional<cv::RotatedRect> {
         if (contour.size() < 6) return std::nullopt;
 
         const auto area = cv::contourArea(contour);
@@ -137,19 +144,138 @@ namespace {
         if (perimeter_ratio < input.min_peri_ratio || perimeter_ratio > input.max_peri_ratio)
             return std::nullopt;
 
-        if (!active) return ellipse;
+        return ellipse;
+    }
 
-        const auto hull           = cv::Mat { contour };
-        const auto hull_area      = cv::contourArea(hull);
-        const auto hull_perimeter = cv::arcLength(hull, true);
+    auto check_arm_shape(const std::vector<cv::Point>& contour, const RuneFinder::Input& input)
+        -> std::optional<cv::RotatedRect> {
+        if (contour.size() < 6) return std::nullopt;
 
-        const auto hull_perimeter_ratio = hull_perimeter / perimeter;
-        const auto normalized_hull_perimeter_ratio =
-            hull_perimeter_ratio > 1.0 ? hull_perimeter_ratio : 1.0 / hull_perimeter_ratio;
-
-        if (hull_area / area > input.active_max_convex_area_ratio) return std::nullopt;
-        if (normalized_hull_perimeter_ratio > input.active_max_convex_peri_ratio)
+        const auto area = cv::contourArea(contour);
+        if (area < input.active_arm_min_area || area > input.active_arm_max_area)
             return std::nullopt;
+
+        const auto ellipse = cv::fitEllipse(contour);
+        const auto width   = std::max(ellipse.size.width, ellipse.size.height);
+        const auto height  = std::min(ellipse.size.width, ellipse.size.height);
+        if (height <= 0) return std::nullopt;
+
+        const auto aspect_ratio = width / height;
+        if (aspect_ratio < input.active_arm_min_aspect_ratio
+            || aspect_ratio > input.active_arm_max_aspect_ratio)
+            return std::nullopt;
+
+        const auto ellipse_area = width * height * std::numbers::pi / 4.0;
+        const auto area_ratio   = area / ellipse_area;
+        if (area_ratio < input.active_arm_min_area_ratio
+            || area_ratio > input.active_arm_max_area_ratio)
+            return std::nullopt;
+
+        auto hull = std::vector<cv::Point> { };
+        cv::convexHull(contour, hull);
+        const auto hull_area = cv::contourArea(hull);
+        if (hull_area <= 0) return std::nullopt;
+
+        const auto hull_ratio = hull_area / area;
+        if (hull_ratio < input.active_arm_min_hull_ratio
+            || hull_ratio > input.active_arm_max_hull_ratio)
+            return std::nullopt;
+
+        const auto perimeter         = cv::arcLength(contour, true);
+        const auto ellipse_perimeter = std::numbers::pi
+            * (3.0 * (width + height) - std::sqrt((3.0 * width + height) * (width + 3.0 * height)));
+        if (ellipse_perimeter <= 0) return std::nullopt;
+
+        const auto perimeter_ratio = perimeter / ellipse_perimeter;
+        if (perimeter_ratio < input.active_arm_min_peri_ratio
+            || perimeter_ratio > input.active_arm_max_peri_ratio)
+            return std::nullopt;
+
+        return ellipse;
+    }
+
+    auto check_active_target(const std::vector<std::vector<cv::Point>>& contours,
+        const std::vector<cv::Vec4i>& hierarchy, size_t index, const RuneFinder::Input& input)
+        -> std::optional<cv::RotatedRect> {
+        const auto& contour = contours[index];
+        if (contour.size() < 6) return std::nullopt;
+
+        const auto area = cv::contourArea(contour);
+        if (area < input.active_target_min_area || area > input.active_target_max_area)
+            return std::nullopt;
+
+        const auto ellipse = cv::fitEllipse(contour);
+        const auto width   = std::max(ellipse.size.width, ellipse.size.height);
+        const auto height  = std::min(ellipse.size.width, ellipse.size.height);
+        if (height <= 0) return std::nullopt;
+
+        const auto aspect_ratio = width / height;
+        if (aspect_ratio < input.active_target_min_side_ratio
+            || aspect_ratio > input.active_target_max_side_ratio)
+            return std::nullopt;
+
+        const auto ellipse_area = width * height * std::numbers::pi / 4.0;
+        const auto area_ratio   = area / ellipse_area;
+        if (area_ratio < input.active_target_min_area_ratio
+            || area_ratio > input.active_target_max_area_ratio)
+            return std::nullopt;
+
+        const auto perimeter         = cv::arcLength(contour, true);
+        const auto ellipse_perimeter = std::numbers::pi
+            * (3.0 * (width + height) - std::sqrt((3.0 * width + height) * (width + 3.0 * height)));
+        if (ellipse_perimeter <= 0) return std::nullopt;
+
+        const auto perimeter_ratio = perimeter / ellipse_perimeter;
+        if (perimeter_ratio < input.active_target_min_peri_ratio
+            || perimeter_ratio > input.active_target_max_peri_ratio)
+            return std::nullopt;
+
+        auto hull = std::vector<cv::Point> { };
+        cv::convexHull(contour, hull);
+        const auto hull_area = cv::contourArea(hull);
+        if (hull_area <= 0) return std::nullopt;
+
+        const auto convexity = area / hull_area;
+        if (convexity < input.active_target_min_convex_area_ratio) return std::nullopt;
+
+        auto direct_children = std::vector<int> { };
+        get_direct_sub_contour_indices(hierarchy, index, direct_children);
+        if (direct_children.size()
+            >= static_cast<std::size_t>(input.active_target_max_direct_children))
+            return std::nullopt;
+
+        auto all_sub_indices = std::vector<int> { };
+        get_all_sub_contour_indices(hierarchy, index, all_sub_indices);
+        if (all_sub_indices.empty()) return std::nullopt;
+
+        double total_sub_area = 0.0;
+        double max_sub_area   = 0.0;
+        size_t max_sub_idx    = 0;
+        for (const auto sub_idx : all_sub_indices) {
+            if (sub_idx < 0 || sub_idx >= static_cast<int>(contours.size())) continue;
+            const auto sub_area = cv::contourArea(contours[sub_idx]);
+            total_sub_area += sub_area;
+            if (sub_area > max_sub_area) {
+                max_sub_area = sub_area;
+                max_sub_idx  = static_cast<size_t>(sub_idx);
+            }
+        }
+
+        const auto ten_ring_ratio = total_sub_area / area;
+        if (ten_ring_ratio > input.active_target_max_tenring_sub_area_ratio) {
+            if (max_sub_area / area < input.active_target_min_concentric_sub_area_ratio)
+                return std::nullopt;
+
+            const auto sub_ellipse = cv::fitEllipse(contours[max_sub_idx]);
+            const auto sub_width   = std::max(sub_ellipse.size.width, sub_ellipse.size.height);
+            const auto sub_height  = std::min(sub_ellipse.size.width, sub_ellipse.size.height);
+            if (sub_height <= 0) return std::nullopt;
+            const auto sub_aspect_ratio = sub_width / sub_height;
+            if (sub_aspect_ratio < input.min_side_ratio || sub_aspect_ratio > input.max_side_ratio)
+                return std::nullopt;
+        } else if (all_sub_indices.size() < 3) {
+            return std::nullopt;
+        }
 
         return ellipse;
     }
@@ -207,53 +333,80 @@ namespace {
 
     auto find_active_pages(const std::vector<std::vector<cv::Point>>& contours,
         const std::vector<cv::Vec4i>& hierarchy, const std::unordered_set<size_t>& valid,
-        const RuneFinder::Input& input) -> std::vector<RunePage> {
-        std::vector<RunePage> result;
+        const std::optional<cv::Point2f>& rune_center, const RuneFinder::Input& input)
+        -> std::vector<RunePage> {
+        struct Candidate {
+            size_t index;
+            RunePage page;
+            bool is_target;
+        };
+        std::vector<Candidate> candidates;
 
         for (size_t index = 0; index < contours.size(); ++index) {
             if (!is_contour_valid(index, valid)) continue;
             if (hierarchy[index][3] != -1) continue;
-            if (hierarchy[index][2] == -1) continue;
 
-            const auto maybe_ellipse = check_ellipse_shape(contours[index], input, true);
-            if (!maybe_ellipse) continue;
-
-            const auto area = cv::contourArea(contours[index]);
-
-            std::vector<int> sub_indices;
-            get_direct_sub_contour_indices(hierarchy, index, sub_indices);
-
-            bool has_valid_sub = false;
-            for (const auto sub_index : sub_indices) {
-                if (sub_index < 0 || sub_index >= static_cast<int>(contours.size())) continue;
-                if (!is_contour_valid(sub_index, valid)) continue;
-
-                const auto sub_area = cv::contourArea(contours[sub_index]);
-                if (sub_area / area < input.active_min_sub_area_ratio) continue;
-
-                const auto maybe_sub_ellipse =
-                    check_ellipse_shape(contours[sub_index], input, false);
-                if (maybe_sub_ellipse) {
-                    has_valid_sub = true;
-                    break;
-                }
+            auto maybe_page = check_arm_shape(contours[index], input);
+            bool is_target  = false;
+            if (!maybe_page) {
+                maybe_page = check_active_target(contours, hierarchy, index, input);
+                is_target  = maybe_page.has_value();
             }
+            if (!maybe_page) continue;
 
-            if (!has_valid_sub) {
-                double total_sub_area = 0.0;
-                for (const auto sub_index : sub_indices) {
-                    if (sub_index >= 0 && sub_index < static_cast<int>(contours.size())
-                        && is_contour_valid(sub_index, valid)) {
-                        total_sub_area += cv::contourArea(contours[sub_index]);
-                    }
-                }
-                if (total_sub_area / area > input.active_max_tenring_sub_area_ratio) continue;
+            // 跳过神符中心（R 标）自身
+            if (rune_center) {
+                const auto center_distance = get_distance(
+                    cv::Point2f { rune_center->x, rune_center->y }, maybe_page->center);
+                if (center_distance < input.active_center_min_distance) continue;
             }
 
             RunePage page;
             page.active = true;
-            page.center = to_point2d(maybe_ellipse->center);
-            result.push_back(page);
+            page.center = to_point2d(maybe_page->center);
+            candidates.push_back(Candidate { index, page, is_target });
+        }
+
+        // 过滤掉被其他已激活页轮廓包含的误检
+        std::vector<Candidate> filtered;
+        for (const auto& candidate : candidates) {
+            bool is_inside_another = false;
+            for (const auto& other : candidates) {
+                if (candidate.index == other.index) continue;
+                if (cv::pointPolygonTest(contours[other.index],
+                        cv::Point2f { static_cast<float>(candidate.page.center.x),
+                            static_cast<float>(candidate.page.center.y) },
+                        false)
+                    > 0) {
+                    is_inside_another = true;
+                    break;
+                }
+            }
+            if (!is_inside_another) filtered.push_back(candidate);
+        }
+
+        // 过滤掉与已激活靶心（圆环）相邻的灯臂误检
+        std::vector<RunePage> result;
+        for (const auto& candidate : filtered) {
+            if (!candidate.is_target) {
+                bool near_target = false;
+                for (const auto& other : filtered) {
+                    if (!other.is_target || candidate.index == other.index) continue;
+                    const auto target_ellipse = cv::fitEllipse(contours[other.index]);
+                    const auto target_size =
+                        std::max(target_ellipse.size.width, target_ellipse.size.height);
+                    const auto center_distance =
+                        get_distance(cv::Point2f { static_cast<float>(candidate.page.center.x),
+                                         static_cast<float>(candidate.page.center.y) },
+                            target_ellipse.center);
+                    if (center_distance < target_size * 1.5) {
+                        near_target = true;
+                        break;
+                    }
+                }
+                if (near_target) continue;
+            }
+            result.push_back(candidate.page);
         }
 
         return result;
@@ -474,11 +627,74 @@ namespace {
         return result;
     }
 
+    auto make_crosshair_gaps(const std::vector<cv::Point>& gap_contour,
+        const cv::RotatedRect& outer_ellipse, const RuneFinder::Input& input) -> std::vector<Gap> {
+        const auto gap_area = cv::contourArea(gap_contour);
+        const auto outer_area =
+            outer_ellipse.size.width * outer_ellipse.size.height * std::numbers::pi / 4.0;
+        const auto gap_area_ratio = gap_area / outer_area;
+        if (gap_area_ratio < 0.05 || gap_area_ratio > 0.40) return { };
+
+        const auto gap_ellipse = cv::fitEllipse(gap_contour);
+        const auto gap_width   = std::max(gap_ellipse.size.width, gap_ellipse.size.height);
+        const auto gap_height  = std::min(gap_ellipse.size.width, gap_ellipse.size.height);
+        if (gap_height <= 0) return { };
+        if (gap_width / gap_height > 4.0) return { };
+
+        const auto moments = cv::moments(gap_contour);
+        if (moments.m00 <= 0) return { };
+        const auto gap_center = cv::Point2f {
+            static_cast<float>(moments.m10 / moments.m00),
+            static_cast<float>(moments.m01 / moments.m00),
+        };
+        const auto outer_radius =
+            std::max(outer_ellipse.size.width, outer_ellipse.size.height) / 2.0f;
+        if (get_distance(gap_center, outer_ellipse.center) > outer_radius) return { };
+
+        std::vector<Gap> result;
+        result.reserve(4);
+        for (int i = 0; i < 4; ++i) {
+            const auto angle = (outer_ellipse.angle + 45.0f + static_cast<float>(i) * 90.0f)
+                * std::numbers::pi / 180.0f;
+            const auto direction = cv::Point2f {
+                static_cast<float>(std::cos(angle)),
+                static_cast<float>(std::sin(angle)),
+            };
+            const auto radius = static_cast<float>(input.gap_circle_radius_ratio * outer_radius);
+            const auto center = outer_ellipse.center + direction * radius;
+
+            Gap gap;
+            gap.center       = center;
+            gap.left_corner  = center;
+            gap.right_corner = center;
+            gap.valid        = true;
+            result.push_back(gap);
+        }
+
+        return result;
+    }
+
     auto build_inactive_page(const std::vector<std::vector<cv::Point>>& contours,
         const std::vector<cv::Vec4i>& hierarchy, const std::unordered_set<size_t>& valid,
         size_t outer_index, const cv::RotatedRect& outer_ellipse, const cv::Point2f& rune_center,
         const RuneFinder::Input& input) -> std::optional<RunePage> {
-        const auto gaps = find_gaps(contours, hierarchy, valid, outer_index, outer_ellipse, input);
+        auto gaps = find_gaps(contours, hierarchy, valid, outer_index, outer_ellipse, input);
+
+        // 如果标准缺口检测失败，尝试识别十字形缺口（小符未激活页）
+        if (gaps.empty()) {
+            std::vector<int> direct_children;
+            get_direct_sub_contour_indices(hierarchy, outer_index, direct_children);
+            for (const auto child_idx : direct_children) {
+                if (child_idx < 0 || child_idx >= static_cast<int>(contours.size())) continue;
+                if (!is_contour_valid(child_idx, valid)) continue;
+                auto cross_gaps = make_crosshair_gaps(contours[child_idx], outer_ellipse, input);
+                if (!cross_gaps.empty()) {
+                    gaps = std::move(cross_gaps);
+                    break;
+                }
+            }
+        }
+
         if (gaps.empty() || gaps.size() > 4) return std::nullopt;
 
         RunePage page;
@@ -507,9 +723,9 @@ namespace {
 
             std::vector<int> direct_children;
             get_direct_sub_contour_indices(hierarchy, index, direct_children);
-            if (direct_children.size() < 4) continue;
+            if (direct_children.empty()) continue;
 
-            const auto maybe_ellipse = check_ellipse_shape(contours[index], input, false);
+            const auto maybe_ellipse = check_ellipse_shape(contours[index], input);
             if (!maybe_ellipse) continue;
 
             const auto maybe_page = build_inactive_page(
@@ -549,7 +765,7 @@ auto RuneFinder::solve() noexcept -> bool {
         result.icon = to_point2d(*maybe_center);
     }
 
-    auto active_pages = find_active_pages(contours, hierarchy, valid_indices, input);
+    auto active_pages = find_active_pages(contours, hierarchy, valid_indices, maybe_center, input);
     result.pages.insert(result.pages.end(), active_pages.begin(), active_pages.end());
 
     if (maybe_center) {

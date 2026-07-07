@@ -7,6 +7,8 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
+#include "module/detector/rune.hpp"
+
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -120,6 +122,37 @@ struct AutoAim::Impl {
 
                 armor2ds    = std::move(result->armors);
                 lightbar2ds = std::move(result->lightbars);
+            }
+
+            { // @NOTE: 临时大符可视化
+                static auto rune_finder = RuneFinder { };
+                rune_finder.input.image = image->mat;
+                rune_finder.input.color = CampColor::RED;
+
+                if (rune_finder.solve()) {
+                    visual.draw_later(Canvas::Point {
+                        .origin = rune_finder.result.icon.make<cv::Point2i>(),
+                        .radius = 2,
+                        .color  = kGreen,
+                    });
+
+                    for (const auto& page : rune_finder.result.pages) {
+                        visual.draw_later(Canvas::Point {
+                            .origin = page.center.make<cv::Point2i>(),
+                            .radius = 2,
+                            .color  = kGreen,
+                        });
+
+                        for (size_t i = 0; i < 4; ++i) {
+                            if (!page.gap_valid[i]) continue;
+                            visual.draw_later(Canvas::Point {
+                                .origin = page.gap_corners[i].make<cv::Point2i>(),
+                                .radius = 2,
+                                .color  = kGreen,
+                            });
+                        }
+                    }
+                }
             }
 
             /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
