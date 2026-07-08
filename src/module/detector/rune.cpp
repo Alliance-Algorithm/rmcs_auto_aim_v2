@@ -301,7 +301,15 @@ namespace details {
         auto hierarchy = std::vector<cv::Vec4i> { };
         cv::findContours(mat.clone(), contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
 
-        for (const auto& contour : contours) {
+        struct Ellipse {
+            cv::Point center;
+            double major;
+            double minor;
+            size_t contour_index;
+        };
+        auto visited = std::vector<Ellipse> { };
+
+        for (const auto& [i, contour] : contours | std::views::enumerate) {
             if (contour.size() < 5) continue;
 
             const auto area = cv::contourArea(contour);
@@ -334,9 +342,17 @@ namespace details {
                 const auto circularity = 4.0 * std::numbers::pi * area / (perimeter * perimeter);
                 if (circularity < min_circularity * kCircularityMargin) continue;
 
-                // @TODO: 同心圆校验
-
-                bullseyes.push_back(contour);
+                const auto moment = cv::moments(contour);
+                visited.push_back(Ellipse {
+                    .center =
+                        cv::Point {
+                            static_cast<int>(moment.m10 / moment.m00),
+                            static_cast<int>(moment.m01 / moment.m00),
+                        },
+                    .major          = static_cast<double>(major),
+                    .minor          = static_cast<double>(minor),
+                    .contour_index  = static_cast<size_t>(i),
+                });
             } else if (area >= icon_area_range[0] && area <= icon_area_range[1]) {
                 const auto ellipse = cv::fitEllipse(contour);
                 const auto major   = std::max(ellipse.size.width, ellipse.size.height);
@@ -347,6 +363,42 @@ namespace details {
                 if (aspect_ratio < cos_theta) continue;
 
                 icons.push_back(contour);
+            }
+        }
+
+        {
+            constexpr auto kConcentricTolerance = 0.3;
+
+            auto seen = std::vector<bool>(visited.size(), false);
+
+            auto indices = std::views::iota(size_t { 0 }, visited.size())
+                | std::views::filter([&](size_t n) { return !seen[n]; });
+
+            for (auto i : indices) {
+                auto group = std::vector<size_t> { i };
+                seen[i]    = true;
+
+                auto concentric = std::views::iota(i + 1, visited.size())
+                    | std::views::filter([&](size_t j) {
+                        if (seen[j]) return false;
+                        const auto& a = visited[i];
+                        const auto& b = visited[j];
+                        const auto dist = std::hypot(
+                            static_cast<double>(a.center.x - b.center.x),
+                            static_cast<double>(a.center.y - b.center.y));
+                        return dist < std::max(a.major, b.major) * 0.5 * kConcentricTolerance;
+                    });
+
+                for (auto j : concentric) {
+                    group.push_back(j);
+                    seen[j] = true;
+                }
+
+                if (group.size() < 2) continue;
+
+                const auto largest = std::ranges::max(
+                    group, { }, [&](size_t n) { return visited[n].major; });
+                bullseyes.push_back(contours[visited[largest].contour_index]);
             }
         }
 
