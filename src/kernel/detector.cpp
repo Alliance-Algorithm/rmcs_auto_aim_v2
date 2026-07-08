@@ -2,6 +2,7 @@
 #include "module/detector/armor_detection.hpp"
 #include "module/detector/green_light.hpp"
 #include "module/detector/lightbar.hpp"
+#include "module/detector/rune.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/corners_optimizor.hpp"
 #include "utility/robot/armor.hpp"
@@ -12,11 +13,17 @@
 
 using namespace rmcs;
 using namespace rmcs::kernel;
+using namespace rmcs::util;
 using namespace rmcs::detector;
 
 struct Detector::Impl {
+    CameraFeature cam;
+    CampColor color;
+
     ArmorDetection armor_detection;
     GreenLightFinder green_light_finder;
+
+    RuneDetector rune_detector;
 
     static auto find_lightbar(const cv::Mat& mat, const Armor2d& armor, Result& result) {
         const auto bounds = cv::Rect2i { 0, 0, mat.cols, mat.rows };
@@ -109,9 +116,17 @@ struct Detector::Impl {
         return { };
     }
 
-    auto detect(const cv::Mat& mat) noexcept -> std::optional<Detector::Result> {
+    auto detect(const cv::Mat& mat) noexcept -> Result {
+        auto result = Result { };
+
+        const auto elements = rune_detector.detect(mat);
+        {
+            result.icons     = elements.icons;
+            result.bullseyes = elements.bullseyes;
+        }
+
         auto detected = armor_detection.sync_detect(mat);
-        if (detected.empty()) return std::nullopt;
+        if (detected.empty()) return result;
 
         std::erase_if(
             detected, [](const Armor2d& armor) { return armor.genre == ArmorGenre::UNKNOWN; });
@@ -133,8 +148,6 @@ struct Detector::Impl {
                 robots[armor.genre].push_back(&armor);
             }
         }
-
-        auto result = Result { };
 
         /// @NOTE:
         ///  - 前哨站与基地的绿灯不会同时亮起，所以我们只需要维护一个绿灯即可，
@@ -183,9 +196,19 @@ auto Detector::initialize(const YAML::Node& yaml) noexcept -> std::expected<void
     return pimpl->initialize(yaml);
 }
 
-auto Detector::detect(const cv::Mat& src) noexcept -> std::optional<Result> {
-    return pimpl->detect(src);
+auto Detector::update_detect_color(CampColor color) -> void {
+    pimpl->color                      = color;
+    pimpl->rune_detector.config.color = color;
 }
+
+auto Detector::update_camera(const std::array<double, 9>& var) noexcept -> void {
+    pimpl->rune_detector.config.cam.from(var);
+}
+auto Detector::update_camera(const std::array<double, 5>& var) noexcept -> void {
+    pimpl->rune_detector.config.cam.from(var);
+}
+
+auto Detector::detect(const cv::Mat& src) noexcept -> Result { return pimpl->detect(src); }
 
 Detector::Detector() noexcept
     : pimpl { std::make_unique<Impl>() } { }

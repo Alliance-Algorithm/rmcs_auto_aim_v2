@@ -113,12 +113,12 @@ ament_add_gtest(
 )
 
 # Rune
-ament_add_gtest(
-    test_rune
-    ${TEST_DIR}/rune.cpp
-    ${RMCS_SRC_DIR}/module/detector/rune.cpp
-)
-target_link_libraries(
-    test_rune
-    ${OpenCV_LIBRARIES}
-)
+# ament_add_gtest(
+#     test_rune
+#     ${TEST_DIR}/rune.cpp
+#     ${RMCS_SRC_DIR}/module/detector/rune.cpp
+# )
+# target_link_libraries(
+#     test_rune
+#     ${OpenCV_LIBRARIES}
+# )

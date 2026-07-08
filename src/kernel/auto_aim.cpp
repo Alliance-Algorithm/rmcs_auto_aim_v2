@@ -7,8 +7,6 @@
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
 
-#include "module/detector/rune.hpp"
-
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/panic.hpp"
@@ -112,47 +110,35 @@ struct AutoAim::Impl {
             /// [] 识别装甲板，灯条，大符页等元素
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
-            if (auto result = detector.detect(image->mat)) {
-
-                for (const auto& roi : result->areas) {
-                    visual.draw_later(roi);
+            {
+                // FIXME:
+                id = RobotId::BLUE_SENTRY;
+                if (id != RobotId::UNKNOWN) {
+                    detector.update_detect_color(
+                        (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 }
-                visual.draw_later(result->armors);
-                visual.draw_later(result->green_light);
+                auto result = detector.detect(image->mat);
 
-                armor2ds    = std::move(result->armors);
-                lightbar2ds = std::move(result->lightbars);
-            }
-
-            { // @NOTE: 临时大符可视化
-                static auto rune_finder = RuneFinder { };
-                rune_finder.input.image = image->mat;
-                rune_finder.input.color = CampColor::RED;
-
-                if (rune_finder.solve()) {
+                for (const auto& icon : result.icons) {
                     visual.draw_later(Canvas::Point {
-                        .origin = rune_finder.result.icon.make<cv::Point2i>(),
-                        .radius = 2,
+                        .origin = icon.center.make<cv::Point>(),
+                        .radius = 5,
                         .color  = kGreen,
                     });
-
-                    for (const auto& page : rune_finder.result.pages) {
-                        visual.draw_later(Canvas::Point {
-                            .origin = page.center.make<cv::Point2i>(),
-                            .radius = 2,
-                            .color  = kGreen,
-                        });
-
-                        for (size_t i = 0; i < 4; ++i) {
-                            if (!page.gap_valid[i]) continue;
-                            visual.draw_later(Canvas::Point {
-                                .origin = page.gap_corners[i].make<cv::Point2i>(),
-                                .radius = 2,
-                                .color  = kGreen,
-                            });
-                        }
-                    }
+                    visual.draw_later(Canvas::Text {
+                        .content  = std::format("R: {:.3f}", icon.score),
+                        .top_left = icon.center.make<cv::Point>(),
+                        .color    = kGreen,
+                    });
                 }
+                for (const auto& roi : result.areas) {
+                    visual.draw_later(roi);
+                }
+                visual.draw_later(result.armors);
+                visual.draw_later(result.green_light);
+
+                armor2ds    = std::move(result.armors);
+                lightbar2ds = std::move(result.lightbars);
             }
 
             /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
@@ -310,6 +296,9 @@ struct AutoAim::Impl {
             auto config = configs["visualization"];
             handle_result("visualization", visual.initialize(config));
         }
+
+        detector.update_camera(camera_matrix);
+        detector.update_camera(distort_coeff);
 
         tracker = std::make_unique<Tracker>(configs["tracker"]);
         tracker->update_camera(camera_matrix);
