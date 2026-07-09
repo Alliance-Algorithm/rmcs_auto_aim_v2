@@ -131,6 +131,22 @@ struct AutoAim::Impl {
                         .color    = kGreen,
                     });
                 }
+                for (const auto& bullseye : result.bullseyes) {
+                    if (!bullseye.active) {
+                        for (const auto p : bullseye.corners) {
+                            visual.draw_later(Canvas::Point {
+                                .origin = p.make<cv::Point>(),
+                                .radius = 5,
+                                .color  = kGreen,
+                            });
+                        }
+                    }
+                    visual.draw_later(Canvas::Point {
+                        .origin = bullseye.center.make<cv::Point>(),
+                        .radius = 8,
+                        .color  = kGreen,
+                    });
+                }
                 for (const auto& roi : result.areas) {
                     visual.draw_later(roi);
                 }

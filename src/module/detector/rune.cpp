@@ -16,238 +16,337 @@ namespace details {
     constexpr auto kBullseyeRadius = 0.15;
     constexpr auto kRuneIconRadius = 0.05;
 
-    auto resample_contour(const std::vector<cv::Point>& contour, size_t n)
-        -> std::vector<cv::Point2f> {
-        if (contour.size() < 2 || n < 2) return { };
+    auto compute_distance_with_icon(const std::vector<cv::Point>& contour) -> double {
+        constexpr auto kBinsR     = 5;
+        constexpr auto kBinsTheta = 12;
+        constexpr auto kN         = 100;
 
-        auto seg_len = std::vector<double> { };
-        seg_len.reserve(contour.size());
-        auto total = 0.0;
-        for (size_t i = 1; i < contour.size(); ++i) {
-            const auto dx = static_cast<double>(contour[i].x - contour[i - 1].x);
-            const auto dy = static_cast<double>(contour[i].y - contour[i - 1].y);
-            seg_len.push_back(std::hypot(dx, dy));
-            total += seg_len.back();
-        }
-        {
-            const auto dx = static_cast<double>(contour[0].x - contour.back().x);
-            const auto dy = static_cast<double>(contour[0].y - contour.back().y);
-            seg_len.push_back(std::hypot(dx, dy));
-            total += seg_len.back();
-        }
+        using Hist = std::array<float, kBinsR * kBinsTheta>;
 
-        auto sampled = std::vector<cv::Point2f> { };
-        sampled.reserve(n);
-        const auto step  = total / static_cast<double>(n);
-        const auto seg_n = seg_len.size();
-        auto acc         = 0.0;
-        auto seg_idx     = size_t { 0 };
+        static const auto kTemplateContour = [] {
+            constexpr auto kTemplate = std::array {
+                std::string_view { " ###################    " },
+                std::string_view { " ####################   " },
+                std::string_view { "  ####################  " },
+                std::string_view { "   #################### " },
+                std::string_view { "   #################### " },
+                std::string_view { "    #######       ######" },
+                std::string_view { "     #######       #####" },
+                std::string_view { "     #######       #####" },
+                std::string_view { "      #######      #####" },
+                std::string_view { "   #################### " },
+                std::string_view { "   #################### " },
+                std::string_view { "   ###################  " },
+                std::string_view { "  ###################   " },
+                std::string_view { "  #################     " },
+                std::string_view { "  ######    #######     " },
+                std::string_view { "  ######     ######     " },
+                std::string_view { " ######      #######    " },
+                std::string_view { " ######       #######   " },
+                std::string_view { " ######        #######  " },
+                std::string_view { " ######    ############ " },
+                std::string_view { "######      ########### " },
+                std::string_view { "######        #####     " },
+                std::string_view { "                ####    " },
+                std::string_view { "                  ###   " },
+                std::string_view { "                    ##  " },
+                std::string_view { "                      # " },
+            };
 
-        for (size_t i = 0; i < n; ++i) {
-            const auto target = static_cast<double>(i) * step;
-            while (seg_idx < seg_n && acc + seg_len[seg_idx] < target) {
-                acc += seg_len[seg_idx];
-                ++seg_idx;
+            const auto rows = static_cast<int>(kTemplate.size());
+            const auto cols = static_cast<int>(kTemplate[0].size());
+
+            auto mat = cv::Mat(rows, cols, CV_8UC1, cv::Scalar { 0 });
+            for (const auto [r, row] : kTemplate | std::views::enumerate) {
+                for (const auto [c, ch] : row | std::views::enumerate) {
+                    if (ch == '#')
+                        mat.at<std::uint8_t>(static_cast<int>(r), static_cast<int>(c)) = 255;
+                }
             }
-            if (seg_idx >= seg_n) seg_idx = seg_n - 1;
-            const auto alpha = seg_len[seg_idx] > 0.0 ? (target - acc) / seg_len[seg_idx] : 0.0;
-            const auto& p0   = contour[seg_idx % contour.size()];
-            const auto& p1   = contour[(seg_idx + 1) % contour.size()];
-            sampled.emplace_back(static_cast<float>(p0.x + alpha * (p1.x - p0.x)),
-                static_cast<float>(p0.y + alpha * (p1.y - p0.y)));
-        }
 
-        return sampled;
-    }
+            auto contours = std::vector<std::vector<cv::Point>> { };
+            cv::findContours(mat, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            if (contours.empty()) return std::vector<cv::Point> { };
 
-    using ShapeContextHist = std::array<float, 60>;
+            return *std::ranges::max_element(
+                contours, { }, [](const auto& c) { return cv::contourArea(c); });
+        }();
 
-    constexpr auto kShapeContextBinsR     = 5;
-    constexpr auto kShapeContextBinsTheta = 12;
-    constexpr auto kShapeContextN         = 100;
+        auto resample = [](const std::vector<cv::Point>& c,
+                            std::size_t n) -> std::vector<cv::Point2f> {
+            if (c.size() < 2 || n < 2) return { };
 
-    struct LogDistRange {
-        double min;
-        double max;
-    };
+            auto seg_len = std::vector<double> { };
+            seg_len.reserve(c.size());
+            auto total = 0.0;
+            for (std::size_t i = 1; i < c.size(); ++i) {
+                const auto dx = static_cast<double>(c[i].x - c[i - 1].x);
+                const auto dy = static_cast<double>(c[i].y - c[i - 1].y);
+                seg_len.push_back(std::hypot(dx, dy));
+                total += seg_len.back();
+            }
+            {
+                const auto dx = static_cast<double>(c[0].x - c.back().x);
+                const auto dy = static_cast<double>(c[0].y - c.back().y);
+                seg_len.push_back(std::hypot(dx, dy));
+                total += seg_len.back();
+            }
 
-    static const auto kTemplateLogDistRange = [] {
-        constexpr auto kTemplate = std::array {
-            std::string_view { " ###################    " },
-            std::string_view { " ####################   " },
-            std::string_view { "  ####################  " },
-            std::string_view { "   #################### " },
-            std::string_view { "   #################### " },
-            std::string_view { "    #######       ######" },
-            std::string_view { "     #######       #####" },
-            std::string_view { "     #######       #####" },
-            std::string_view { "      #######      #####" },
-            std::string_view { "   #################### " },
-            std::string_view { "   #################### " },
-            std::string_view { "   ###################  " },
-            std::string_view { "  ###################   " },
-            std::string_view { "  #################     " },
-            std::string_view { "  ######    #######     " },
-            std::string_view { "  ######     ######     " },
-            std::string_view { " ######      #######    " },
-            std::string_view { " ######       #######   " },
-            std::string_view { " ######        #######  " },
-            std::string_view { " ######    ############ " },
-            std::string_view { "######      ########### " },
-            std::string_view { "######        #####     " },
-            std::string_view { "                ####    " },
-            std::string_view { "                  ###   " },
-            std::string_view { "                    ##  " },
-            std::string_view { "                      # " },
+            auto sampled = std::vector<cv::Point2f> { };
+            sampled.reserve(n);
+            const auto step  = total / static_cast<double>(n);
+            const auto seg_n = seg_len.size();
+            auto acc         = 0.0;
+            auto seg_idx     = std::size_t { 0 };
+
+            for (std::size_t i = 0; i < n; ++i) {
+                const auto target = static_cast<double>(i) * step;
+                while (seg_idx < seg_n && acc + seg_len[seg_idx] < target) {
+                    acc += seg_len[seg_idx];
+                    ++seg_idx;
+                }
+                if (seg_idx >= seg_n) seg_idx = seg_n - 1;
+                const auto alpha = seg_len[seg_idx] > 0.0 ? (target - acc) / seg_len[seg_idx] : 0.0;
+                const auto& p0   = c[seg_idx % c.size()];
+                const auto& p1   = c[(seg_idx + 1) % c.size()];
+                sampled.emplace_back(static_cast<float>(p0.x + alpha * (p1.x - p0.x)),
+                    static_cast<float>(p0.y + alpha * (p1.y - p0.y)));
+            }
+
+            return sampled;
         };
 
-        const auto rows = static_cast<int>(kTemplate.size());
-        const auto cols = static_cast<int>(kTemplate[0].size());
+        static const auto kLogDistRange = [&] {
+            const auto sampled  = resample(kTemplateContour, kN);
+            constexpr auto kEps = 1e-6;
 
-        auto mat = cv::Mat(rows, cols, CV_8UC1, cv::Scalar { 0 });
-        for (const auto [r, row] : kTemplate | std::views::enumerate) {
-            for (const auto [c, ch] : row | std::views::enumerate) {
-                if (ch == '#') mat.at<uint8_t>(static_cast<int>(r), static_cast<int>(c)) = 255;
+            auto all_dists = std::vector<double> { };
+            all_dists.reserve(sampled.size() * sampled.size() / 2);
+            for (std::size_t i = 0; i < sampled.size(); ++i) {
+                for (std::size_t j = i + 1; j < sampled.size(); ++j) {
+                    const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
+                    const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
+                    all_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + kEps));
+                }
             }
-        }
 
-        auto contours = std::vector<std::vector<cv::Point>> { };
-        cv::findContours(mat, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        if (contours.empty()) return LogDistRange { 0.0, 1.0 };
+            const auto [r_min, r_max] = std::ranges::minmax(all_dists);
+            auto range                = r_max - r_min;
+            if (range < 1.0) range = 1.0;
+            return std::pair { r_min - 0.2 * range, r_max + 0.2 * range };
+        }();
 
-        const auto& largest = *std::ranges::max_element(
-            contours, { }, [](const auto& c) { return cv::contourArea(c); });
-
-        const auto sampled  = resample_contour(largest, kShapeContextN);
-        constexpr auto kEps = 1e-6;
-
-        auto all_dists = std::vector<double> { };
-        all_dists.reserve(sampled.size() * sampled.size() / 2);
-        for (size_t i = 0; i < sampled.size(); ++i) {
-            for (size_t j = i + 1; j < sampled.size(); ++j) {
-                const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
-                const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
-                all_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + kEps));
-            }
-        }
-
-        const auto [r_min, r_max] = std::ranges::minmax(all_dists);
-        auto range                = r_max - r_min;
-        if (range < 1.0) range = 1.0;
-        return LogDistRange { r_min - 0.2 * range, r_max + 0.2 * range };
-    }();
-
-    auto compute_shape_context(const std::vector<cv::Point>& contour, size_t n = kShapeContextN)
-        -> ShapeContextHist {
-        const auto sampled = resample_contour(contour, n);
-        if (sampled.size() != n) return { };
-
-        auto hist            = ShapeContextHist { };
-        constexpr auto n_r   = static_cast<double>(kShapeContextBinsR);
-        constexpr auto n_t   = static_cast<double>(kShapeContextBinsTheta);
-        constexpr auto pi    = std::numbers::pi;
-        constexpr auto twopi = 2.0 * pi;
-        constexpr auto kEps  = 1e-6;
-
-        const auto global_r_min = kTemplateLogDistRange.min;
-        const auto global_r_max = kTemplateLogDistRange.max;
-        auto global_r_range     = global_r_max - global_r_min;
+        const auto [global_r_min, global_r_max] = kLogDistRange;
+        auto global_r_range                     = global_r_max - global_r_min;
         if (global_r_range < 1e-3) global_r_range = 1.0;
 
-        for (size_t i = 0; i < n; ++i) {
-            auto log_dists = std::vector<double> { };
-            auto angles    = std::vector<double> { };
-            log_dists.reserve(n - 1);
-            angles.reserve(n - 1);
-            for (size_t j = 0; j < n; ++j) {
-                if (i == j) continue;
-                const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
-                const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
-                log_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + kEps));
-                angles.push_back(std::atan2(dy, dx));
+        auto compute_hist = [&](const std::vector<cv::Point>& c) -> Hist {
+            const auto sampled = resample(c, kN);
+            if (sampled.size() != kN) return { };
+
+            auto hist            = Hist { };
+            constexpr auto n_r   = static_cast<double>(kBinsR);
+            constexpr auto n_t   = static_cast<double>(kBinsTheta);
+            constexpr auto pi    = std::numbers::pi;
+            constexpr auto twopi = 2.0 * pi;
+
+            for (std::size_t i = 0; i < kN; ++i) {
+                auto log_dists = std::vector<double> { };
+                auto angles    = std::vector<double> { };
+                log_dists.reserve(kN - 1);
+                angles.reserve(kN - 1);
+                for (std::size_t j = 0; j < kN; ++j) {
+                    if (i == j) continue;
+                    const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
+                    const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
+                    log_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + 1e-6));
+                    angles.push_back(std::atan2(dy, dx));
+                }
+
+                for (std::size_t k = 0; k < log_dists.size(); ++k) {
+                    const auto r_bin = std::clamp(
+                        static_cast<int>((log_dists[k] - global_r_min) / global_r_range * n_r), 0,
+                        kBinsR - 1);
+                    const auto theta_bin = std::clamp(
+                        static_cast<int>((angles[k] + pi) / twopi * n_t), 0, kBinsTheta - 1);
+                    hist[static_cast<std::size_t>(r_bin) * kBinsTheta
+                        + static_cast<std::size_t>(theta_bin)] += 1.0f;
+                }
             }
 
-            for (size_t k = 0; k < log_dists.size(); ++k) {
-                const auto r_bin = std::clamp(
-                    static_cast<int>((log_dists[k] - global_r_min) / global_r_range * n_r), 0,
-                    kShapeContextBinsR - 1);
-                const auto theta_bin = std::clamp(static_cast<int>((angles[k] + pi) / twopi * n_t),
-                    0, kShapeContextBinsTheta - 1);
-                hist[static_cast<size_t>(r_bin) * kShapeContextBinsTheta
-                    + static_cast<size_t>(theta_bin)] += 1.0f;
-            }
-        }
-
-        for (auto& h : hist)
-            h /= static_cast<float>(n);
-        auto sum = 0.0f;
-        for (const auto& h : hist)
-            sum += h;
-        if (sum > 0.0f)
             for (auto& h : hist)
-                h /= sum;
+                h /= static_cast<float>(kN);
+            auto sum = 0.0f;
+            for (const auto& h : hist)
+                sum += h;
+            if (sum > 0.0f)
+                for (auto& h : hist)
+                    h /= sum;
 
-        return hist;
-    }
-
-    static const auto kTemplateShapeContext = [] {
-        constexpr auto kTemplate = std::array {
-            std::string_view { " ###################    " },
-            std::string_view { " ####################   " },
-            std::string_view { "  ####################  " },
-            std::string_view { "   #################### " },
-            std::string_view { "   #################### " },
-            std::string_view { "    #######       ######" },
-            std::string_view { "     #######       #####" },
-            std::string_view { "     #######       #####" },
-            std::string_view { "      #######      #####" },
-            std::string_view { "   #################### " },
-            std::string_view { "   #################### " },
-            std::string_view { "   ###################  " },
-            std::string_view { "  ###################   " },
-            std::string_view { "  #################     " },
-            std::string_view { "  ######    #######     " },
-            std::string_view { "  ######     ######     " },
-            std::string_view { " ######      #######    " },
-            std::string_view { " ######       #######   " },
-            std::string_view { " ######        #######  " },
-            std::string_view { " ######    ############ " },
-            std::string_view { "######      ########### " },
-            std::string_view { "######        #####     " },
-            std::string_view { "                ####    " },
-            std::string_view { "                  ###   " },
-            std::string_view { "                    ##  " },
-            std::string_view { "                      # " },
+            return hist;
         };
+        static const auto kTemplateSc = compute_hist(kTemplateContour);
 
-        const auto rows = static_cast<int>(kTemplate.size());
-        const auto cols = static_cast<int>(kTemplate[0].size());
+        const auto sc = compute_hist(contour);
 
-        auto mat = cv::Mat(rows, cols, CV_8UC1, cv::Scalar { 0 });
-        for (const auto [r, row] : kTemplate | std::views::enumerate) {
-            for (const auto [c, ch] : row | std::views::enumerate) {
-                if (ch == '#') mat.at<uint8_t>(static_cast<int>(r), static_cast<int>(c)) = 255;
-            }
-        }
-
-        auto contours = std::vector<std::vector<cv::Point>> { };
-        cv::findContours(mat, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        if (contours.empty()) return ShapeContextHist { };
-
-        const auto& largest = *std::ranges::max_element(
-            contours, { }, [](const auto& c) { return cv::contourArea(c); });
-
-        return compute_shape_context(largest, 100);
-    }();
-
-    auto shape_context_distance(const ShapeContextHist& a, const ShapeContextHist& b) -> double {
         auto dist = 0.0;
-        for (size_t i = 0; i < a.size(); ++i) {
-            const auto diff = static_cast<double>(a[i]) - static_cast<double>(b[i]);
-            const auto sum  = static_cast<double>(a[i]) + static_cast<double>(b[i]) + 1e-10;
+        for (std::size_t i = 0; i < sc.size(); ++i) {
+            const auto diff = static_cast<double>(sc[i]) - static_cast<double>(kTemplateSc[i]);
+            const auto sum =
+                static_cast<double>(sc[i]) + static_cast<double>(kTemplateSc[i]) + 1e-10;
             dist += diff * diff / sum;
         }
+
         return dist;
+    }
+
+    auto compute_bullseye_feature(const cv::Mat& roi, cv::Point2f center,
+        std::array<cv::Point2f, 4>& endpoints, bool& active) -> bool {
+
+        constexpr auto kRadialBins         = 16;
+        constexpr auto kThetaBins          = 180;
+        constexpr auto kArmLengthStddevMax = 0.3;
+
+        auto square = cv::Mat { };
+        {
+            const auto square_size = std::max(roi.cols, roi.rows);
+
+            square = cv::Mat(square_size, square_size, roi.type(), cv::Scalar { 0, 0, 0 });
+            roi.copyTo(square(cv::Rect { 0, 0, roi.cols, roi.rows }));
+        }
+
+        auto gray = cv::Mat { };
+        if (square.channels() == 3) {
+            cv::cvtColor(square, gray, cv::COLOR_BGR2GRAY);
+        } else {
+            gray = square;
+        }
+
+        const auto max_radius = std::min(square.cols, square.rows) * 0.5;
+
+        auto polar_hist = std::array<float, static_cast<std::size_t>(kRadialBins * kThetaBins)> { };
+        {
+            for (int y = 0; y < gray.rows; ++y) {
+                for (int x = 0; x < gray.cols; ++x) {
+                    const auto dx = static_cast<double>(x) - center.x;
+                    const auto dy = static_cast<double>(y) - center.y;
+                    const auto r  = std::hypot(dx, dy);
+                    if (r >= max_radius) continue;
+
+                    const auto theta = std::atan2(dy, dx);
+                    const auto r_bin = std::clamp(
+                        static_cast<int>(r / max_radius * kRadialBins), 0, kRadialBins - 1);
+                    const auto t_bin = std::clamp<double>(
+                        (theta + std::numbers::pi) / (2 * std::numbers::pi) * kThetaBins, 0,
+                        kThetaBins - 1);
+
+                    polar_hist[static_cast<int>(r_bin * kThetaBins + t_bin)] +=
+                        static_cast<float>(gray.at<std::uint8_t>(y, x));
+                }
+            }
+        }
+
+        auto angular_proj = std::array<double, static_cast<std::size_t>(kThetaBins)> { };
+        {
+            for (int t = 0; t < kThetaBins; ++t) {
+                for (int r = 0; r < kRadialBins; ++r) {
+                    angular_proj[t] += polar_hist[r * kThetaBins + t] * static_cast<float>(r + 1);
+                }
+            }
+        }
+
+        constexpr auto kHarmonicRatio = 0.15;
+
+        auto sum_cos = 0.0;
+        auto sum_sin = 0.0;
+        auto sum_dc  = 0.0;
+        for (int t = 0; t < kThetaBins; ++t) {
+            const auto angle = 4.0 * static_cast<double>(t) / kThetaBins * 2.0 * std::numbers::pi;
+            sum_cos += angular_proj[t] * std::cos(angle);
+            sum_sin += angular_proj[t] * std::sin(angle);
+            sum_dc += angular_proj[t];
+        }
+        const auto harmonic_ratio = std::hypot(sum_cos, sum_sin) / (sum_dc + 1e-10);
+        if (harmonic_ratio < kHarmonicRatio) {
+            active = true;
+
+            auto radial_total = std::array<double, static_cast<std::size_t>(kRadialBins)> { };
+            for (int r = 0; r < kRadialBins; ++r) {
+                for (int t = 0; t < kThetaBins; ++t) {
+                    radial_total[r] += polar_hist[r * kThetaBins + t];
+                }
+            }
+
+            const auto outer_radius_bin = static_cast<std::size_t>(
+                std::ranges::max_element(radial_total) - radial_total.begin());
+            const auto radius =
+                max_radius * static_cast<double>(outer_radius_bin + 1) / kRadialBins;
+
+            endpoints = {
+                center + cv::Point2f { 0.0f, -static_cast<float>(radius) },
+                center + cv::Point2f { +static_cast<float>(radius), 0.0f },
+                center + cv::Point2f { 0.0f, +static_cast<float>(radius) },
+                center + cv::Point2f { -static_cast<float>(radius), 0.0f },
+            };
+            return true;
+        }
+
+        const auto phase = std::atan2(sum_sin, sum_cos) / 4.0;
+
+        auto tips = std::array<cv::Point2f, 4> { };
+        {
+            constexpr auto pi    = std::numbers::pi;
+            constexpr auto twopi = 2.0 * pi;
+
+            for (std::size_t p = 0; p < 4; ++p) {
+                const auto theta = phase + static_cast<double>(p) * pi * 0.5;
+                const auto t_idx =
+                    static_cast<int>(std::llround((theta + pi) / twopi * kThetaBins)) % kThetaBins;
+                const auto dx = std::cos(theta);
+                const auto dy = std::sin(theta);
+
+                auto max_r_bin  = 0;
+                auto max_r_ener = 0.0;
+                for (int r = 0; r < kRadialBins; ++r) {
+                    auto energy = 0.0;
+                    for (int dt = -1; dt <= 1; ++dt)
+                        energy +=
+                            polar_hist[r * kThetaBins + ((t_idx + dt + kThetaBins) % kThetaBins)];
+                    if (energy > max_r_ener) {
+                        max_r_ener = energy;
+                        max_r_bin  = r;
+                    }
+                }
+
+                const auto arm_len = max_radius * max_r_bin / kRadialBins;
+                tips[p]            = cv::Point2f {
+                    center.x + static_cast<float>(arm_len * dx),
+                    center.y + static_cast<float>(arm_len * dy),
+                };
+            }
+        }
+
+        {
+            auto lengths = std::array<double, 4> { };
+            auto mean    = 0.0;
+            for (std::size_t i = 0; i < 4; ++i) {
+                lengths[i] = std::hypot(tips[i].x - center.x, tips[i].y - center.y);
+                mean += lengths[i];
+            }
+            mean *= 0.25;
+
+            auto variance = 0.0;
+            for (const auto l : lengths) {
+                const auto diff = l - mean;
+                variance += diff * diff;
+            }
+            variance *= 0.25;
+            if (std::sqrt(variance) > mean * kArmLengthStddevMax) return false;
+        }
+
+        active    = false;
+        endpoints = tips;
+        return true;
     }
 
     auto find_contours(const RuneDetector::Config& config, const cv::Mat& mat,
@@ -305,7 +404,7 @@ namespace details {
             cv::Point center;
             double major;
             double minor;
-            size_t contour_index;
+            std::size_t contour_index;
         };
         auto visited = std::vector<Ellipse> { };
 
@@ -349,9 +448,10 @@ namespace details {
                             static_cast<int>(moment.m10 / moment.m00),
                             static_cast<int>(moment.m01 / moment.m00),
                         },
-                    .major          = static_cast<double>(major),
-                    .minor          = static_cast<double>(minor),
-                    .contour_index  = static_cast<size_t>(i),
+                    .major = static_cast<double>(major),
+                    .minor = static_cast<double>(minor),
+
+                    .contour_index = static_cast<std::size_t>(i),
                 });
             } else if (area >= icon_area_range[0] && area <= icon_area_range[1]) {
                 const auto ellipse = cv::fitEllipse(contour);
@@ -371,33 +471,32 @@ namespace details {
 
             auto seen = std::vector<bool>(visited.size(), false);
 
-            auto indices = std::views::iota(size_t { 0 }, visited.size())
-                | std::views::filter([&](size_t n) { return !seen[n]; });
+            auto indices = std::views::iota(std::size_t { 0 }, visited.size())
+                | std::views::filter([&](std::size_t n) { return !seen[n]; });
 
             for (auto i : indices) {
-                auto group = std::vector<size_t> { i };
+                auto group = std::vector<std::size_t> { i };
                 seen[i]    = true;
 
                 auto concentric = std::views::iota(i + 1, visited.size())
-                    | std::views::filter([&](size_t j) {
-                        if (seen[j]) return false;
-                        const auto& a = visited[i];
-                        const auto& b = visited[j];
-                        const auto dist = std::hypot(
-                            static_cast<double>(a.center.x - b.center.x),
-                            static_cast<double>(a.center.y - b.center.y));
-                        return dist < std::max(a.major, b.major) * 0.5 * kConcentricTolerance;
-                    });
+                    | std::views::filter([&](std::size_t j) {
+                          if (seen[j]) return false;
+                          const auto& a   = visited[i];
+                          const auto& b   = visited[j];
+                          const auto dist = std::hypot(static_cast<double>(a.center.x - b.center.x),
+                              static_cast<double>(a.center.y - b.center.y));
+                          return dist < std::max(a.major, b.major) * 0.5 * kConcentricTolerance;
+                      });
 
                 for (auto j : concentric) {
                     group.push_back(j);
                     seen[j] = true;
                 }
 
-                if (group.size() < 2) continue;
+                if (group.empty()) continue;
 
-                const auto largest = std::ranges::max(
-                    group, { }, [&](size_t n) { return visited[n].major; });
+                const auto largest =
+                    std::ranges::max(group, { }, [&](std::size_t n) { return visited[n].major; });
                 bullseyes.push_back(contours[visited[largest].contour_index]);
             }
         }
@@ -461,10 +560,66 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
 
     auto result = Elements { };
 
-    for (const auto& icon : icons) {
-        const auto sc = details::compute_shape_context(icon, 100);
+    for (const auto& bull : bullseyes) {
+        const auto br          = cv::boundingRect(bull);
+        constexpr auto kMargin = 20;
+        auto roi               = cv::Rect {
+            br.x - kMargin,
+            br.y - kMargin,
+            br.width + 2 * kMargin,
+            br.height + 2 * kMargin,
+        };
+        roi &= cv::Rect { 0, 0, mat.cols, mat.rows };
+        if (roi.width <= 0 || roi.height <= 0) continue;
 
-        const auto score = details::shape_context_distance(details::kTemplateShapeContext, sc);
+        const auto moment     = cv::moments(bull);
+        const auto center_roi = cv::Point2f {
+            static_cast<float>(moment.m10 / moment.m00 - roi.x),
+            static_cast<float>(moment.m01 / moment.m00 - roi.y),
+        };
+
+        auto masked_roi = cv::Mat { };
+        {
+            auto contour_local = bull;
+            for (auto& p : contour_local) {
+                p.x -= roi.x;
+                p.y -= roi.y;
+            }
+
+            auto mask = cv::Mat { };
+            mask      = cv::Mat::zeros(roi.size(), CV_8UC1);
+            auto ctns = std::vector<std::vector<cv::Point>> { contour_local };
+            cv::drawContours(mask, ctns, -1, cv::Scalar { 255 }, cv::FILLED);
+            mat(roi).copyTo(masked_roi, mask);
+        }
+
+        auto endpoints = std::array<cv::Point2f, 4> { };
+        auto active    = bool { };
+        if (!details::compute_bullseye_feature(masked_roi, center_roi, endpoints, active)) continue;
+
+        for (auto& p : endpoints) {
+            p.x += static_cast<float>(roi.x);
+            p.y += static_cast<float>(roi.y);
+        }
+
+        result.bullseyes.push_back({
+            .center =
+                Point2d {
+                    center_roi.x + static_cast<float>(roi.x),
+                    center_roi.y + static_cast<float>(roi.y),
+                },
+            .corners = { {
+                Point2d { endpoints[0] },
+                Point2d { endpoints[1] },
+                Point2d { endpoints[2] },
+                Point2d { endpoints[3] },
+            } },
+            .active  = active,
+        });
+    }
+
+    for (const auto& icon : icons) {
+        const auto score = details::compute_distance_with_icon(icon);
         if (score >= config.match_threshold) continue;
 
         const auto rc = cv::minAreaRect(icon);
