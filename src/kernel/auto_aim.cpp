@@ -9,6 +9,7 @@
 
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
+#include "utility/math/solve_pnp/pnp_solution.hpp" // FIXME: REMOVE SOON
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -40,6 +41,7 @@ struct AutoAim::Impl {
 
     std::jthread worker;
 
+    SingleRunePnpSolution pnp_solution;
     FramerateCounter counter;
 
     auto run(const std::stop_token& stop) -> void {
@@ -112,7 +114,7 @@ struct AutoAim::Impl {
             auto lightbar2ds = Lightbar2ds { };
             {
                 // FIXME:
-                id = RobotId::RED_SENTRY;
+                id = RobotId::BLUE_SENTRY;
                 if (id != RobotId::UNKNOWN) {
                     detector.update_detect_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
@@ -130,6 +132,7 @@ struct AutoAim::Impl {
                         .top_left = icon.center.make<cv::Point>(),
                         .color    = kGreen,
                     });
+                    pnp_solution.input.icon = icon.center;
                 }
                 for (const auto& bullseye : result.bullseyes) {
                     if (!bullseye.active) {
@@ -139,6 +142,21 @@ struct AutoAim::Impl {
                                 .radius = 3,
                                 .color  = kGreen,
                             });
+                        }
+                        { // FIXME: 临时测试
+                            auto& input = pnp_solution.input;
+
+                            input.center  = bullseye.center;
+                            input.corners = bullseye.corners;
+
+                            if (pnp_solution.solve()) {
+                                visual.publish(
+                                    Transform {
+                                        pnp_solution.result.translation,
+                                        pnp_solution.result.orientation,
+                                    },
+                                    "rune_center");
+                            }
                         }
                     }
                     visual.draw_later(Canvas::Point {
@@ -326,6 +344,9 @@ struct AutoAim::Impl {
         tracker->update_camera(distort_coeff);
 
         fire = std::make_unique<FireController>(configs["fire_control"]);
+
+        pnp_solution.input.cam.from(camera_matrix);
+        pnp_solution.input.cam.from(distort_coeff);
 
         worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }

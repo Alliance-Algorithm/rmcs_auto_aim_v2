@@ -1,13 +1,13 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
 #include "utility/math/camera.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/armor.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
-#include "utility/robot/rune.hpp"
 
 namespace rmcs::util {
 
@@ -56,6 +56,32 @@ struct RobustPnpSolution {
     auto solve() -> bool;
 };
 
-struct RunePnpSolution { };
+// 单扇叶的 Pnp 变换，只能观测到一个未激活的靶心时，使用该 Solution
+struct SingleRunePnpSolution {
+    struct Input {
+        CameraFeature cam;
+
+        Point2d center;
+        Point2d icon;
+        std::array<Point2d, 4> corners;
+    } input;
+
+    struct Result {
+        Translation translation;
+        Orientation orientation;
+    } result;
+
+    auto solve() -> bool;
+};
+
+// 大符或者存在已激活的小符，可以用此 Solution 做大尺度的 Pnp
+struct MultipleRunePnpSolution {
+    struct Input {
+        CameraFeature cam;
+
+        Point2d icon;
+        std::vector<Point2d> centers;
+    } input;
+};
 
 }
