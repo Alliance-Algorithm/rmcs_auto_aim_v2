@@ -147,7 +147,7 @@ struct AutoAim::Impl {
                         .color  = kGreen,
                     });
                     visual.draw_later(Canvas::Text {
-                        .content  = std::format("Bullseye: {:.3f}", bullseye.score),
+                        .content  = std::format("B: {:.3f}", bullseye.score),
                         .top_left = bullseye.center.make<cv::Point>(),
                         .color    = kGreen,
                     });

@@ -7,6 +7,7 @@
 #include "utility/robot/armor.hpp"
 #include "utility/robot/color.hpp"
 #include "utility/robot/id.hpp"
+#include "utility/robot/rune.hpp"
 
 namespace rmcs::util {
 
@@ -54,5 +55,7 @@ struct RobustPnpSolution {
 
     auto solve() -> bool;
 };
+
+struct RunePnpSolution { };
 
 }
