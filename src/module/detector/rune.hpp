@@ -22,7 +22,8 @@ public:
         int blue_diff_threshold   = 30;
         int min_channel_threshold = 60;
 
-        double match_threshold = 0.2;
+        double match_threshold    = 0.2;
+        double active_threshold   = 0.15;
     } config;
 
     struct Elements {

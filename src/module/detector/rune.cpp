@@ -201,9 +201,9 @@ namespace details {
     }
 
     auto compute_bullseye_feature(const cv::Mat& roi, cv::Point2f center,
-        std::array<cv::Point2f, 4>& endpoints, bool& active) -> bool {
+        std::array<cv::Point2f, 4>& endpoints, double& score, double active_threshold) -> bool {
 
-        constexpr auto kRadialBins         = 16;
+        constexpr auto kRadialBins         = 32;
         constexpr auto kThetaBins          = 180;
         constexpr auto kArmLengthStddevMax = 0.3;
 
@@ -254,9 +254,6 @@ namespace details {
                 }
             }
         }
-
-        constexpr auto kHarmonicRatio = 0.15;
-
         auto sum_cos = 0.0;
         auto sum_sin = 0.0;
         auto sum_dc  = 0.0;
@@ -267,8 +264,8 @@ namespace details {
             sum_dc += angular_proj[t];
         }
         const auto harmonic_ratio = std::hypot(sum_cos, sum_sin) / (sum_dc + 1e-10);
-        if (harmonic_ratio < kHarmonicRatio) {
-            active = true;
+        score                     = harmonic_ratio;
+        if (harmonic_ratio < active_threshold) {
 
             auto radial_total = std::array<double, static_cast<std::size_t>(kRadialBins)> { };
             for (int r = 0; r < kRadialBins; ++r) {
@@ -305,20 +302,43 @@ namespace details {
                 const auto dx = std::cos(theta);
                 const auto dy = std::sin(theta);
 
-                auto max_r_bin  = 0;
-                auto max_r_ener = 0.0;
+                auto radial_profile = std::array<double, static_cast<std::size_t>(kRadialBins)> { };
                 for (int r = 0; r < kRadialBins; ++r) {
-                    auto energy = 0.0;
-                    for (int dt = -1; dt <= 1; ++dt)
-                        energy +=
+                    for (int dt = -3; dt <= 3; ++dt)
+                        radial_profile[r] +=
                             polar_hist[r * kThetaBins + ((t_idx + dt + kThetaBins) % kThetaBins)];
-                    if (energy > max_r_ener) {
-                        max_r_ener = energy;
-                        max_r_bin  = r;
+                }
+
+                const auto max_energy = *std::ranges::max_element(radial_profile);
+                const auto threshold  = max_energy * 0.25;
+
+                auto boundary = -1;
+                for (int r = kRadialBins - 1; r >= 0; --r) {
+                    if (radial_profile[r] >= threshold) {
+                        boundary = r;
+                        break;
                     }
                 }
 
-                const auto arm_len = max_radius * max_r_bin / kRadialBins;
+                auto exact_r = 0.0;
+                if (boundary >= kRadialBins - 1) {
+                    exact_r = 1.0;
+                } else if (boundary < 0) {
+                    exact_r = static_cast<double>(
+                                  std::ranges::max_element(radial_profile) - radial_profile.begin())
+                        / kRadialBins;
+                } else {
+                    const auto e_in  = radial_profile[boundary];
+                    const auto e_out = radial_profile[boundary + 1];
+                    if (e_in > e_out) {
+                        const auto frac = (threshold - e_out) / (e_in - e_out);
+                        exact_r         = (static_cast<double>(boundary + 1) - frac) / kRadialBins;
+                    } else {
+                        exact_r = static_cast<double>(boundary + 1) / kRadialBins;
+                    }
+                }
+
+                const auto arm_len = max_radius * exact_r;
                 tips[p]            = cv::Point2f {
                     center.x + static_cast<float>(arm_len * dx),
                     center.y + static_cast<float>(arm_len * dy),
@@ -344,7 +364,7 @@ namespace details {
             if (std::sqrt(variance) > mean * kArmLengthStddevMax) return false;
         }
 
-        active    = false;
+        score     = harmonic_ratio;
         endpoints = tips;
         return true;
     }
@@ -594,8 +614,10 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
         }
 
         auto endpoints = std::array<cv::Point2f, 4> { };
-        auto active    = bool { };
-        if (!details::compute_bullseye_feature(masked_roi, center_roi, endpoints, active)) continue;
+        auto score     = double { };
+        if (!details::compute_bullseye_feature(
+                masked_roi, center_roi, endpoints, score, config.active_threshold))
+            continue;
 
         for (auto& p : endpoints) {
             p.x += static_cast<float>(roi.x);
@@ -614,7 +636,8 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
                 Point2d { endpoints[2] },
                 Point2d { endpoints[3] },
             } },
-            .active  = active,
+            .active  = score < config.active_threshold,
+            .score   = score,
         });
     }
 

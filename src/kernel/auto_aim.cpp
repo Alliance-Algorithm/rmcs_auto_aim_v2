@@ -112,7 +112,7 @@ struct AutoAim::Impl {
             auto lightbar2ds = Lightbar2ds { };
             {
                 // FIXME:
-                id = RobotId::BLUE_SENTRY;
+                id = RobotId::RED_SENTRY;
                 if (id != RobotId::UNKNOWN) {
                     detector.update_detect_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
@@ -136,15 +136,20 @@ struct AutoAim::Impl {
                         for (const auto p : bullseye.corners) {
                             visual.draw_later(Canvas::Point {
                                 .origin = p.make<cv::Point>(),
-                                .radius = 5,
+                                .radius = 3,
                                 .color  = kGreen,
                             });
                         }
                     }
                     visual.draw_later(Canvas::Point {
                         .origin = bullseye.center.make<cv::Point>(),
-                        .radius = 8,
+                        .radius = 5,
                         .color  = kGreen,
+                    });
+                    visual.draw_later(Canvas::Text {
+                        .content  = std::format("Bullseye: {:.3f}", bullseye.score),
+                        .top_left = bullseye.center.make<cv::Point>(),
+                        .color    = kGreen,
                     });
                 }
                 for (const auto& roi : result.areas) {
