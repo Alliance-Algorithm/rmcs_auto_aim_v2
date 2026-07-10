@@ -2,6 +2,7 @@
 
 #include "module/tracker/model/outpost.hpp"
 #include "module/tracker/model/robot.hpp"
+#include "module/tracker/model/rune.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/camera.hpp"
 #include "utility/serializable.hpp"
@@ -59,10 +60,30 @@ struct Tracker::Impl {
         };
     } outpost_config;
 
+    struct RuneConfig : RuneModel::Config, Serializable {
+        static constexpr std::tuple metas {
+            // clang-format off
+            &RuneConfig::noise_x, "noise_x",
+            &RuneConfig::noise_y, "noise_y",
+            &RuneConfig::noise_z, "noise_z",
+            &RuneConfig::noise_rotation_angle, "noise_rotation_angle",
+            &RuneConfig::noise_rotation_speed, "noise_rotation_speed",
+            &RuneConfig::noise_face_yaw, "noise_face_yaw",
+            &RuneConfig::noise_observation, "noise_observation",
+            &RuneConfig::gate_threshold, "gate_threshold",
+            &RuneConfig::init_seed_mean_error, "init_seed_mean_error",
+            &RuneConfig::init_seed_max_error, "init_seed_max_error",
+            &RuneConfig::init_center_gate, "init_center_gate",
+            // clang-format on
+        };
+    } rune_config;
+
     struct {
         Armor2ds armor2ds;
         Armor3ds armor3ds;
         Lightbar2ds lightbars;
+        std::vector<RuneIcon> icons;
+        std::vector<RuneBullseye> bullseyes;
     } stored;
 
     bool aim_intent  = false;
@@ -79,7 +100,8 @@ struct Tracker::Impl {
     Timestamp outpost_stamp;
     std::unique_ptr<OutpostModel> outpost;
 
-    /* @NOTE: 假装这里有一个大符的 Model */
+    Timestamp rune_stamp;
+    std::unique_ptr<RuneModel> rune;
 
     Printer logging { "TrackerV2" };
     Addition addition;
@@ -97,6 +119,12 @@ struct Tracker::Impl {
             logging.error("OutpostModel config error: {}", ret.error());
             throw std::runtime_error { "无法构造 OutpostModel Config" };
         }
+        if (const auto rune_node = yaml["rune"]; rune_node && !rune_node.IsNull()) {
+            if (auto ret = rune_config.serialize(rune_node); !ret) {
+                logging.error("RuneModel config error: {}", ret.error());
+                throw std::runtime_error { "无法构造 RuneModel Config" };
+            }
+        }
 
         /*^^*/ if (config.fallback_color == "RED") {
             track_color = ArmorColor::RED;
@@ -111,6 +139,8 @@ struct Tracker::Impl {
         stored.armor2ds.clear();
         stored.armor3ds.clear();
         stored.lightbars.clear();
+        stored.icons.clear();
+        stored.bullseyes.clear();
     }
 
     auto store(std::span<const Armor2d> items) {
@@ -145,11 +175,21 @@ struct Tracker::Impl {
             }
         }
     }
+    auto store(std::span<const RuneIcon> items) {
+        if (!track_devices.contains(DeviceId::RUNE)) return;
+        std::ranges::copy(items, std::back_inserter(stored.icons));
+    }
+    auto store(std::span<const RuneBullseye> items) {
+        if (!track_devices.contains(DeviceId::RUNE)) return;
+        std::ranges::copy(items, std::back_inserter(stored.bullseyes));
+    }
 
     auto execute(Timestamp timestamp) {
         addition.tracked2d.clear();
         addition.tracked3d.clear();
         addition.lightbars.clear();
+        addition.rune_features.clear();
+        addition.rune_polygon.reset();
         addition.infos.clear();
 
         { // 前哨站观测超时
@@ -166,6 +206,18 @@ struct Tracker::Impl {
             }
         }
         { // @NOTE: 假装这里有大符的超时处理
+            if (rune != nullptr) {
+                const auto dt = std::chrono::duration<double> {
+                    timestamp - rune_stamp,
+                };
+                if (dt.count() > config.timeout_seconds) {
+                    rune = nullptr;
+
+                    if (track_genre == DeviceId::RUNE && aim_intent && aim_cleanup) {
+                        track_genre = DeviceId::UNKNOWN;
+                    }
+                }
+            }
         }
         // 机器人观测超时处理
         std::erase_if(robot_stamps, [&](const auto& item) {
@@ -224,6 +276,41 @@ struct Tracker::Impl {
             }
         }
         { // @NOTE: 故作姿态地假装在迭代大符
+            if (!stored.icons.empty() || !stored.bullseyes.empty()) {
+                if (rune == nullptr) {
+                    auto model = std::make_unique<RuneModel>(rune_config);
+                    model->update_camera(
+                        std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
+                        camera.distort_coeff);
+                    model->update_transform({
+                        .translation = camera.translation,
+                        .orientation = camera.orientation,
+                    });
+                    if (model->init(stored.icons, stored.bullseyes)) {
+                        rune       = std::move(model);
+                        rune_stamp = timestamp;
+                        logging.info("Init OK with {}", get_enum_name(DeviceId::RUNE));
+                    }
+                } else {
+                    const auto dt = std::chrono::duration<double> {
+                        timestamp - rune_stamp,
+                    };
+
+                    rune->update_transform({
+                        .translation = camera.translation,
+                        .orientation = camera.orientation,
+                    });
+                    rune->predict(dt.count());
+                    rune->correct(stored.icons, stored.bullseyes);
+
+                    if (rune->diverged()) {
+                        rune = nullptr;
+                        logging.warn("{} is diverged", get_enum_name(DeviceId::RUNE));
+                    } else {
+                        rune_stamp = timestamp;
+                    }
+                }
+            }
         }
         // 迭代机器人 Model
         for (const auto& [id, target] : seen) {
@@ -302,6 +389,48 @@ struct Tracker::Impl {
                     const auto v = state.rotation_speed;
                     addition.infos.push_back({
                         .text  = std::format("a: {:+.1f} | v: {:+2.2f}", a, v),
+                        .point = Point3d { state.x, state.y, state.z },
+                    });
+                }
+            }
+            if (!locked || DeviceId::RUNE == track_genre) {
+                if (rune && rune->converge()) {
+                    const auto state = rune->state();
+                    const auto score = calculate(DeviceId::RUNE, state.get_direction());
+                    if (better > score) {
+                        better = score;
+                        result = make_trackable(timestamp, state);
+
+                        device = DeviceId::RUNE;
+                    }
+
+                    std::ranges::copy(
+                        rune->addition().predicted | std::views::transform([](const auto& item) {
+                            return Addition::RuneFeature { item.feature_id, item.point };
+                        }),
+                        std::back_inserter(addition.rune_features));
+
+                    if (rune->addition().predicted.size() == 6) {
+                        auto polygon = Addition::RunePolygon { };
+                        auto ok      = true;
+                        for (const auto& item : rune->addition().predicted) {
+                            if (item.feature_id == 0) {
+                                polygon.icon = item.point;
+                            } else if (item.feature_id >= 1 && item.feature_id <= 5) {
+                                polygon.blades[static_cast<std::size_t>(item.feature_id - 1)] =
+                                    item.point;
+                            } else {
+                                ok = false;
+                            }
+                        }
+                        if (ok) addition.rune_polygon = polygon;
+                    }
+
+                    const auto a = state.rotation_angle;
+                    const auto v = state.rotation_speed;
+                    const auto y = state.face_yaw;
+                    addition.infos.push_back({
+                        .text  = std::format("ra: {:+.1f} | rv: {:+2.2f} | fy: {:+.2f}", a, v, y),
                         .point = Point3d { state.x, state.y, state.z },
                     });
                 }
@@ -386,6 +515,8 @@ auto Tracker::clean() noexcept -> void { pimpl->clean(); }
 auto Tracker::store(std::span<const Armor2d> item) -> void { pimpl->store(item); }
 auto Tracker::store(std::span<const Armor3d> item) -> void { pimpl->store(item); }
 auto Tracker::store(std::span<const Lightbar2d> item) -> void { pimpl->store(item); }
+auto Tracker::store(std::span<const RuneIcon> item) -> void { pimpl->store(item); }
+auto Tracker::store(std::span<const RuneBullseye> item) -> void { pimpl->store(item); }
 
 auto Tracker::execute(Timestamp stamp) -> Trackable::Unique { return pimpl->execute(stamp); }
 

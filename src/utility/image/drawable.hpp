@@ -36,6 +36,12 @@ struct Canvas {
 
         cv::Scalar color = kWhite;
     };
+    struct Line {
+        cv::Point2i begin;
+        cv::Point2i end;
+
+        cv::Scalar color = kWhite;
+    };
     struct ArmorShape {
         Armor2d shape;
         cv::Scalar color = kWhite;
@@ -52,6 +58,7 @@ struct Canvas {
     auto draw(const cv::Rect2i&) -> void;
     auto draw(const Text&) -> void;
     auto draw(const Point&) -> void;
+    auto draw(const Line&) -> void;
 };
 template <class T>
 concept drawable_trait = requires(Canvas& canvas) { canvas.draw(std::declval<T>()); };

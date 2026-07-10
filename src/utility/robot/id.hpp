@@ -20,6 +20,7 @@ namespace id::details {
         std::uint16_t { 1 << 8 },
         std::uint16_t { 1 << 9 },
         std::uint16_t { 1 << 10 },
+        std::uint16_t { 1 << 11 },
     };
 }
 enum class DeviceId : std::uint16_t {
@@ -35,6 +36,7 @@ enum class DeviceId : std::uint16_t {
     RADAR      = id::details::id_underlyings[9],
     OUTPOST    = id::details::id_underlyings[10],
     BASE       = id::details::id_underlyings[11],
+    RUNE       = id::details::id_underlyings[12],
 };
 constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
     switch (id) {
@@ -51,6 +53,7 @@ constexpr auto to_index(DeviceId id) noexcept -> std::size_t {
         case DeviceId::RADAR:      return 9;
         case DeviceId::OUTPOST:    return 10;
         case DeviceId::BASE:       return 11;
+        case DeviceId::RUNE:       return 12;
         // clang-format on
     }
     return { };
@@ -70,6 +73,7 @@ constexpr auto to_string(DeviceId id) noexcept {
         case DeviceId::RADAR:      return "RADAR";
         case DeviceId::OUTPOST:    return "OUTPOST";
         case DeviceId::BASE:       return "BASE";
+        case DeviceId::RUNE:       return "RUNE";
         // clang-format on
     }
     return "UNREACHABLE";
@@ -126,7 +130,7 @@ struct DeviceIds {
     }
 
     static constexpr auto None() { return DeviceIds { }; }
-    static constexpr auto Full() { return DeviceIds { (1 << 11) - 1 }; }
+    static constexpr auto Full() { return DeviceIds { (1 << 12) - 1 }; }
 
     static constexpr auto kLargeArmor() {
         return DeviceIds {
@@ -167,6 +171,7 @@ struct DeviceIds {
         return DeviceIds {
             DeviceId::OUTPOST,
             DeviceId::BASE,
+            DeviceId::RUNE,
         };
     }
     static constexpr auto kInfantry() {

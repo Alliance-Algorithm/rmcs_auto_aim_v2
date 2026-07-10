@@ -26,7 +26,7 @@ capturer:
   max_videos_size_gb: 50
 
   # source: "hikcamera" or "local_video"
-  source: "hikcamera"
+  source: "local_video"
 
   hikcamera:
     # int
@@ -45,7 +45,7 @@ capturer:
 
   local_video:
     # 替换为你具体的路径
-    location: "/path/to/your/video"
+    location: "/workspaces/RMCS/develop_ws/record/适应性小符.avi"
     # double 帧率
     frame_rate: 80
     # bool 是否循环播放
@@ -59,7 +59,7 @@ detector:
   # model_location: "shenzhen-0708.onnx"
   # model_location: "tongji-yolov5.xml"
 
-  infer_device: "AUTO"
+  infer_device: "CPU"
   use_roi_segment: false
   roi_rows: 640
   roi_cols: 640

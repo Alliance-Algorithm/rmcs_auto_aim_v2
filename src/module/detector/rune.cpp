@@ -442,7 +442,7 @@ namespace details {
             /*^^*/ if (radius >= bullseye_range[0] && radius <= bullseye_range[1]) {
                 constexpr auto kEllipseAreaRatioMin = 0.7;
                 constexpr auto kEllipseAreaRatioMax = 1.3;
-                constexpr auto kCircularityMargin   = 0.9;
+                constexpr auto kCircularityMargin   = 0.7;
 
                 const auto ellipse = cv::fitEllipse(contour);
                 const auto major   = std::max(ellipse.size.width, ellipse.size.height);
@@ -572,6 +572,9 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
         }
 
         cv::bitwise_and(mask, minimum_mask, binary);
+
+        auto kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size { 5, 5 });
+        cv::morphologyEx(binary, binary, cv::MORPH_CLOSE, kernel);
     }
 
     auto icons     = std::vector<std::vector<cv::Point>> { };

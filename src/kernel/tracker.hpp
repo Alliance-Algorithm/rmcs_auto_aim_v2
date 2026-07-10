@@ -4,7 +4,9 @@
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/armor.hpp"
+#include "utility/robot/rune.hpp"
 
+#include <optional>
 #include <span>
 #include <yaml-cpp/yaml.h>
 
@@ -23,6 +25,18 @@ public:
             Point2d point;
         };
         std::vector<Lightbar> lightbars;
+
+        struct RuneFeature {
+            int id;
+            Point2d point;
+        };
+        std::vector<RuneFeature> rune_features;
+
+        struct RunePolygon {
+            Point2d icon;
+            std::array<Point2d, 5> blades;
+        };
+        std::optional<RunePolygon> rune_polygon;
 
         struct Info {
             std::string text;
@@ -57,6 +71,8 @@ public:
     auto store(std::span<const Armor2d>) -> void;
     auto store(std::span<const Armor3d>) -> void;
     auto store(std::span<const Lightbar2d>) -> void;
+    auto store(std::span<const RuneIcon>) -> void;
+    auto store(std::span<const RuneBullseye>) -> void;
 
     auto execute(Timestamp) -> Trackable::Unique;
 

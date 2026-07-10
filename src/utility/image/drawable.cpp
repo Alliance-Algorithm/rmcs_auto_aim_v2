@@ -120,4 +120,9 @@ auto Canvas::draw(const Point& point) -> void {
     cv::circle(mat, point.origin, point.radius, point.color, -1, cv::LINE_AA);
 }
 
+auto Canvas::draw(const Line& line) -> void {
+    auto& mat = canvas;
+    cv::line(mat, line.begin, line.end, line.color, line_thickness, cv::LINE_AA);
+}
+
 }

@@ -9,7 +9,6 @@
 
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
-#include "utility/math/solve_pnp/pnp_solution.hpp" // FIXME: REMOVE SOON
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
@@ -41,7 +40,6 @@ struct AutoAim::Impl {
 
     std::jthread worker;
 
-    SingleRunePnpSolution pnp_solution;
     FramerateCounter counter;
 
     auto run(const std::stop_token& stop) -> void {
@@ -112,6 +110,8 @@ struct AutoAim::Impl {
             /// [] 识别装甲板，灯条，大符页等元素
             auto armor2ds    = Armor2ds { };
             auto lightbar2ds = Lightbar2ds { };
+            auto rune_icons  = std::vector<RuneIcon> { };
+            auto rune_bullseyes = std::vector<RuneBullseye> { };
             {
                 // FIXME:
                 id = RobotId::BLUE_SENTRY;
@@ -132,7 +132,6 @@ struct AutoAim::Impl {
                         .top_left = icon.center.make<cv::Point>(),
                         .color    = kGreen,
                     });
-                    pnp_solution.input.icon = icon.center;
                 }
                 for (const auto& bullseye : result.bullseyes) {
                     if (!bullseye.active) {
@@ -142,21 +141,6 @@ struct AutoAim::Impl {
                                 .radius = 3,
                                 .color  = kGreen,
                             });
-                        }
-                        { // FIXME: 临时测试
-                            auto& input = pnp_solution.input;
-
-                            input.center  = bullseye.center;
-                            input.corners = bullseye.corners;
-
-                            if (pnp_solution.solve()) {
-                                visual.publish(
-                                    Transform {
-                                        pnp_solution.result.translation,
-                                        pnp_solution.result.orientation,
-                                    },
-                                    "rune_center");
-                            }
                         }
                     }
                     visual.draw_later(Canvas::Point {
@@ -178,6 +162,8 @@ struct AutoAim::Impl {
 
                 armor2ds    = std::move(result.armors);
                 lightbar2ds = std::move(result.lightbars);
+                rune_icons = std::move(result.icons);
+                rune_bullseyes = std::move(result.bullseyes);
             }
 
             /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
@@ -221,6 +207,8 @@ struct AutoAim::Impl {
                 tracker->store(armor2ds);
                 tracker->store(armor3ds);
                 tracker->store(lightbar2ds);
+                tracker->store(rune_icons);
+                tracker->store(rune_bullseyes);
 
                 trackable = tracker->execute(image->timestamp);
 
@@ -236,6 +224,38 @@ struct AutoAim::Impl {
                         .content  = std::to_string(item.id),
                         .top_left = item.point.make<cv::Point2i>(),
                         .color    = kYellow,
+                    });
+                }
+                for (const auto& item : addition.rune_features) {
+                    visual.draw_later(Canvas::Point {
+                        .origin = item.point.make<cv::Point2i>(),
+                        .radius = 4,
+                        .color  = kYellow,
+                    });
+                }
+                if (addition.rune_polygon) {
+                    const auto& polygon = *addition.rune_polygon;
+                    auto center         = Point2d { };
+                    for (const auto& blade : polygon.blades) {
+                        center.x += blade.x;
+                        center.y += blade.y;
+                    }
+                    center.x /= static_cast<double>(polygon.blades.size());
+                    center.y /= static_cast<double>(polygon.blades.size());
+
+                    for (std::size_t index = 0; index < polygon.blades.size(); ++index) {
+                        const auto& begin = polygon.blades[index];
+                        const auto& end = polygon.blades[(index + 1) % polygon.blades.size()];
+                        visual.draw_later(Canvas::Line {
+                            .begin = begin.make<cv::Point2i>(),
+                            .end   = end.make<cv::Point2i>(),
+                            .color = kYellow,
+                        });
+                    }
+                    visual.draw_later(Canvas::Line {
+                        .begin = polygon.icon.make<cv::Point2i>(),
+                        .end   = center.make<cv::Point2i>(),
+                        .color = kYellow,
                     });
                 }
                 for (const auto& info : addition.infos) {
@@ -344,9 +364,6 @@ struct AutoAim::Impl {
         tracker->update_camera(distort_coeff);
 
         fire = std::make_unique<FireController>(configs["fire_control"]);
-
-        pnp_solution.input.cam.from(camera_matrix);
-        pnp_solution.input.cam.from(distort_coeff);
 
         worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }

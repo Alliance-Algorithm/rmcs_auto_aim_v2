@@ -1,0 +1,79 @@
+#pragma once
+
+#include "utility/pimpl.hpp"
+#include "utility/robot/rune.hpp"
+
+#include <array>
+#include <cstdint>
+#include <span>
+#include <vector>
+
+namespace rmcs {
+
+class RuneModel {
+    RMCS_PIMPL_DEFINITION(RuneModel)
+
+public:
+    struct State {
+        double x;
+        double y;
+        double z;
+
+        double rotation_speed;
+        double rotation_angle;
+
+        double face_yaw = 0;
+
+        std::array<bool, 5> inactive;
+
+        auto transition(double seconds) -> void;
+
+        auto get_direction() const -> Point3d;
+        auto get_aimpoints() const -> std::vector<Point3d>;
+        auto get_rotation_speed() const -> double;
+    };
+
+    struct Config {
+        double noise_x = 1e-4;
+        double noise_y = 1e-4;
+        double noise_z = 1e-4;
+
+        double noise_rotation_angle = 1e-3;
+        double noise_rotation_speed = 1e-0;
+        double noise_face_yaw       = 1e-4;
+
+        double noise_observation = 20.0;
+
+        double gate_threshold = 9.210;
+
+        double init_seed_mean_error = 10.0;
+        double init_seed_max_error  = 20.0;
+        double init_center_gate     = 30.0;
+    };
+
+    struct Addition {
+        struct Tracked {
+            int feature_id;
+            Point2d point;
+        };
+        std::vector<Tracked> tracked;
+        std::vector<Tracked> predicted;
+    };
+
+    explicit RuneModel(const Config&) noexcept;
+
+    auto update_camera(std::array<double, 9>, std::array<double, 5>) noexcept -> void;
+    auto update_transform(const Transform&) noexcept -> void;
+
+    auto init(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> bool;
+    auto predict(double dt) noexcept -> void;
+    auto correct(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> void;
+
+    auto converge() const -> bool;
+    auto diverged() const -> bool;
+
+    auto state() const noexcept -> State;
+    auto addition() const -> const Addition&;
+};
+
+}
