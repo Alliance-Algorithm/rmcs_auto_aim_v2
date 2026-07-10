@@ -344,6 +344,9 @@
         let sessionUrl = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         let retryTimer = null;
+        /** @type {string[]} */
+        let pendingIceCandidates = [];
+        let connectAttempts = 0;
         /** @type {MediaStream | null} */
         let currentStream = null;
         /** @type {MediaRecorder | null} */
@@ -592,27 +595,33 @@
             }, 'image/png');
         }
 
-        /** @param {RTCPeerConnection} peer @returns {Promise<void>} */
-        function waitForIceComplete(peer) {
+        /** @param {RTCPeerConnection} peer @param {number} [timeoutMs=100] @returns {Promise<void>} */
+        function waitForIceComplete(peer, timeoutMs = 100) {
             if (peer.iceGatheringState === 'complete') {
                 return Promise.resolve();
             }
 
             return new Promise((resolve) => {
-                const onStateChange = () => {
+                const timeout = setTimeout(() => {
+                    peer.removeEventListener('icegatheringstatechange', onStateChange);
+                    resolve();
+                }, timeoutMs);
+
+                function onStateChange() {
                     if (peer.iceGatheringState !== 'complete') {
                         return;
                     }
 
+                    clearTimeout(timeout);
                     peer.removeEventListener('icegatheringstatechange', onStateChange);
                     resolve();
-                };
+                }
 
                 peer.addEventListener('icegatheringstatechange', onStateChange);
             });
         }
 
-        function cleanup() {
+        async function cleanup() {
             lastFrameAt = 0;
             lastPlaybackTime = 0;
             currentStream = null;
@@ -623,15 +632,20 @@
                 retryTimer = null;
             }
 
+            pendingIceCandidates = [];
+
             if (peerConnection) {
                 peerConnection.ontrack = null;
                 peerConnection.onconnectionstatechange = null;
+                peerConnection.onicecandidate = null;
                 peerConnection.close();
                 peerConnection = null;
             }
 
             if (sessionUrl) {
-                fetch(sessionUrl, {method: 'DELETE'}).catch(() => { });
+                try {
+                    await fetch(sessionUrl, {method: 'DELETE'});
+                } catch { }
                 sessionUrl = null;
             }
         }
@@ -647,31 +661,66 @@
                     return;
                 }
 
+                if (peer.connectionState === 'connected') {
+                    connectAttempts = 0;
+                }
                 lastFrameAt = Date.now();
                 watchVideoFrames(peer);
             });
         }
 
-        /** @param {number} [delayMs=2000] */
-        function scheduleReconnect(delayMs = 2000) {
+        /** @param {number} [delayMs=500] */
+        function scheduleReconnect(delayMs = 500) {
             if (stopped || retryTimer) {
                 return;
             }
 
-            cleanup();
             retryTimer = setTimeout(() => {
                 retryTimer = null;
                 connect();
             }, delayMs);
         }
 
+        function computeBackoff(attempts) {
+            return Math.min(100 * Math.pow(2, attempts), 2000);
+        }
+
+        function scheduleReconnectWithBackoff() {
+            if (stopped || retryTimer) {
+                return;
+            }
+            scheduleReconnect(computeBackoff(connectAttempts));
+            connectAttempts++;
+        }
+
         async function connect() {
-            cleanup();
+            await cleanup();
 
             const peer = new RTCPeerConnection({iceServers: []});
             peerConnection = peer;
 
             peer.addTransceiver('video', {direction: 'recvonly'});
+            peer.onicecandidate = (event) => {
+                if (peer !== peerConnection) {
+                    return;
+                }
+
+                if (!event.candidate) {
+                    return;
+                }
+
+                const candidateSdp = 'a=' + event.candidate.candidate + '\r\n';
+
+                if (sessionUrl) {
+                    fetch(sessionUrl, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/trickle-ice-sdpfrag'},
+                        body: candidateSdp,
+                    }).catch(() => { });
+                } else {
+                    pendingIceCandidates.push(candidateSdp);
+                }
+            };
             peer.ontrack = (event) => {
                 if (peer !== peerConnection) {
                     return;
@@ -682,7 +731,7 @@
 
                 event.track.onended = () => {
                     if (peer === peerConnection) {
-                        scheduleReconnect(0);
+                        scheduleReconnectWithBackoff();
                     }
                 };
 
@@ -704,7 +753,7 @@
                 }
 
                 if (state === 'failed' || state === 'closed') {
-                    scheduleReconnect();
+                    scheduleReconnectWithBackoff();
                 }
             };
 
@@ -731,6 +780,16 @@
                 }
 
                 sessionUrl = new URL(response.headers.get('location'), WHEP_URL).toString();
+
+                for (const candidate of pendingIceCandidates) {
+                    fetch(sessionUrl, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/trickle-ice-sdpfrag'},
+                        body: candidate,
+                    }).catch(() => { });
+                }
+                pendingIceCandidates = [];
+
                 const answer = await response.text();
                 await peer.setRemoteDescription({type: 'answer', sdp: answer});
             } catch (error) {
@@ -739,7 +798,7 @@
                 }
 
                 console.error('[playing]', error);
-                scheduleReconnect();
+                scheduleReconnectWithBackoff();
             }
         }
 
@@ -763,10 +822,13 @@
                 if (video.currentTime !== lastPlaybackTime) {
                     lastPlaybackTime = video.currentTime;
                     lastFrameAt = now;
+                    if (peerConnection?.connectionState === 'connected') {
+                        connectAttempts = 0;
+                    }
                 }
             }
 
-            if (lastFrameAt && now - lastFrameAt > 1200) {
+            if (lastFrameAt && now - lastFrameAt > 8000) {
                 scheduleReconnect(0);
             }
         }, 400);
