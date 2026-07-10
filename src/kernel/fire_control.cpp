@@ -4,6 +4,7 @@
 #include "module/fire_control/trajectory_solution.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
+#include "utility/repeat.hpp"
 #include "utility/serializable.hpp"
 
 #include <algorithm>
@@ -53,6 +54,17 @@ struct FireController::Impl {
     std::int8_t last_armor_idx = -1;
 
     Printer logging { "fire" };
+
+    Repeat single_rune_actions {
+        Repeat::Action { "idle", 0.4 },
+        Repeat::Action { "shoot", 0.2 },
+    };
+    Repeat multiple_run_actions {
+        Repeat::Action { "1-idle", 0.4 },
+        Repeat::Action { "1-shoot", 0.2 },
+        Repeat::Action { "2-idle", 0.4 },
+        Repeat::Action { "2-shoot", 0.2 },
+    };
 
     static constexpr auto yaw_angle(const Point3d& center, const Point3d& armor) {
         const auto v1_x = -center.x;
@@ -110,17 +122,21 @@ struct FireController::Impl {
     }
 
     // @return 序号, 是否预瞄
-    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window) const
+    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window)
         -> std::tuple<std::int8_t, bool> {
 
         const auto aimpoints = trackable.get_aimpoints();
         const auto omega     = trackable.get_rotation_speed();
 
-        if (aimpoints.size() == 1) {
-            return { std::int8_t { 0 }, false };
+        // 能量机关
+        if (aimpoints.size() == 5) {
+            // TODO:
+            return { 0, false };
         }
 
-        { // 倾向于使用上一帧的有效装甲板
+        {
+            // 倾向于使用上一帧的有效装甲板
+            // FIXME: 在边界时会疯狂跳变
             const auto length = static_cast<std::int8_t>(aimpoints.size());
             if ((last_armor_idx >= 0) && (last_armor_idx < length)) {
                 const auto idx = last_armor_idx;
@@ -183,7 +199,7 @@ struct FireController::Impl {
         };
     }
 
-    auto aim(const Trackable& trackable) const -> std::optional<Aimed> {
+    auto aim(const Trackable& trackable) -> std::optional<Aimed> {
 
         const auto direction = trackable.get_direction();
         const auto distance  = std::sqrt(

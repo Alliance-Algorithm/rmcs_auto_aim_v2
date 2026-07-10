@@ -112,6 +112,12 @@ ament_add_gtest(
     ${TEST_DIR}/transform_communication.cpp
 )
 
+# Repeat
+ament_add_gtest(
+    test_repeat
+    ${TEST_DIR}/repeat.cpp
+)
+
 # Rune
 # ament_add_gtest(
 #     test_rune
