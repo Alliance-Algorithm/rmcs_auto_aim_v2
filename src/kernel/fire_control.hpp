@@ -29,6 +29,8 @@ public:
         bool shoot   = false;
         bool pre_aim = false;
 
+        bool single_shoot = false;
+
         Point3d center = { };
         Point3d attack = { };
     };

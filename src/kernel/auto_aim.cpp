@@ -262,6 +262,7 @@ struct AutoAim::Impl {
                 if (auto aimed = fire->aim(*trackable)) {
                     cmd.should_track = true;
                     cmd.should_shoot = aimed->shoot;
+                    cmd.single_shoot = aimed->single_shoot;
                     cmd.yaw          = aimed->yaw;
                     cmd.pitch        = aimed->pitch;
                     cmd.robot_center = aimed->center;

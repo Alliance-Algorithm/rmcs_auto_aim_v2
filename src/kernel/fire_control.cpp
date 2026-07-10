@@ -47,24 +47,25 @@ struct FireController::Impl {
         };
     } config;
 
-    std::unique_ptr<ShootEvaluator> shoot_evaluator;
-
     State state;
+    bool single_shoot = false;
 
     std::int8_t last_armor_idx = -1;
-
-    Printer logging { "fire" };
 
     Repeat single_rune_actions {
         Repeat::Action { "idle", 0.4 },
         Repeat::Action { "shoot", 0.2 },
     };
-    Repeat multiple_run_actions {
+    Repeat multiple_rune_actions {
         Repeat::Action { "1-idle", 0.4 },
         Repeat::Action { "1-shoot", 0.2 },
         Repeat::Action { "2-idle", 0.4 },
         Repeat::Action { "2-shoot", 0.2 },
     };
+    AimPoints last_aimpoints;
+
+    Printer logging { "fire" };
+    std::unique_ptr<ShootEvaluator> shoot_evaluator;
 
     static constexpr auto yaw_angle(const Point3d& center, const Point3d& armor) {
         const auto v1_x = -center.x;
@@ -125,15 +126,53 @@ struct FireController::Impl {
     auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window)
         -> std::tuple<std::int8_t, bool> {
 
-        const auto aimpoints = trackable.get_aimpoints();
-        const auto omega     = trackable.get_rotation_speed();
+        auto aimpoints = trackable.get_aimpoints();
+        auto omega     = trackable.get_rotation_speed();
 
         // 能量机关
         if (aimpoints.size() == 5) {
-            // TODO:
-            return { 0, false };
-        }
+            single_shoot = true;
 
+            if (!aimpoints.same_valid(last_aimpoints)) {
+                single_rune_actions.stop();
+                multiple_rune_actions.stop();
+            }
+            last_aimpoints = std::move(aimpoints);
+
+            const auto indices = last_aimpoints.valid_indices();
+            /*^^*/ if (indices.size() == 1) {
+                if (single_rune_actions.started() == false) {
+                    single_rune_actions.start();
+                }
+
+                const auto tag = single_rune_actions.tick();
+                if (tag == "idle") {
+                    return { static_cast<std::int8_t>(indices[0]), true };
+                } else {
+                    return { static_cast<std::int8_t>(indices[0]), false };
+                }
+            } else if (indices.size() == 2) {
+                if (multiple_rune_actions.started() == false) {
+                    multiple_rune_actions.start();
+                }
+
+                const auto tag = multiple_rune_actions.tick();
+                /*^^*/ if (tag == "1-idle") {
+                    return { static_cast<std::int8_t>(indices[0]), true };
+                } else if (tag == "1-shoot") {
+                    return { static_cast<std::int8_t>(indices[0]), false };
+                } else if (tag == "2-idle") {
+                    return { static_cast<std::int8_t>(indices[1]), true };
+                } else if (tag == "2-shoot") {
+                    return { static_cast<std::int8_t>(indices[1]), false };
+                }
+            }
+
+            return { -1, true }; // 不存在的情况
+        }
+        single_shoot = false;
+
+        // 前哨站与机器人
         {
             // 倾向于使用上一帧的有效装甲板
             // FIXME: 在边界时会疯狂跳变
@@ -174,7 +213,7 @@ struct FireController::Impl {
                 next_idx   = i;
             }
         }
-        return std::tuple { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
+        return { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
     }
 
     auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, double> {
@@ -272,12 +311,13 @@ struct FireController::Impl {
                     state.yaw, state.pitch);
 
             return Aimed {
-                .yaw     = yaw,
-                .pitch   = pitch,
-                .shoot   = shoot,
-                .pre_aim = pre_aim,
-                .center  = center,
-                .attack  = attack,
+                .yaw          = yaw,
+                .pitch        = pitch,
+                .shoot        = shoot,
+                .pre_aim      = pre_aim,
+                .single_shoot = single_shoot,
+                .center       = center,
+                .attack       = attack,
             };
         }
         return std::nullopt;

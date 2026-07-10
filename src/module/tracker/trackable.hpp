@@ -42,7 +42,7 @@ struct Ins : public Trackable {
             { state.get_aimpoints() };
         };
         static_assert(kHasAimpoints, "State::get_aimpoints()");
-        return state.get_aimpoints();
+        return AimPoints { state.get_aimpoints() };
     }
     auto get_direction() const -> Point3d override {
         constexpr auto kHasDirection = requires {

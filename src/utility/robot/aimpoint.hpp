@@ -25,8 +25,8 @@ struct AimPoints : std::vector<AimPoint> {
     using vector::vector;
 
     // 目前只有 Rune 需要有效性判断，为简化 Robot 和 Outpost 的实现逻辑，
-    // 保留此隐式转换
-    AimPoints(const std::vector<Point3d>& points) { // NOLINT
+    // 保留此显式转换以兼容接口
+    explicit AimPoints(const std::vector<Point3d>& points) {
         vector::reserve(points.size());
         for (const auto point : points) {
             vector::emplace_back(point);
@@ -42,9 +42,11 @@ struct AimPoints : std::vector<AimPoint> {
             return p1.valid == p2.valid;
         });
     }
-    auto valid_count() const -> std::size_t {
-        // Valid 的数量
-        return std::ranges::count_if(*this, &AimPoint::valid);
+
+    auto valid_indices() const {
+        constexpr auto pred = [](const auto& pair) { return std::get<1>(pair).valid; };
+        return std::ranges::to<std::vector<std::size_t>>(
+            *this | std::views::enumerate | std::views::filter(pred) | std::views::keys);
     }
 };
 
