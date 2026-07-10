@@ -27,10 +27,12 @@ struct FireController::Impl {
 
         std::array<double, 2> attack_window { 20.0, 20.0 };
 
-        double yaw_tolerance { 0.07 };
-        double pitch_tolerance { 0.04 };
-        bool require_stable_command { true };
-        bool is_lazy_gimbal { false };
+        double yaw_tolerance   = 0.07;
+        double pitch_tolerance = 0.04;
+
+        bool require_stable_command = true;
+        bool is_lazy_gimbal         = false;
+        bool skip_pose_check        = false; // TODO:
 
         static constexpr std::tuple metas {
             // clang-format off
@@ -300,20 +302,25 @@ struct FireController::Impl {
             pitch = pitch + config.offset_pitch;
 
             // 射击评估
-            const auto shoot = !pre_aim
-                && shoot_evaluator->evaluate(
-                    {
-                        .yaw    = yaw,
-                        .pitch  = pitch,
-                        .center = center,
-                        .armor  = attack,
-                    },
-                    state.yaw, state.pitch);
+            auto should_shoot = true;
+            if (pre_aim) {
+                should_shoot = false;
+            } else if (config.skip_pose_check) {
+                should_shoot = true;
+            } else {
+                const auto cmd = ShootEvaluator::Command {
+                    .yaw    = yaw,
+                    .pitch  = pitch,
+                    .center = center,
+                    .armor  = attack,
+                };
+                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+            }
 
             return Aimed {
                 .yaw          = yaw,
                 .pitch        = pitch,
-                .shoot        = shoot,
+                .shoot        = should_shoot,
                 .pre_aim      = pre_aim,
                 .single_shoot = single_shoot,
                 .center       = center,

@@ -64,6 +64,7 @@ struct ReprojectionSolution {
 };
 
 namespace util {
+    // 注意，point_camera 为相机坐标系，而非 ROS 系
     auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
         -> std::optional<Point2d>;
 }

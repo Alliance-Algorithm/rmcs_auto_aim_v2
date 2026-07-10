@@ -9,12 +9,14 @@
 
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
-#include "utility/math/solve_pnp/pnp_solution.hpp" // FIXME: REMOVE SOON
 #include "utility/panic.hpp"
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
+#include "utility/rclcpp/visual/point.hpp"
 #include "utility/singleton/running.hpp"
+
+#include "module/tracker/model/rune.hpp"
 
 #include <algorithm>
 #include <csignal>
@@ -41,8 +43,14 @@ struct AutoAim::Impl {
 
     std::jthread worker;
 
-    SingleRunePnpSolution pnp_solution;
     FramerateCounter counter;
+
+    // 临时：能量机关 RuneModel + 可视化（独立于 tracker）
+    RclcppNode rune_node { "rune_debug" };
+    std::unique_ptr<RuneModel> rune;
+    std::unique_ptr<visual::Points> rune_points;
+    bool rune_inited = false;
+    Timestamp rune_last_stamp { };
 
     auto run(const std::stop_token& stop) -> void {
         while (util::get_running() && !stop.stop_requested()) {
@@ -114,7 +122,7 @@ struct AutoAim::Impl {
             auto lightbar2ds = Lightbar2ds { };
             {
                 // FIXME:
-                id = RobotId::BLUE_SENTRY;
+                id = RobotId::BLUE_HERO;
                 if (id != RobotId::UNKNOWN) {
                     detector.update_detect_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
@@ -132,7 +140,6 @@ struct AutoAim::Impl {
                         .top_left = icon.center.make<cv::Point>(),
                         .color    = kGreen,
                     });
-                    pnp_solution.input.icon = icon.center;
                 }
                 for (const auto& bullseye : result.bullseyes) {
                     if (!bullseye.active) {
@@ -142,21 +149,6 @@ struct AutoAim::Impl {
                                 .radius = 3,
                                 .color  = kGreen,
                             });
-                        }
-                        { // FIXME: 临时测试
-                            auto& input = pnp_solution.input;
-
-                            input.center  = bullseye.center;
-                            input.corners = bullseye.corners;
-
-                            if (pnp_solution.solve()) {
-                                visual.publish(
-                                    Transform {
-                                        pnp_solution.result.translation,
-                                        pnp_solution.result.orientation,
-                                    },
-                                    "rune_center");
-                            }
                         }
                     }
                     visual.draw_later(Canvas::Point {
@@ -178,6 +170,69 @@ struct AutoAim::Impl {
 
                 armor2ds    = std::move(result.armors);
                 lightbar2ds = std::move(result.lightbars);
+
+                // 临时：能量机关 RuneModel + Points 可视化（独立于 tracker）
+                {
+                    using namespace util::visual;
+
+                    rune->update_transform(iso);
+
+                    std::erase_if(
+                        result.bullseyes, [](const RuneBullseye& item) { return item.active; });
+
+                    if (rune_inited == false) {
+                        rune_inited     = rune->init(result.bullseyes, result.icons);
+                        rune_last_stamp = image->timestamp;
+                    } else {
+                        const auto dt =
+                            std::chrono::duration<double>(image->timestamp - rune_last_stamp)
+                                .count();
+                        rune_last_stamp = image->timestamp;
+                        rune->predict(dt);
+                        rune->correct(result.bullseyes, result.icons);
+                    }
+
+                    if (rune_inited) {
+                        const auto state     = rune->state();
+                        const auto aimpoints = state.get_aimpoints();
+
+                        auto points = std::vector<Points::Point> { };
+                        points.reserve(aimpoints.size() + 1);
+
+                        for (const auto& aim : aimpoints) {
+                            points.push_back({
+                                .x = aim.x,
+                                .y = aim.y,
+                                .z = aim.z,
+                                .r = 1.0F,
+                                .g = aim.valid ? 0.0F : 1.0F,
+                                .b = 0.0F,
+                                .a = 1.0F,
+                            });
+
+                            if (!aim.valid) {
+                                if (auto p = estimator.make_point2d(aim)) {
+                                    visual.draw_later(Canvas::Point {
+                                        .origin = p->make<cv::Point2i>(),
+                                        .radius = 5,
+                                        .color  = kYellow,
+                                    });
+                                }
+                            }
+                        }
+                        points.push_back({
+                            .x = state.cx,
+                            .y = state.cy,
+                            .z = state.cz,
+                            .r = 0.0F,
+                            .g = 0.0F,
+                            .b = 1.0F,
+                            .a = 1.0F,
+                        });
+
+                        rune_points->update(points);
+                    }
+                }
             }
 
             /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
@@ -346,8 +401,16 @@ struct AutoAim::Impl {
 
         fire = std::make_unique<FireController>(configs["fire_control"]);
 
-        pnp_solution.input.cam.from(camera_matrix);
-        pnp_solution.input.cam.from(distort_coeff);
+        // 临时：能量机关 RuneModel + Points 可视化
+        rune_node.set_pub_topic_prefix("/rune_debug/");
+        rune = std::make_unique<RuneModel>(RuneModel::Config { });
+        rune->update_camera(camera_matrix, distort_coeff);
+        rune_points = std::make_unique<visual::Points>(visual::Points::Config {
+            .rclcpp = rune_node,
+            .name   = "rune_blades",
+            .tf     = "odom_imu_link",
+            .size   = 0.2,
+        });
 
         worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }
