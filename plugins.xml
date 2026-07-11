@@ -2,4 +2,16 @@
   <class type="rmcs::AutoAimComponent" base_class_type="rmcs_executor::Component">
     <description>...</description>
   </class>
+  <class type="rmcs::AutoAimCapturerComponent" base_class_type="rmcs_executor::Component">
+    <description>Captures and synchronizes Hikcamera frames for auto aim.</description>
+  </class>
+  <class type="rmcs::AutoAimRecorderComponent" base_class_type="rmcs_executor::Component">
+    <description>Records CameraFrame events to raw Bayer and CSV files.</description>
+  </class>
+  <class type="rmcs::AutoAimPlayerComponent" base_class_type="rmcs_executor::Component">
+    <description>Replays CameraFrame events from raw Bayer and CSV files.</description>
+  </class>
+  <class type="rmcs::AutoAimVideoPlayerComponent" base_class_type="rmcs_executor::Component">
+    <description>Plays CameraFrame events from a regular video file.</description>
+  </class>
 </library>

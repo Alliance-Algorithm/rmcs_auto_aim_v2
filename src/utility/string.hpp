@@ -1,8 +1,27 @@
 #pragma once
+
+#include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <string_view>
 
 namespace rmcs::util {
+
+[[nodiscard]] inline auto trim(std::string_view data) noexcept -> std::string_view {
+    while (!data.empty() && std::isspace(static_cast<unsigned char>(data.front())) != 0)
+        data.remove_prefix(1);
+    while (!data.empty() && std::isspace(static_cast<unsigned char>(data.back())) != 0)
+        data.remove_suffix(1);
+    return data;
+}
+
+[[nodiscard]] inline auto ascii_iequals(std::string_view lhs, std::string_view rhs) noexcept
+    -> bool {
+    auto lower = [](char ch) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    };
+    return std::ranges::equal(lhs, rhs, std::ranges::equal_to { }, lower, lower);
+}
 
 template <std::size_t N>
 struct StaticString {

@@ -217,7 +217,7 @@ struct RotationEstimator::Impl {
 
     auto update(const Image& image) -> std::optional<Estimate> {
 
-        const auto& input = image.mat;
+        const auto& input = image.mat();
         if (input.empty()) return std::nullopt;
 
         auto raw_gray = cv::Mat { };
@@ -238,7 +238,7 @@ struct RotationEstimator::Impl {
             cv::bitwise_and(allowed_mask, lightbar_mask, allowed_mask);
         }
 
-        const auto timestamp = image.timestamp;
+        const auto timestamp = image.timestamp();
 
         addition           = { };
         addition.timestamp = timestamp;

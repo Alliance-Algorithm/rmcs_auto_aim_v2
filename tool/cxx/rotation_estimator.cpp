@@ -12,15 +12,22 @@
 #include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include <rmcs_msgs/camera_frame.hpp>
+
 namespace {
 
 using RotationMessage = geometry_msgs::msg::Vector3Stamped;
+
+struct SnapshotImage {
+    cv::Mat mat;
+    rmcs::Timestamp timestamp { };
+};
 
 struct LatestFrame {
     std::mutex mutex;
     std::condition_variable cv;
 
-    std::unique_ptr<rmcs::Image> image;
+    std::unique_ptr<SnapshotImage> image;
     std::uint64_t sequence { 0 };
 };
 
@@ -144,7 +151,7 @@ auto main(int argc, char** argv) -> int {
                 continue;
             }
 
-            auto image       = std::make_unique<rmcs::Image>();
+            auto image       = std::make_unique<SnapshotImage>();
             image->mat       = captured->mat.clone();
             image->timestamp = captured->timestamp;
 
@@ -168,7 +175,7 @@ auto main(int argc, char** argv) -> int {
     while (rclcpp::ok()) {
         rclcpp::spin_some(node);
 
-        auto image = std::unique_ptr<rmcs::Image> { };
+        auto image = std::unique_ptr<SnapshotImage> { };
         {
             auto lock = std::unique_lock { latest_frame.mutex };
             latest_frame.cv.wait_for(lock, std::chrono::milliseconds { 5 },
@@ -181,9 +188,20 @@ auto main(int argc, char** argv) -> int {
 
         statistics.processed += 1;
 
-        const auto update_begin = std::chrono::steady_clock::now();
-        auto estimate           = estimator.update(*image);
-        const auto update_end   = std::chrono::steady_clock::now();
+        const auto update_begin          = std::chrono::steady_clock::now();
+        auto camera_frame                = std::make_shared<rmcs_msgs::CameraFrame>();
+        camera_frame->exposure_timestamp = image->timestamp;
+
+        auto mat = cv::Mat {
+            rmcs_msgs::CameraFrame::kHeight,
+            rmcs_msgs::CameraFrame::kWidth,
+            CV_8UC3,
+            reinterpret_cast<void*>(camera_frame->data.data()),
+        };
+        image->mat.copyTo(mat);
+
+        auto estimate         = estimator.update(rmcs::Image { std::move(camera_frame) });
+        const auto update_end = std::chrono::steady_clock::now();
         statistics.add_update_time(update_end - update_begin);
         const auto& addition = estimator.addition();
 

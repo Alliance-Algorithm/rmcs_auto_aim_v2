@@ -1,7 +1,14 @@
 #include "kernel/auto_aim.hpp"
 
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <thread>
+
 #include <eigen3/Eigen/Geometry>
 #include <rmcs_executor/component.hpp>
+#include <rmcs_msgs/camera_frame.hpp>
 #include <rmcs_msgs/mouse.hpp>
 #include <rmcs_msgs/robot_id.hpp>
 #include <rmcs_msgs/switch.hpp>
@@ -13,6 +20,35 @@ class AutoAimComponent final : public rmcs_executor::Component {
 
 private:
     AutoAim auto_aim { };
+
+    EventInputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> camera_frame {
+        [this](const std::shared_ptr<const rmcs_msgs::CameraFrame>& frame) {
+            if (!frame || camera_frame_stop_requested.load(std::memory_order::relaxed)) return;
+
+            latest_camera_frame.store(frame, std::memory_order::release);
+            camera_frame_event_count.fetch_add(1, std::memory_order::release);
+            camera_frame_event_count.notify_one();
+        },
+    };
+
+    std::atomic<std::shared_ptr<const rmcs_msgs::CameraFrame>> latest_camera_frame { nullptr };
+    std::atomic<std::uint32_t> camera_frame_event_count { 0 };
+    std::atomic<bool> camera_frame_stop_requested { false };
+    std::jthread camera_frame_worker { [this](const std::stop_token& stop) {
+        while (!stop.stop_requested()
+            && !camera_frame_stop_requested.load(std::memory_order::relaxed)) {
+            if (auto frame = latest_camera_frame.exchange(nullptr, std::memory_order::acq_rel)) {
+                auto_aim.process(Image { std::move(frame) });
+                continue;
+            }
+
+            const auto old = camera_frame_event_count.load(std::memory_order::relaxed);
+            if (!latest_camera_frame.load(std::memory_order::acquire) && !stop.stop_requested()
+                && !camera_frame_stop_requested.load(std::memory_order::relaxed)) {
+                camera_frame_event_count.wait(old, std::memory_order::acquire);
+            }
+        }
+    } };
 
     InputInterface<Eigen::Isometry3d> camera_transform;
     InputInterface<Eigen::Vector3d> barrel_direction;
@@ -33,6 +69,7 @@ private:
 
 public:
     AutoAimComponent() noexcept {
+        register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
         register_input("/auto_aim/camera_transform", camera_transform, false);
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
         register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
@@ -44,6 +81,13 @@ public:
         register_output("/auto_aim/should_shoot", should_shoot, false);
         register_output("/auto_aim/control_direction", target_direction, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
+    }
+
+    ~AutoAimComponent() override {
+        camera_frame_stop_requested.store(true, std::memory_order::relaxed);
+        camera_frame_worker.request_stop();
+        camera_frame_event_count.fetch_add(1, std::memory_order::release);
+        camera_frame_event_count.notify_one();
     }
 
     auto before_updating() -> void override {

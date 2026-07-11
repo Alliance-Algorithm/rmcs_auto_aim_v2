@@ -26,7 +26,9 @@ struct RclcppNode::Details {
         : rclcpp { std::make_shared<rclcpp::Node>(name,
               rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true)) } { }
 
-    auto spin_once() const noexcept { rclcpp::spin_some(rclcpp); }
+    auto spin_once() const noexcept {
+        if (rclcpp::ok()) rclcpp::spin_some(rclcpp);
+    }
 
     template <class T>
     auto make_pub(const std::string& topic_name, const rclcpp::QoS& qos) noexcept {

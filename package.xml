@@ -19,6 +19,7 @@
   <depend>fast_tf</depend>
   <depend>std_msgs</depend>
   <depend>rmcs_msgs</depend>
+  <depend>rmcs_utility</depend>
   <depend>hikcamera</depend>
 
   <export>

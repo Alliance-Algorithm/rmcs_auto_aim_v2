@@ -21,12 +21,12 @@ defaultPlayerPort = 18080
 defaultMediamtxPort = 8889
 playerRoute = "/res/playing.html"
 playerFile = "playing.html"
-fifoRecordPath = "/tmp/autoaim/cap/record"
-contextPath = "/tmp/autoaim/cap/context"
-fifoPlayPause = "/tmp/autoaim/local_video/play_pause"
-fifoStepForward = "/tmp/autoaim/local_video/step_forward"
-fifoStepBackward = "/tmp/autoaim/local_video/step_backward"
-contextLocalVideo = "/tmp/autoaim/local_video/context"
+fifoRecorderStart = "/tmp/autoaim/recorder/start"
+fifoRecorderStop = "/tmp/autoaim/recorder/stop"
+contextRecorderPath = "/tmp/autoaim/recorder/context"
+fifoPlayerPause = "/tmp/autoaim/player/pause"
+fifoPlayerStep = "/tmp/autoaim/player/step"
+contextPlayerPath = "/tmp/autoaim/player/context"
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────────────────
@@ -45,18 +45,23 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
             return
         return super().do_GET()
 
-    localVideoRoutes = {
-        "/api/play_pause": fifoPlayPause,
-        "/api/step_forward": fifoStepForward,
-        "/api/step_backward": fifoStepBackward,
-    }
-
     def do_POST(self) -> None:
         if self.path == "/api/record":
             self.handleRecord()
             return
-        if self.path in self.localVideoRoutes:
-            self.write_to_fifo(self.localVideoRoutes[self.path], "1")
+        if self.path == "/api/play_pause":
+            try:
+                paused = self.readPlayerPaused()
+            except OSError as e:
+                self.jsonResponse(503, {"status": "error", "message": str(e)})
+                return
+            self.write_to_fifo(fifoPlayerPause, "false" if paused else "true")
+            return
+        if self.path == "/api/step_forward":
+            self.write_to_fifo(fifoPlayerStep, "1")
+            return
+        if self.path == "/api/step_backward":
+            self.write_to_fifo(fifoPlayerStep, "-1")
             return
         self.send_error(404, "Not Found")
 
@@ -64,12 +69,13 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
         contentLength = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(contentLength).decode().strip()
 
-        if body not in ("0", "1", "true", "false"):
+        if body in ("1", "true"):
+            self.write_to_fifo(fifoRecorderStart, "1")
+        elif body in ("0", "false"):
+            self.write_to_fifo(fifoRecorderStop, "1")
+        else:
             self.jsonResponse(
                 400, {"status": "error", "message": "invalid value"})
-            return
-
-        self.write_to_fifo(fifoRecordPath, body)
 
     def write_to_fifo(self, path: str, value: str) -> None:
         fd = None
@@ -94,20 +100,16 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
     def readContext(self) -> dict[str, object]:
         context: dict[str, object] = {
             "filename": "not started",
-            "recordStatus": "context not found",
+            "recordStatus": "unavailable",
             "recordOn": False,
-            "source": "",
+            "recorderAvailable": False,
             "playing": True,
+            "playerAvailable": False,
         }
 
-        self.readFileToContext(contextPath, context)
-        self.readFileToContext(contextLocalVideo, context)
-
-        return context
-
-    def readFileToContext(self, path: str, context: dict[str, object]) -> None:
+        parsed_recorder = False
         try:
-            with open(path, "r") as f:
+            with open(contextRecorderPath, "r") as f:
                 for line in f:
                     name, separator, content = line.partition(":")
                     if not separator:
@@ -115,16 +117,45 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
                     value = content.strip()
                     if name == "filename":
                         context["filename"] = value
-                    elif name == "status":
-                        context["recordStatus"] = value
-                    elif name == "record_on":
+                        parsed_recorder = True
+                    elif name == "enabled":
                         context["recordOn"] = value in ("1", "true")
-                    elif name == "playing":
-                        context["playing"] = value == "1"
-                    elif name == "source":
-                        context["source"] = value
+                        parsed_recorder = True
+        except OSError:
+            parsed_recorder = False
+
+        if parsed_recorder:
+            context["recorderAvailable"] = True
+            if context["recordOn"]:
+                context["recordStatus"] = "recording"
+            elif context["filename"] not in ("", "not started"):
+                context["recordStatus"] = "stopped"
+            else:
+                context["recordStatus"] = "ready"
+
+        try:
+            context["playing"] = not self.readPlayerPaused()
+            context["playerAvailable"] = True
         except OSError:
             pass
+
+        return context
+
+    def readPlayerPaused(self) -> bool:
+        parsed = False
+        paused = False
+        with open(contextPlayerPath, "r") as f:
+            for line in f:
+                name, separator, content = line.partition(":")
+                if not separator:
+                    continue
+                if name != "paused":
+                    continue
+                paused = content.strip() in ("1", "true")
+                parsed = True
+        if not parsed:
+            raise OSError(f"Empty player context: {contextPlayerPath}")
+        return paused
 
     def jsonResponse(self, code: int, data: dict) -> None:
         body = json.dumps(data).encode()

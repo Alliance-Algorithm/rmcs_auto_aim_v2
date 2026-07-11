@@ -12,6 +12,17 @@ find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(OpenVINO REQUIRED)
 
+## mvs-usb3-core 是海康 MVS 的 usb3-only 版本，find.cmake 由 Dockerfile 生成
+if(CMAKE_SYSROOT)
+    set(HIK_MVS_SDK_ROOT "${CMAKE_SYSROOT}/opt/mvs-usb3-core")
+else()
+    set(HIK_MVS_SDK_ROOT "/opt/mvs-usb3-core")
+endif()
+
+find_package(MVSUSB3Core REQUIRED CONFIG
+    PATHS "${HIK_MVS_SDK_ROOT}" NO_DEFAULT_PATH
+)
+
 ## ROS2 相关依赖
 find_package(type_description_interfaces REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -26,8 +37,16 @@ find_package(rmcs_msgs REQUIRED)
 find_package(rmcs_executor REQUIRED)
 find_package(rmcs_description REQUIRED)
 find_package(fast_tf REQUIRED)
-find_package(hikcamera REQUIRED)
+find_package(rmcs_utility REQUIRED)
 
+
+set(AUTO_AIM_COMPONENT
+    ${PROJECT_SOURCE_DIR}/src/component.cpp
+    ${PROJECT_SOURCE_DIR}/src/io/capturer/capturer.cpp
+    ${PROJECT_SOURCE_DIR}/src/io/recorder/recorder.cpp
+    ${PROJECT_SOURCE_DIR}/src/io/recorder/player.cpp
+    ${PROJECT_SOURCE_DIR}/src/io/recorder/video_player.cpp
+)
 
 ## 代码资源搜索
 file(GLOB_RECURSE AUTO_AIM_UTILITY
@@ -54,27 +73,27 @@ add_library(
 target_include_directories(
     ${PROJECT_NAME}_utility
     PUBLIC
-        ${PROJECT_SOURCE_DIR}/src/
-        ${rmcs_msgs_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/src/
+    ${rmcs_msgs_INCLUDE_DIRS}
     PRIVATE
-        ${visualization_msgs_INCLUDE_DIRS}
-        ${geometry_msgs_INCLUDE_DIRS}
-        ${std_msgs_INCLUDE_DIRS}
-        ${tf2_ros_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
+    ${std_msgs_INCLUDE_DIRS}
+    ${tf2_ros_INCLUDE_DIRS}
 )
 target_link_libraries(
     ${PROJECT_NAME}_utility
     PUBLIC
-        yaml-cpp::yaml-cpp
-        ament_index_cpp::ament_index_cpp
-        rclcpp::rclcpp
-        ${OpenCV_LIBS}
-        ${rmcs_msgs_LIBRARIES}
+    yaml-cpp::yaml-cpp
+    ament_index_cpp::ament_index_cpp
+    rclcpp::rclcpp
+    ${OpenCV_LIBS}
+    ${rmcs_msgs_LIBRARIES}
     PRIVATE
-        ${visualization_msgs_LIBRARIES}
-        ${geometry_msgs_LIBRARIES}
-        ${std_msgs_LIBRARIES}
-        ${tf2_ros_LIBRARIES}
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+    ${std_msgs_LIBRARIES}
+    ${tf2_ros_LIBRARIES}
 )
 
 ## 核心构建: kernel and module
@@ -85,14 +104,12 @@ add_library(
 target_include_directories(
     ${PROJECT_NAME}_kernel
     PUBLIC
-        ${PROJECT_SOURCE_DIR}/src/
-    PRIVATE
-        ${hikcamera_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/src/
 )
 target_link_libraries(
     ${PROJECT_NAME}_kernel
     PUBLIC
-        ${PROJECT_NAME}_utility
+    ${PROJECT_NAME}_utility
 )
 
 add_library(
@@ -102,17 +119,13 @@ add_library(
 target_include_directories(
     ${PROJECT_NAME}_module
     PUBLIC
-        ${PROJECT_SOURCE_DIR}/src/
-    PRIVATE
-        ${hikcamera_INCLUDE_DIRS}
+    ${PROJECT_SOURCE_DIR}/src/
 )
 target_link_libraries(
     ${PROJECT_NAME}_module
     PUBLIC
-        ${PROJECT_NAME}_utility
-        openvino::runtime
-    PRIVATE
-        ${hikcamera_LIBRARIES}
+    ${PROJECT_NAME}_utility
+    openvino::runtime
 )
 
 ## 组件构建: component
@@ -122,37 +135,40 @@ set_source_files_properties(
 )
 add_library(
     ${PROJECT_NAME}_component SHARED
-    ${PROJECT_SOURCE_DIR}/src/component.cpp
+    ${AUTO_AIM_COMPONENT}
 )
 target_include_directories(
     ${PROJECT_NAME}_component
     PRIVATE
-        ${rmcs_description_INCLUDE_DIRS}
-        ${rmcs_executor_INCLUDE_DIRS}
+    ${rmcs_utility_INCLUDE_DIRS}
+    ${rmcs_description_INCLUDE_DIRS}
+    ${rmcs_executor_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
 )
 target_link_libraries(
     ${PROJECT_NAME}_component
     ${PROJECT_NAME}_kernel
     ${PROJECT_NAME}_module
+    MVSUSB3Core::MVSUSB3Core
     ${rmcs_executor_LIBRARIES}
 )
 
 ## 安装配置
 install(
     TARGETS
-        ${PROJECT_NAME}_component
-        ${PROJECT_NAME}_kernel
-        ${PROJECT_NAME}_module
-        ${PROJECT_NAME}_utility
+    ${PROJECT_NAME}_component
+    ${PROJECT_NAME}_kernel
+    ${PROJECT_NAME}_module
+    ${PROJECT_NAME}_utility
     DESTINATION
-        lib/
+    lib/
 )
 install(
     DIRECTORY
-        config/
-        models/
+    config/
+    models/
     DESTINATION
-        share/${PROJECT_NAME}
+    share/${PROJECT_NAME}
 )
 
 ## plugins for rmcs_executor

@@ -107,7 +107,12 @@ struct Tracker::Impl {
     Addition addition;
 
     explicit Impl(const YAML::Node& yaml) {
-        if (auto ret = config.serialize(yaml); !ret) {
+        auto compat_yaml = YAML::Clone(yaml);
+        if (!compat_yaml["fallback_color"] && compat_yaml["enemy_color"]) {
+            compat_yaml["fallback_color"] = compat_yaml["enemy_color"];
+        }
+
+        if (auto ret = config.serialize(compat_yaml); !ret) {
             logging.error("TrackerV2 初始化错误: {}", ret.error());
             throw std::runtime_error { "无法构造 TrackerV2" };
         }

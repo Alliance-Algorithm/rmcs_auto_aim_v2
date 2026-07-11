@@ -1,0 +1,29 @@
+rmcs_executor:
+  ros__parameters:
+    update_rate: 1000.0
+    components:
+      - rmcs::AutoAimCapturerComponent -> auto_aim_capturer
+      - rmcs::AutoAimRecorderComponent -> auto_aim_recorder
+
+auto_aim_capturer:
+  ros__parameters:
+    camera_name: ""
+    exposure_us: 2000.0
+    gain: 16.9807
+    framerate: 249.1
+    invert_image: false
+    rls_tau_sec: 10.0
+
+auto_aim_recorder:
+  ros__parameters:
+    output_path: "/tmp/autoaim/records"
+    queue_depth: 16
+    flush_every_n_frames: 64
+    max_duration_seconds: 0
+    max_videos_size_gb: 0.0
+
+auto_aim_player:
+  ros__parameters:
+    input_path: "/tmp/autoaim/records/<timestamp>"
+    loop_play: false
+    pause_fps: 30.0

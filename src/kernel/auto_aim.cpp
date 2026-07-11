@@ -1,6 +1,5 @@
 #include "auto_aim.hpp"
 
-#include "kernel/capturer.hpp"
 #include "kernel/detector.hpp"
 #include "kernel/fire_control.hpp"
 #include "kernel/pose_estimator.hpp"
@@ -13,14 +12,13 @@
 #include "utility/rclcpp/configuration.hpp"
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
-#include "utility/singleton/running.hpp"
 
 #include <algorithm>
-#include <csignal>
+#include <array>
+#include <chrono>
 #include <experimental/scope>
 #include <filesystem>
 #include <memory>
-#include <thread>
 
 using namespace rmcs;
 using namespace rmcs::util;
@@ -30,7 +28,6 @@ struct AutoAim::Impl {
     AutoAim& self;
     RclcppNode node { "auto_aim" };
 
-    Capturer cap { };
     Detector detector { };
     PoseEstimator estimator { };
     Visualization visual { };
@@ -38,281 +35,7 @@ struct AutoAim::Impl {
     std::unique_ptr<Tracker> tracker;
     std::unique_ptr<FireController> fire;
 
-    std::jthread worker;
-
     FramerateCounter counter;
-
-    auto run(const std::stop_token& stop) -> void {
-        while (util::get_running() && !stop.stop_requested()) {
-            using namespace rmcs_msgs;
-
-            node.spin_once();
-
-            auto image = cap.fetch_image();
-            if (!image) continue;
-
-            auto intent = bool { false };
-
-            auto max_yaw_vel = 0.0;
-            auto max_yaw_acc = 0.0;
-
-            auto iso   = Transform::kIdentity();
-            auto yaw   = 0.0;
-            auto pitch = 0.0;
-            auto id    = RobotId { RobotId::UNKNOWN };
-
-            auto track_ids = DeviceIds::Full();
-            {
-                using namespace std::chrono_literals;
-
-                std::lock_guard lock { self.context_mutex };
-                auto& context = self.current_context;
-
-                /// 8ms 是一个经验值，实际是多少延迟得进一步确定，
-                /// 但大部分情况下是有效的对齐
-                const auto time = image->timestamp - 8ms;
-                const auto best = std::ranges::min_element(
-                    context.transforms, [time](const auto& lhs, const auto& rhs) {
-                        return std::chrono::abs(lhs.timestamp - time)
-                            < std::chrono::abs(rhs.timestamp - time);
-                    });
-                if (best != context.transforms.end()) {
-                    iso   = best->transform;
-                    yaw   = best->yaw;
-                    pitch = best->pitch;
-                }
-
-                intent = context.aim_intent;
-
-                max_yaw_vel = context.max_yaw_vel;
-                max_yaw_acc = context.max_yaw_acc;
-
-                id = context.id;
-
-                track_ids = context.track_ids;
-            }
-            visual.publish(iso, "camera_link");
-            visual.publish(yaw, "yaw");
-
-            if (counter.tick()) {
-                node.info("fps: {:03} mya: {:03.1f} myv: {:02.2f}", counter.fps(), max_yaw_acc,
-                    max_yaw_vel);
-            }
-
-            [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
-                visual.draw_later( // 录制开关
-                    Canvas::Text { cap.recording() ? "RECORD ON" : "RECORD OFF", { 10, 700 } });
-                visual.draw_later( // 自瞄帧率
-                    Canvas::Text { std::format("FPS: {}", counter.fps()), { 10, 680 } });
-                visual.update_image(image->mat);
-            } };
-
-            /// [] 识别装甲板，灯条，大符页等元素
-            auto armor2ds    = Armor2ds { };
-            auto lightbar2ds = Lightbar2ds { };
-            auto rune_icons  = std::vector<RuneIcon> { };
-            auto rune_bullseyes = std::vector<RuneBullseye> { };
-            {
-                // FIXME:
-                id = RobotId::BLUE_SENTRY;
-                if (id != RobotId::UNKNOWN) {
-                    detector.update_detect_color(
-                        (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
-                }
-                auto result = detector.detect(image->mat);
-
-                for (const auto& icon : result.icons) {
-                    visual.draw_later(Canvas::Point {
-                        .origin = icon.center.make<cv::Point>(),
-                        .radius = 5,
-                        .color  = kGreen,
-                    });
-                    visual.draw_later(Canvas::Text {
-                        .content  = std::format("R: {:.3f}", icon.score),
-                        .top_left = icon.center.make<cv::Point>(),
-                        .color    = kGreen,
-                    });
-                }
-                for (const auto& bullseye : result.bullseyes) {
-                    if (!bullseye.active) {
-                        for (const auto p : bullseye.corners) {
-                            visual.draw_later(Canvas::Point {
-                                .origin = p.make<cv::Point>(),
-                                .radius = 3,
-                                .color  = kGreen,
-                            });
-                        }
-                    }
-                    visual.draw_later(Canvas::Point {
-                        .origin = bullseye.center.make<cv::Point>(),
-                        .radius = 5,
-                        .color  = kGreen,
-                    });
-                    visual.draw_later(Canvas::Text {
-                        .content  = std::format("B: {:.3f}", bullseye.score),
-                        .top_left = bullseye.center.make<cv::Point>(),
-                        .color    = kGreen,
-                    });
-                }
-                for (const auto& roi : result.areas) {
-                    visual.draw_later(roi);
-                }
-                visual.draw_later(result.armors);
-                visual.draw_later(result.green_light);
-
-                armor2ds    = std::move(result.armors);
-                lightbar2ds = std::move(result.lightbars);
-                rune_icons = std::move(result.icons);
-                rune_bullseyes = std::move(result.bullseyes);
-            }
-
-            /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
-            ///    三维装甲板仅作可视化用途
-            auto armor3ds = Armor3ds { };
-            {
-                estimator.update_camera_transform(iso);
-
-                auto result = estimator.estimate_armor(armor2ds, image->mat);
-
-                const auto& addition = estimator.addition();
-                visual.draw_later(addition.detected_2d);
-                // visual.draw_later(addition.areas);
-                // visual.draw_later(addition.predicted_near);
-                // visual.draw_later(addition.predicted_away);
-
-                visual.publish(addition.origin, "origin_armors");
-                visual.publish(addition.detected_3d, "outpost_lightbars");
-                visual.publish({ addition.center_3d, Orientation::kIdentity() }, "outpost_center");
-
-                armor3ds = std::move(result);
-            }
-            visual.publish(armor3ds, "visible_armors");
-
-            /// [] 跟踪目标，跟踪器里面维护了可见机器人的 EKF 状态
-            auto trackable = Trackable::Unique { };
-            {
-                using namespace rmcs_msgs;
-                if (id != RobotId::UNKNOWN) {
-                    tracker->update_track_color(
-                        (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
-                    // 哨兵自瞄常开，需要超时检测
-                    tracker->update_aim_cleanup(
-                        id == RobotId::RED_SENTRY || id == RobotId::BLUE_SENTRY);
-                }
-                tracker->update_aim_intent(intent);
-                tracker->update_track_genre(track_ids);
-                tracker->update_camera(iso);
-
-                tracker->clean();
-                tracker->store(armor2ds);
-                tracker->store(armor3ds);
-                tracker->store(lightbar2ds);
-                tracker->store(rune_icons);
-                tracker->store(rune_bullseyes);
-
-                trackable = tracker->execute(image->timestamp);
-
-                const auto& addition = tracker->addition();
-                for (const auto& item : addition.tracked2d) {
-                    visual.draw_later(Canvas::ArmorShape {
-                        .shape = item,
-                        .color = { 127, 127, 127 },
-                    });
-                }
-                for (const auto& item : addition.lightbars) {
-                    visual.draw_later(Canvas::Text {
-                        .content  = std::to_string(item.id),
-                        .top_left = item.point.make<cv::Point2i>(),
-                        .color    = kYellow,
-                    });
-                }
-                for (const auto& item : addition.rune_features) {
-                    visual.draw_later(Canvas::Point {
-                        .origin = item.point.make<cv::Point2i>(),
-                        .radius = 4,
-                        .color  = kYellow,
-                    });
-                }
-                if (addition.rune_polygon) {
-                    const auto& polygon = *addition.rune_polygon;
-                    auto center         = Point2d { };
-                    for (const auto& blade : polygon.blades) {
-                        center.x += blade.x;
-                        center.y += blade.y;
-                    }
-                    center.x /= static_cast<double>(polygon.blades.size());
-                    center.y /= static_cast<double>(polygon.blades.size());
-
-                    for (std::size_t index = 0; index < polygon.blades.size(); ++index) {
-                        const auto& begin = polygon.blades[index];
-                        const auto& end = polygon.blades[(index + 1) % polygon.blades.size()];
-                        visual.draw_later(Canvas::Line {
-                            .begin = begin.make<cv::Point2i>(),
-                            .end   = end.make<cv::Point2i>(),
-                            .color = kYellow,
-                        });
-                    }
-                    visual.draw_later(Canvas::Line {
-                        .begin = polygon.icon.make<cv::Point2i>(),
-                        .end   = center.make<cv::Point2i>(),
-                        .color = kYellow,
-                    });
-                }
-                for (const auto& info : addition.infos) {
-                    if (auto p = estimator.make_point2d(info.point)) {
-                        visual.draw_later(Canvas::Text {
-                            .content  = info.text,
-                            .top_left = p->make<cv::Point2i>(),
-                        });
-                    }
-                }
-                visual.publish(addition.tracked3d, "trackable");
-            }
-
-            /// [] 根据跟踪目标求解弹道及控制指令，下发控制层
-            auto cmd = Command::kInvalid();
-            if (trackable) {
-                fire->update({
-                    .timestamp   = image->timestamp,
-                    .yaw         = yaw,
-                    .pitch       = pitch,
-                    .max_yaw_vel = max_yaw_vel,
-                    .max_yaw_acc = max_yaw_acc,
-                });
-                if (auto aimed = fire->aim(*trackable)) {
-                    cmd.should_track = true;
-                    cmd.should_shoot = aimed->shoot;
-                    cmd.yaw          = aimed->yaw;
-                    cmd.pitch        = aimed->pitch;
-                    cmd.robot_center = aimed->center;
-
-                    visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                    visual.publish(aimed->yaw, "aim_yaw");
-
-                    if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
-                        const auto color = aimed->shoot ? kRed : aimed->pre_aim ? kYellow : kGreen;
-                        visual.draw_later(Canvas::Point {
-                            .origin = aim_2d->make<cv::Point2i>(),
-                            .radius = 3,
-                            .color  = color,
-                        });
-                    }
-                    visual.draw_later(
-                        Canvas::Text { "PREAIM", { 10, 620 }, aimed->pre_aim ? kRed : kWhite });
-                }
-            }
-            visual.draw_later(
-                Canvas::Text { "SHOOT", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
-            visual.draw_later(
-                Canvas::Text { "TRACK", { 10, 640 }, cmd.should_track ? kRed : kWhite });
-
-            {
-                std::lock_guard lock { self.command_mutex };
-                self.current_command = cmd;
-                self.unread_command.store(true, std::memory_order::release);
-            }
-        }
-    }
 
     explicit Impl(AutoAim& self)
         : self { self } {
@@ -335,10 +58,6 @@ struct AutoAim::Impl {
             }
         };
 
-        {
-            auto config = configs["capturer"];
-            handle_result("capturer", cap.initialize(config));
-        }
         {
             auto config         = configs["detector"];
             auto model_location = std::filesystem::path { util::Parameters::share_location() }
@@ -364,16 +83,276 @@ struct AutoAim::Impl {
         tracker->update_camera(distort_coeff);
 
         fire = std::make_unique<FireController>(configs["fire_control"]);
-
-        worker = std::jthread([this](const std::stop_token& stop) { Impl::run(stop); });
     }
-    ~Impl() {
-        worker.request_stop();
-        if (worker.joinable()) {
-            worker.join();
+
+    auto process(const Image& image) -> void {
+        using namespace rmcs_msgs;
+
+        node.spin_once();
+
+        const auto& image_mat = image.mat();
+        if (image_mat.empty()) return;
+
+        auto intent = bool { false };
+
+        auto max_yaw_vel = 0.0;
+        auto max_yaw_acc = 0.0;
+
+        auto iso   = Transform::kIdentity();
+        auto yaw   = 0.0;
+        auto pitch = 0.0;
+        auto id    = RobotId { RobotId::UNKNOWN };
+
+        auto track_ids = DeviceIds::Full();
+        {
+            using namespace std::chrono_literals;
+
+            std::lock_guard lock { self.context_mutex };
+            auto& context = self.current_context;
+
+            /// 8ms 是一个经验值，实际是多少延迟得进一步确定，
+            /// 但大部分情况下是有效的对齐
+            const auto time = image.timestamp() - 8ms;
+            const auto best = std::ranges::min_element(
+                context.transforms, [time](const auto& lhs, const auto& rhs) {
+                    return std::chrono::abs(lhs.timestamp - time)
+                        < std::chrono::abs(rhs.timestamp - time);
+                });
+            if (best != context.transforms.end()) {
+                iso   = best->transform;
+                yaw   = best->yaw;
+                pitch = best->pitch;
+            }
+
+            intent      = context.aim_intent;
+            max_yaw_vel = context.max_yaw_vel;
+            max_yaw_acc = context.max_yaw_acc;
+            id          = context.id;
+            track_ids   = context.track_ids;
+        }
+
+        iso.orientation = image.imu_orientation();
+
+        visual.publish(iso, "camera_link");
+        visual.publish(yaw, "yaw");
+
+        if (counter.tick()) {
+            node.info(
+                "fps: {:03} mya: {:03.1f} myv: {:02.2f}", counter.fps(), max_yaw_acc, max_yaw_vel);
+        }
+
+        [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
+            visual.draw_later(Canvas::Text { std::format("FPS: {}", counter.fps()), { 10, 680 } });
+            if (visual.initialized()) {
+                auto visualization_image = image.clone_mat();
+                visual.update_image(visualization_image);
+            }
+        } };
+
+        /// [] 识别装甲板，灯条，大符页等元素
+        auto armor2ds       = Armor2ds { };
+        auto lightbar2ds    = Lightbar2ds { };
+        auto rune_icons     = std::vector<RuneIcon> { };
+        auto rune_bullseyes = std::vector<RuneBullseye> { };
+        if (id != RobotId::UNKNOWN) {
+            detector.update_detect_color(
+                (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+        }
+        auto result = detector.detect(image_mat);
+        for (const auto& icon : result.icons) {
+            visual.draw_later(Canvas::Point {
+                .origin = icon.center.make<cv::Point2i>(),
+                .radius = 5,
+                .color  = kGreen,
+            });
+            visual.draw_later(Canvas::Text {
+                .content  = std::format("R: {:.3f}", icon.score),
+                .top_left = icon.center.make<cv::Point2i>(),
+                .color    = kGreen,
+            });
+        }
+        for (const auto& bullseye : result.bullseyes) {
+            if (!bullseye.active) {
+                for (const auto& corner : bullseye.corners) {
+                    visual.draw_later(Canvas::Point {
+                        .origin = corner.make<cv::Point2i>(),
+                        .radius = 3,
+                        .color  = kGreen,
+                    });
+                }
+            }
+            visual.draw_later(Canvas::Point {
+                .origin = bullseye.center.make<cv::Point2i>(),
+                .radius = 5,
+                .color  = kGreen,
+            });
+            visual.draw_later(Canvas::Text {
+                .content  = std::format("B: {:.3f}", bullseye.score),
+                .top_left = bullseye.center.make<cv::Point2i>(),
+                .color    = kGreen,
+            });
+        }
+        for (const auto& roi : result.areas) {
+            visual.draw_later(roi);
+        }
+        visual.draw_later(result.armors);
+        visual.draw_later(result.green_light);
+
+        armor2ds       = std::move(result.armors);
+        lightbar2ds    = std::move(result.lightbars);
+        rune_icons     = std::move(result.icons);
+        rune_bullseyes = std::move(result.bullseyes);
+
+        /// [] 位姿估计，目前只有前哨站的 Ekf 需要用这个来迭代，其他机器人的
+        ///    三维装甲板仅作可视化用途
+        auto armor3ds = Armor3ds { };
+        {
+            estimator.update_camera_transform(iso);
+
+            auto result = estimator.estimate_armor(armor2ds, image_mat);
+
+            const auto& addition = estimator.addition();
+            visual.draw_later(addition.detected_2d);
+            // visual.draw_later(addition.areas);
+            // visual.draw_later(addition.predicted_near);
+            // visual.draw_later(addition.predicted_away);
+
+            visual.publish(addition.origin, "origin_armors");
+            visual.publish(addition.detected_3d, "outpost_lightbars");
+            visual.publish({ addition.center_3d, Orientation::kIdentity() }, "outpost_center");
+
+            armor3ds = std::move(result);
+        }
+        visual.publish(armor3ds, "visible_armors");
+
+        /// [] 跟踪目标，跟踪器里面维护了可见机器人的 EKF 状态
+        auto trackable = Trackable::Unique { };
+        {
+            if (id != RobotId::UNKNOWN) {
+                tracker->update_track_color(
+                    (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                // 哨兵自瞄常开，需要超时检测
+                tracker->update_aim_cleanup(
+                    id == RobotId::RED_SENTRY || id == RobotId::BLUE_SENTRY);
+            }
+            tracker->update_aim_intent(intent);
+            tracker->update_track_genre(track_ids);
+            tracker->update_camera(iso);
+
+            tracker->clean();
+            tracker->store(armor2ds);
+            tracker->store(armor3ds);
+            tracker->store(lightbar2ds);
+            tracker->store(rune_icons);
+            tracker->store(rune_bullseyes);
+
+            trackable = tracker->execute(image.timestamp());
+
+            const auto& addition = tracker->addition();
+            for (const auto& item : addition.tracked2d) {
+                visual.draw_later(Canvas::ArmorShape {
+                    .shape = item,
+                    .color = { 127, 127, 127 },
+                });
+            }
+            for (const auto& item : addition.lightbars) {
+                visual.draw_later(Canvas::Text {
+                    .content  = std::to_string(item.id),
+                    .top_left = item.point.make<cv::Point2i>(),
+                    .color    = kYellow,
+                });
+            }
+            for (const auto& item : addition.rune_features) {
+                visual.draw_later(Canvas::Point {
+                    .origin = item.point.make<cv::Point2i>(),
+                    .radius = 4,
+                    .color  = kYellow,
+                });
+            }
+            if (addition.rune_polygon) {
+                const auto& polygon = *addition.rune_polygon;
+                auto center         = Point2d { };
+                for (const auto& blade : polygon.blades) {
+                    center.x += blade.x;
+                    center.y += blade.y;
+                }
+                center.x /= static_cast<double>(polygon.blades.size());
+                center.y /= static_cast<double>(polygon.blades.size());
+
+                for (std::size_t index = 0; index < polygon.blades.size(); ++index) {
+                    const auto& begin = polygon.blades[index];
+                    const auto& end = polygon.blades[(index + 1) % polygon.blades.size()];
+                    visual.draw_later(Canvas::Line {
+                        .begin = begin.make<cv::Point2i>(),
+                        .end   = end.make<cv::Point2i>(),
+                        .color = kYellow,
+                    });
+                }
+                visual.draw_later(Canvas::Line {
+                    .begin = polygon.icon.make<cv::Point2i>(),
+                    .end   = center.make<cv::Point2i>(),
+                    .color = kYellow,
+                });
+            }
+            for (const auto& info : addition.infos) {
+                if (auto p = estimator.make_point2d(info.point)) {
+                    visual.draw_later(Canvas::Text {
+                        .content  = info.text,
+                        .top_left = p->make<cv::Point2i>(),
+                    });
+                }
+            }
+            visual.publish(addition.tracked3d, "trackable");
+        }
+
+        /// [] 根据跟踪目标求解弹道及控制指令，下发控制层
+        auto cmd      = Command::kInvalid();
+        cmd.timestamp = image.timestamp();
+        if (trackable) {
+            fire->update({
+                .timestamp   = image.timestamp(),
+                .yaw         = yaw,
+                .pitch       = pitch,
+                .max_yaw_vel = max_yaw_vel,
+                .max_yaw_acc = max_yaw_acc,
+            });
+            if (auto aimed = fire->aim(*trackable)) {
+                cmd.should_track = true;
+                cmd.should_shoot = aimed->shoot;
+                cmd.yaw          = aimed->yaw;
+                cmd.pitch        = aimed->pitch;
+                cmd.robot_center = aimed->center;
+
+                visual.update_aiming_direction(cmd.yaw, cmd.pitch);
+                visual.publish(aimed->yaw, "aim_yaw");
+
+                if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
+                    const auto color = aimed->shoot ? kRed : aimed->pre_aim ? kYellow : kGreen;
+                    visual.draw_later(Canvas::Point {
+                        .origin = aim_2d->make<cv::Point2i>(),
+                        .radius = 3,
+                        .color  = color,
+                    });
+                }
+                visual.draw_later(Canvas::Text {
+                    "PREAIM",
+                    { 10, 620 },
+                    aimed->pre_aim ? kRed : kWhite,
+                });
+            }
+        }
+        visual.draw_later(Canvas::Text { "SHOOT", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
+        visual.draw_later(Canvas::Text { "TRACK", { 10, 640 }, cmd.should_track ? kRed : kWhite });
+
+        {
+            std::lock_guard lock { self.command_mutex };
+            self.current_command = cmd;
+            self.unread_command.store(true, std::memory_order::release);
         }
     }
 };
+
+auto AutoAim::process(const Image& image) -> void { pimpl->process(image); }
 
 AutoAim::AutoAim() noexcept
     : pimpl { std::make_unique<Impl>(*this) } { }

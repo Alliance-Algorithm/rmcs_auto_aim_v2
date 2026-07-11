@@ -324,14 +324,16 @@
             <div style="height: 10px; flex: 0 0 auto;" aria-hidden="true"></div>
 
             <section class="panel-group">
-                <h2>本地视频控制</h2>
-                <p>仅本地视频源可用</p>
+                <h2>播放控制</h2>
+                <p>适用于 player 回放</p>
                 <div class="playback-row">
-                    <button id="prev-btn" class="capture-button" type="button" disabled>-1</button>
-                    <button id="play-pause-btn" class="capture-button" type="button" disabled>暂停</button>
-                    <button id="next-btn" class="capture-button" type="button" disabled>+1</button>
+                    <button id="prev-btn" class="capture-button" type="button">-1</button>
+                    <button id="play-pause-btn" class="capture-button" type="button">暂停</button>
+                    <button id="next-btn" class="capture-button" type="button">+1</button>
                 </div>
             </section>
+
+
         </aside>
     </main>
 
@@ -355,10 +357,14 @@
         let recordingWanted = false;
         /** @type {boolean | null} */
         let backendRecordOn = null;
+        /** @type {boolean} */
+        let recorderAvailable = false;
         /** @type {BlobPart[]} */
         let recordedChunks = [];
         /** @type {'playing' | 'paused'} */
         let playbackStatus = 'playing';
+        /** @type {boolean} */
+        let playerAvailable = false;
 
         /** @type {HTMLVideoElement} */
         const video = document.getElementById('video');
@@ -422,7 +428,7 @@
         }
 
         function updateBackendRecordButton() {
-            if (backendRecordOn === null) {
+            if (!recorderAvailable || backendRecordOn === null) {
                 backendRecordButton.textContent = '等待录制状态';
                 backendRecordButton.disabled = true;
                 return;
@@ -433,15 +439,19 @@
         }
 
         /** @type {boolean} */
-        let isLocalVideo = false;
-        /** @type {boolean} */
         let isPlaying = true;
 
         function updatePlaybackButtons() {
-            const enabled = isLocalVideo;
-            prevButton.disabled = !enabled || isPlaying;
-            playPauseButton.disabled = !enabled;
-            nextButton.disabled = !enabled || isPlaying;
+            if (!playerAvailable) {
+                prevButton.disabled = true;
+                playPauseButton.disabled = true;
+                nextButton.disabled = true;
+                playPauseButton.textContent = '暂停';
+                return;
+            }
+            prevButton.disabled = isPlaying;
+            playPauseButton.disabled = false;
+            nextButton.disabled = isPlaying;
             playPauseButton.textContent = isPlaying ? '暂停' : '播放';
         }
 
@@ -462,18 +472,20 @@
 
                 const data = await response.json();
                 const recordContext = data.context || {};
+                recorderAvailable = Boolean(recordContext.recorderAvailable);
                 backendRecordOn = Boolean(recordContext.recordOn);
                 backendRecordOnValue.textContent = backendRecordOn ? '开启' : '关闭';
                 backendStatusValue.textContent = recordContext.recordStatus || '-';
                 backendFilenameValue.textContent = recordContext.filename || '-';
-                isLocalVideo = recordContext.source === 'local_video';
+                playerAvailable = Boolean(recordContext.playerAvailable);
                 isPlaying = Boolean(recordContext.playing);
             } catch (error) {
+                recorderAvailable = false;
                 backendRecordOn = null;
                 backendRecordOnValue.textContent = '未知';
                 backendStatusValue.textContent = '状态不可用';
                 backendFilenameValue.textContent = '-';
-                isLocalVideo = false;
+                playerAvailable = false;
                 isPlaying = true;
                 console.error('Failed to fetch record context:', error);
             }

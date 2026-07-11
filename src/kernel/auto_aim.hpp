@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utility/clock.hpp"
+#include "utility/image/image.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/id.hpp"
@@ -57,6 +58,8 @@ public:
 
         RobotId id = RobotId::UNKNOWN;
     };
+
+    auto process(const Image& image) -> void;
 
     template <typename WithFunc>
         requires std::invocable<WithFunc, Context&>

@@ -1,90 +1,38 @@
 #pragma once
+
 #include <rclcpp/exceptions/exceptions.hpp>
 #include <yaml-cpp/exceptions.h>
 
+#include <concepts>
 #include <expected>
 #include <format>
 #include <string>
 
 namespace rmcs::util {
 
-using SerialResult = std::expected<void, std::string>;
-
 using integer_t = std::int64_t;
 using double_t  = double;
 using flag_t    = bool;
 using string_t  = std::string;
 
+// Extendable dispatch point
+template <typename Source>
+struct SerializableSource {
+    static_assert(!std::is_same_v<Source, Source>,
+        "No SerializableSource specialization for this source type. "
+        "Create one via: template <> struct rmcs::util::SerializableSource<YourType> { ... };");
+
+    template <typename T>
+    static auto get(Source& source, const std::string& name, T& target) noexcept
+        -> std::expected<void, std::string>;
+};
+
 namespace details {
-
-    template <typename T>
-    concept yaml_cpp_trait = requires(T node) {
-        { node.IsNull() } -> std::same_as<bool>;
-    };
-
-    template <typename T>
-    concept rclcpp_node_trait = requires(T node) {
-        { node.get_parameter("") };
-    };
-
     template <typename T>
     concept serializable_metas_trait =
         requires { typename std::tuple_size<decltype(T::metas)>::type; }
         && (std::tuple_size_v<decltype(T::metas)> != 0)
         && (std::tuple_size_v<decltype(T::metas)> % 2 == 0);
-
-    template <class Node>
-    struct NodeAdapter {
-        Node& node;
-
-        explicit NodeAdapter(Node& node) noexcept
-            : node { node } { }
-
-        template <typename T>
-            requires details::yaml_cpp_trait<Node>
-        auto get_param(const std::string& name, T& target) noexcept
-            -> std::expected<void, std::string> {
-            try {
-                if (!node[name]) {
-                    return std::unexpected {
-                        std::format("Missing key '{}'", name),
-                    };
-                }
-                target = node[name].template as<T>();
-            } catch (const YAML::TypedBadConversion<T>& e) {
-                return std::unexpected {
-                    std::format("Type mismatch for '{}': {}", name, e.what()),
-                };
-            } catch (const std::exception& e) {
-                return std::unexpected {
-                    std::format("Exception while reading '{}': {}", name, e.what()),
-                };
-            }
-            return { };
-        }
-
-        template <typename T>
-            requires details::rclcpp_node_trait<Node>
-        auto get_param(const std::string& name, T& target) noexcept
-            -> std::expected<void, std::string> {
-            try {
-                if (!node.template get_parameter<T>(name, target)) {
-                    return std::unexpected {
-                        std::format("Unable to find {}", name),
-                    };
-                }
-            } catch (rclcpp::exceptions::InvalidParameterTypeException& e) {
-                return std::unexpected {
-                    std::format("Unexpected while getting {}: {}", name, e.what()),
-                };
-            } catch (const std::exception& e) {
-                return std::unexpected {
-                    std::format("Catch unknown exception while getting {}: {}", name, e.what()),
-                };
-            }
-            return { };
-        }
-    };
 
     template <class Data, typename Mem>
     struct MemberMeta final {
@@ -112,21 +60,22 @@ namespace details {
         constexpr explicit Serializable(MemberMeta<Data, Mem>... metas) noexcept
             : metas { std::tuple { metas... } } { }
 
-        template <class Node>
-        auto serialize(std::string_view prefix, Node& source, Data& target) const noexcept
+        template <class Source>
+            requires((requires(Source& source, const std::string& name, Mem& target) {
+                {
+                    SerializableSource<std::remove_cvref_t<Source>>::get(source, name, target)
+                } -> std::same_as<std::expected<void, std::string>>;
+            }) && ...)
+        auto serialize(std::string_view prefix, Source& source, Data& target) const noexcept
             -> std::expected<void, std::string> {
             using Ret = std::expected<void, std::string>;
 
-            auto adapter = NodeAdapter { source };
-
             const auto deserialize = [&]<typename T>(MemberMeta<Data, T> meta) -> Ret {
                 auto& target_member = meta.extract_from(target);
-                if (prefix.empty()) {
-                    return adapter.get_param(std::string { meta.meta_name }, target_member);
-                } else {
-                    return adapter.get_param(
-                        std::format("{}.{}", prefix, meta.meta_name), target_member);
-                }
+                return SerializableSource<std::remove_cvref_t<Source>>::get(source,
+                    prefix.empty() ? std::string { meta.meta_name }
+                                   : std::format("{}.{}", prefix, meta.meta_name),
+                    target_member);
             };
             const auto apply_function = [&]<typename... T>(MemberMeta<Data, T>... meta) {
                 auto result = Ret { };
@@ -155,6 +104,13 @@ namespace details {
         }
     };
 
+    template <typename Data, typename Source>
+    concept serializable_source_trait = serializable_metas_trait<Data>
+        && requires(Data& self, const Source& source, std::string_view prefix) {
+               {
+                   self.make_serializable(self.metas).serialize(prefix, source, self)
+               } -> std::same_as<std::expected<void, std::string>>;
+           };
 }
 
 struct Serializable {
@@ -170,21 +126,17 @@ struct Serializable {
         return make_serializable_impl(metas, std::make_index_sequence<N / 2> { });
     }
 
-    template <typename T>
-    auto serialize(this T& self, std::string_view prefix, const auto& source) noexcept
+    template <typename T, typename Source>
+        requires details::serializable_source_trait<T, Source>
+    auto serialize(this T& self, std::string_view prefix, const Source& source) noexcept
         -> std::expected<void, std::string> {
-
-        static_assert(
-            details::serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
-
         auto s = self.make_serializable(self.metas);
         return s.serialize(prefix, source, self);
     }
 
-    template <class T>
-    auto serialize(this T& self, const auto& source) noexcept {
-        static_assert(
-            details::serializable_metas_trait<T>, "Serializable T must has valid metas tuple");
+    template <class T, class Source>
+        requires details::serializable_source_trait<T, Source>
+    auto serialize(this T& self, const Source& source) noexcept {
         return self.serialize("", source);
     }
 
@@ -193,5 +145,65 @@ struct Serializable {
         return s.make_printable_from(self);
     }
 };
-
 }
+
+// Source-specific specializations
+
+namespace YAML {
+class Node;
+}
+
+template <typename Source>
+    requires std::same_as<std::remove_cvref_t<Source>, YAML::Node>
+struct rmcs::util::SerializableSource<Source> {
+    template <typename T>
+    static auto get(const Source& source, const std::string& name, T& target) noexcept
+        -> std::expected<void, std::string> {
+        try {
+            if (!source[name]) {
+                return std::unexpected {
+                    std::format("Missing key '{}'", name),
+                };
+            }
+            target = source[name].template as<T>();
+        } catch (const YAML::TypedBadConversion<T>& e) {
+            return std::unexpected {
+                std::format("Type mismatch for '{}': {}", name, e.what()),
+            };
+        } catch (const std::exception& e) {
+            return std::unexpected {
+                std::format("Exception while reading '{}': {}", name, e.what()),
+            };
+        }
+        return { };
+    }
+};
+
+namespace rclcpp {
+class Node;
+}
+
+template <typename Source>
+    requires std::same_as<std::remove_cvref_t<Source>, rclcpp::Node>
+struct rmcs::util::SerializableSource<Source> {
+    template <typename T>
+    static auto get(const Source& source, const std::string& name, T& target) noexcept
+        -> std::expected<void, std::string> {
+        try {
+            if (!source.template get_parameter<T>(name, target)) {
+                return std::unexpected {
+                    std::format("Unable to find {}", name),
+                };
+            }
+        } catch (rclcpp::exceptions::InvalidParameterTypeException& e) {
+            return std::unexpected {
+                std::format("Unexpected while getting {}: {}", name, e.what()),
+            };
+        } catch (const std::exception& e) {
+            return std::unexpected {
+                std::format("Catch unknown exception while getting {}: {}", name, e.what()),
+            };
+        }
+        return { };
+    }
+};
