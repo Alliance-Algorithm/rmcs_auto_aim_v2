@@ -258,16 +258,50 @@ namespace details {
         }
         auto sum_cos = 0.0;
         auto sum_sin = 0.0;
-        auto sum_dc  = 0.0;
         for (int t = 0; t < kThetaBins; ++t) {
             const auto angle = 4.0 * static_cast<double>(t) / kThetaBins * 2.0 * std::numbers::pi;
             sum_cos += angular_proj[t] * std::cos(angle);
             sum_sin += angular_proj[t] * std::sin(angle);
-            sum_dc += angular_proj[t];
         }
-        const auto harmonic_ratio = std::hypot(sum_cos, sum_sin) / (sum_dc + 1e-10);
-        score                     = harmonic_ratio;
-        if (harmonic_ratio < active_threshold) {
+        const auto phase = std::atan2(sum_sin, sum_cos) / 4.0;
+
+        constexpr auto kWindow = 2;
+
+        auto peaks   = std::array<double, 4> { };
+        auto valleys = std::array<double, 4> { };
+
+        for (std::size_t p = 0; p < 4; ++p) {
+            const auto theta_peak   = phase + static_cast<double>(p) * std::numbers::pi * 0.5;
+            const auto theta_valley = theta_peak + std::numbers::pi * 0.25;
+
+            const auto pi = std::numbers::pi;
+            const auto t_peak =
+                ((static_cast<int>(std::llround((theta_peak + pi) / (2.0 * pi) * kThetaBins))
+                     % kThetaBins)
+                    + kThetaBins)
+                % kThetaBins;
+            const auto t_valley =
+                ((static_cast<int>(std::llround((theta_valley + pi) / (2.0 * pi) * kThetaBins))
+                     % kThetaBins)
+                    + kThetaBins)
+                % kThetaBins;
+
+            double p_sum = 0.0, v_sum = 0.0;
+            for (int dt = -kWindow; dt <= kWindow; ++dt) {
+                p_sum += angular_proj[(t_peak + dt + kThetaBins) % kThetaBins];
+                v_sum += angular_proj[(t_valley + dt + kThetaBins) % kThetaBins];
+            }
+            peaks[p]   = p_sum / (2 * kWindow + 1);
+            valleys[p] = v_sum / (2 * kWindow + 1);
+        }
+
+        const auto avg_peak   = (peaks[0] + peaks[1] + peaks[2] + peaks[3]) * 0.25;
+        const auto avg_valley = (valleys[0] + valleys[1] + valleys[2] + valleys[3]) * 0.25;
+
+        const auto pvd = (avg_peak - avg_valley) / (avg_peak + avg_valley + 1e-10);
+
+        score = pvd;
+        if (pvd < active_threshold) {
 
             auto radial_total = std::array<double, static_cast<std::size_t>(kRadialBins)> { };
             for (int r = 0; r < kRadialBins; ++r) {
@@ -289,8 +323,6 @@ namespace details {
             };
             return true;
         }
-
-        const auto phase = std::atan2(sum_sin, sum_cos) / 4.0;
 
         auto tips = std::array<cv::Point2f, 4> { };
         {
@@ -366,7 +398,7 @@ namespace details {
             if (std::sqrt(variance) > mean * kArmLengthStddevMax) return false;
         }
 
-        score     = harmonic_ratio;
+        score     = pvd;
         endpoints = tips;
         return true;
     }

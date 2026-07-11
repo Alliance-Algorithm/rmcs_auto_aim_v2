@@ -19,7 +19,7 @@ public:
         double max_perspective = 60.;
 
         double match_threshold  = 0.20;
-        double active_threshold = 0.08;
+        double active_threshold = 0.2;
     } config;
 
     struct Elements {
