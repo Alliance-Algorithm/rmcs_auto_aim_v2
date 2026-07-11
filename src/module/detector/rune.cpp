@@ -1,7 +1,6 @@
 #include "rune.hpp"
 #include "utility/image/process.hpp"
 
-#include <opencv2/highgui.hpp> // FIXME:
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
@@ -205,8 +204,9 @@ namespace details {
     auto compute_bullseye_feature(const cv::Mat& roi, cv::Point2f center,
         std::array<cv::Point2f, 4>& endpoints, double& score, double active_threshold) -> bool {
 
-        constexpr auto kRadialBins         = 32;
-        constexpr auto kThetaBins          = 180;
+        constexpr auto kRadialBins = 32;
+        constexpr auto kThetaBins  = 180;
+
         constexpr auto kArmLengthStddevMax = 0.3;
 
         auto square = cv::Mat { };
@@ -420,7 +420,7 @@ namespace details {
 
         auto contours  = std::vector<std::vector<cv::Point>> { };
         auto hierarchy = std::vector<cv::Vec4i> { };
-        cv::findContours(mat.clone(), contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+        cv::findContours(mat.clone(), contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
         struct Ellipse {
             cv::Point center;
@@ -547,9 +547,6 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
 
     auto binary = cv::Mat { };
     util::extract_channel(mat, config.color, binary);
-
-    cv::imshow("binary", binary);
-    cv::waitKey(1);
 
     auto icons     = std::vector<std::vector<cv::Point>> { };
     auto bullseyes = std::vector<std::vector<cv::Point>> { };

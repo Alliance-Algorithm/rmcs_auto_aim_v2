@@ -130,6 +130,7 @@ struct AutoAim::Impl {
             id          = context.id;
             track_ids   = context.track_ids;
         }
+        // id = RobotId::BLUE_SENTRY;
 
         iso.orientation = image.imu_orientation();
 
