@@ -122,7 +122,8 @@ struct AutoAim::Impl {
             auto lightbar2ds = Lightbar2ds { };
             {
                 // FIXME:
-                id = RobotId::BLUE_HERO;
+                // id = RobotId::RED_SENTRY;
+                id = RobotId::BLUE_SENTRY;
                 if (id != RobotId::UNKNOWN) {
                     detector.update_detect_color(
                         (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
