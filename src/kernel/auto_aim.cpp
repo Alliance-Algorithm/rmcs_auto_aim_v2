@@ -13,6 +13,8 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 
+#include "module/tracker/model/rune.hpp"
+
 #include <algorithm>
 #include <array>
 #include <chrono>

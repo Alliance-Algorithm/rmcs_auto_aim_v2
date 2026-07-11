@@ -104,6 +104,23 @@ target_link_libraries(
 )
 
 add_executable(
+    test_rune_ekf
+    ${TOOL_DIR}/test_rune_ekf.cpp
+    ${RMCS_SRC_DIR}/module/tracker/model/rune.cpp
+    ${RMCS_SRC_DIR}/utility/math/solve_pnp/pnp_solution.cpp
+    ${RMCS_SRC_DIR}/utility/math/reprojection.cpp
+    ${RMCS_SRC_DIR}/utility/math/camera.cpp
+    ${RMCS_SRC_DIR}/utility/panic.cpp
+)
+target_link_libraries(
+    test_rune_ekf
+    rclcpp::rclcpp
+    ${visualization_msgs_LIBRARIES}
+    ${geometry_msgs_LIBRARIES}
+    ${OpenCV_LIBS}
+)
+
+add_executable(
     ov-model-status
     ${TOOL_DIR}/ov_model_status.cpp
 )

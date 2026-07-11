@@ -59,6 +59,7 @@ private:
 
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
+    OutputInterface<bool> single_shoot;
     OutputInterface<Eigen::Vector3d> target_direction;
     OutputInterface<Eigen::Vector3d> robot_center;
 
@@ -79,6 +80,7 @@ public:
 
         register_output("/auto_aim/should_control", should_track, false);
         register_output("/auto_aim/should_shoot", should_shoot, false);
+        register_output("/auto_aim/single_shoot", single_shoot, false);
         register_output("/auto_aim/control_direction", target_direction, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
     }
@@ -162,6 +164,7 @@ public:
 
                 *should_track = cmd.should_track;
                 *should_shoot = cmd.should_shoot;
+                *single_shoot = cmd.single_shoot;
                 *robot_center = cmd.robot_center.make<Eigen::Vector3d>();
 
                 if (!cmd.should_track) return;

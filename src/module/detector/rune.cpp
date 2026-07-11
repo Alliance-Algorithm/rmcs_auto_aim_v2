@@ -1,5 +1,7 @@
 #include "rune.hpp"
+#include "utility/image/process.hpp"
 
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
@@ -544,38 +546,7 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
     if (mat.empty()) return { };
 
     auto binary = cv::Mat { };
-    {
-        auto channels = std::vector<cv::Mat> { };
-        cv::split(mat, channels);
-
-        auto difference    = cv::Mat { };
-        auto difference_u8 = cv::Mat { };
-        auto minimum_mask  = cv::Mat { };
-        auto mask          = cv::Mat { };
-
-        /*^^*/ if (config.color == CampColor::RED) {
-            cv::subtract(channels[2], channels[0], difference, cv::noArray(), CV_16S);
-            difference.convertTo(difference_u8, CV_8U);
-            cv::threshold(difference_u8, mask, config.red_diff_threshold, 255, cv::THRESH_BINARY);
-
-            cv::threshold(
-                channels[2], minimum_mask, config.min_channel_threshold, 255, cv::THRESH_BINARY);
-        } else if (config.color == CampColor::BLUE) {
-            cv::subtract(channels[0], channels[2], difference, cv::noArray(), CV_16S);
-            difference.convertTo(difference_u8, CV_8U);
-            cv::threshold(difference_u8, mask, config.blue_diff_threshold, 255, cv::THRESH_BINARY);
-
-            cv::threshold(
-                channels[0], minimum_mask, config.min_channel_threshold, 255, cv::THRESH_BINARY);
-        } else {
-            return { };
-        }
-
-        cv::bitwise_and(mask, minimum_mask, binary);
-
-        auto kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size { 5, 5 });
-        cv::morphologyEx(binary, binary, cv::MORPH_CLOSE, kernel);
-    }
+    util::extract_channel(mat, config.color, binary);
 
     auto icons     = std::vector<std::vector<cv::Point>> { };
     auto bullseyes = std::vector<std::vector<cv::Point>> { };

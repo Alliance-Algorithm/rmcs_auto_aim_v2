@@ -1,6 +1,7 @@
 #pragma once
 #include "utility/math/linear.hpp"
 #include <array>
+#include <vector>
 
 namespace rmcs {
 
@@ -26,9 +27,12 @@ struct RuneBullseye {
     bool active;
     double score;
 };
+using RuneBullseyes = std::vector<RuneBullseye>;
+
 struct RuneIcon {
     Point2d center;
     double score;
 };
+using RuneIcons = std::vector<RuneIcon>;
 
 }

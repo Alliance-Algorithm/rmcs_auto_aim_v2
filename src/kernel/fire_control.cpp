@@ -4,6 +4,7 @@
 #include "module/fire_control/trajectory_solution.hpp"
 #include "utility/logging/printer.hpp"
 #include "utility/math/angle.hpp"
+#include "utility/repeat.hpp"
 #include "utility/serializable.hpp"
 
 #include <algorithm>
@@ -26,10 +27,12 @@ struct FireController::Impl {
 
         std::array<double, 2> attack_window { 20.0, 20.0 };
 
-        double yaw_tolerance { 0.07 };
-        double pitch_tolerance { 0.04 };
-        bool require_stable_command { true };
-        bool is_lazy_gimbal { false };
+        double yaw_tolerance   = 0.07;
+        double pitch_tolerance = 0.04;
+
+        bool require_stable_command = true;
+        bool is_lazy_gimbal         = false;
+        bool skip_pose_check        = false; // TODO:
 
         static constexpr std::tuple metas {
             // clang-format off
@@ -46,13 +49,25 @@ struct FireController::Impl {
         };
     } config;
 
-    std::unique_ptr<ShootEvaluator> shoot_evaluator;
-
     State state;
+    bool single_shoot = false;
 
     std::int8_t last_armor_idx = -1;
 
+    Repeat single_rune_actions {
+        Repeat::Action { "idle", 0.4 },
+        Repeat::Action { "shoot", 0.2 },
+    };
+    Repeat multiple_rune_actions {
+        Repeat::Action { "1-idle", 0.4 },
+        Repeat::Action { "1-shoot", 0.2 },
+        Repeat::Action { "2-idle", 0.4 },
+        Repeat::Action { "2-shoot", 0.2 },
+    };
+    AimPoints last_aimpoints;
+
     Printer logging { "fire" };
+    std::unique_ptr<ShootEvaluator> shoot_evaluator;
 
     static constexpr auto yaw_angle(const Point3d& center, const Point3d& armor) {
         const auto v1_x = -center.x;
@@ -110,17 +125,59 @@ struct FireController::Impl {
     }
 
     // @return 序号, 是否预瞄
-    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window) const
+    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window)
         -> std::tuple<std::int8_t, bool> {
 
-        const auto aimpoints = trackable.get_aimpoints();
-        const auto omega     = trackable.get_rotation_speed();
+        auto aimpoints = trackable.get_aimpoints();
+        auto omega     = trackable.get_rotation_speed();
 
-        if (aimpoints.size() == 1) {
-            return { std::int8_t { 0 }, false };
+        // 能量机关
+        if (aimpoints.size() == 5) {
+            single_shoot = true;
+
+            if (!aimpoints.same_valid(last_aimpoints)) {
+                single_rune_actions.stop();
+                multiple_rune_actions.stop();
+            }
+            last_aimpoints = std::move(aimpoints);
+
+            const auto indices = last_aimpoints.valid_indices();
+            /*^^*/ if (indices.size() == 1) {
+                if (single_rune_actions.started() == false) {
+                    single_rune_actions.start();
+                }
+
+                const auto tag = single_rune_actions.tick();
+                if (tag == "idle") {
+                    return { static_cast<std::int8_t>(indices[0]), true };
+                } else {
+                    return { static_cast<std::int8_t>(indices[0]), false };
+                }
+            } else if (indices.size() == 2) {
+                if (multiple_rune_actions.started() == false) {
+                    multiple_rune_actions.start();
+                }
+
+                const auto tag = multiple_rune_actions.tick();
+                /*^^*/ if (tag == "1-idle") {
+                    return { static_cast<std::int8_t>(indices[0]), true };
+                } else if (tag == "1-shoot") {
+                    return { static_cast<std::int8_t>(indices[0]), false };
+                } else if (tag == "2-idle") {
+                    return { static_cast<std::int8_t>(indices[1]), true };
+                } else if (tag == "2-shoot") {
+                    return { static_cast<std::int8_t>(indices[1]), false };
+                }
+            }
+
+            return { -1, true }; // 不存在的情况
         }
+        single_shoot = false;
 
-        { // 倾向于使用上一帧的有效装甲板
+        // 前哨站与机器人
+        {
+            // 倾向于使用上一帧的有效装甲板
+            // FIXME: 在边界时会疯狂跳变
             const auto length = static_cast<std::int8_t>(aimpoints.size());
             if ((last_armor_idx >= 0) && (last_armor_idx < length)) {
                 const auto idx = last_armor_idx;
@@ -158,7 +215,7 @@ struct FireController::Impl {
                 next_idx   = i;
             }
         }
-        return std::tuple { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
+        return { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
     }
 
     auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, double> {
@@ -183,7 +240,7 @@ struct FireController::Impl {
         };
     }
 
-    auto aim(const Trackable& trackable) const -> std::optional<Aimed> {
+    auto aim(const Trackable& trackable) -> std::optional<Aimed> {
 
         const auto direction = trackable.get_direction();
         const auto distance  = std::sqrt(
@@ -245,23 +302,29 @@ struct FireController::Impl {
             pitch = pitch + config.offset_pitch;
 
             // 射击评估
-            const auto shoot = !pre_aim
-                && shoot_evaluator->evaluate(
-                    {
-                        .yaw    = yaw,
-                        .pitch  = pitch,
-                        .center = center,
-                        .armor  = attack,
-                    },
-                    state.yaw, state.pitch);
+            auto should_shoot = true;
+            if (pre_aim) {
+                should_shoot = false;
+            } else if (config.skip_pose_check) {
+                should_shoot = true;
+            } else {
+                const auto cmd = ShootEvaluator::Command {
+                    .yaw    = yaw,
+                    .pitch  = pitch,
+                    .center = center,
+                    .armor  = attack,
+                };
+                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+            }
 
             return Aimed {
-                .yaw     = yaw,
-                .pitch   = pitch,
-                .shoot   = shoot,
-                .pre_aim = pre_aim,
-                .center  = center,
-                .attack  = attack,
+                .yaw          = yaw,
+                .pitch        = pitch,
+                .shoot        = should_shoot,
+                .pre_aim      = pre_aim,
+                .single_shoot = single_shoot,
+                .center       = center,
+                .attack       = attack,
             };
         }
         return std::nullopt;

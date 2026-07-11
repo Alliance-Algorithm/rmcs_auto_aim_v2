@@ -23,6 +23,7 @@ public:
 
         bool should_track = false;
         bool should_shoot = false;
+        bool single_shoot = false;
 
         double yaw { kNaN };
         double pitch { kNaN };
