@@ -13,7 +13,7 @@ auto extract_channel(const cv::Mat& src, CampColor camp, cv::Mat& dst) -> void {
     constexpr auto kMinChannelThreshold = 60;
 
     // 形态学闭合：3x3 椭圆核，填曝光断口
-    constexpr auto kCloseKernelSize = 3;
+    constexpr auto kCloseKernelSize = 5;
     constexpr auto kCloseIterations = 1;
 
     auto channels = std::vector<cv::Mat> { };

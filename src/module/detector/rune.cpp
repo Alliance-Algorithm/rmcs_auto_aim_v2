@@ -548,9 +548,6 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
     auto binary = cv::Mat { };
     util::extract_channel(mat, config.color, binary);
 
-    cv::imshow("binary", binary);
-    cv::waitKey(1);
-
     auto icons     = std::vector<std::vector<cv::Point>> { };
     auto bullseyes = std::vector<std::vector<cv::Point>> { };
     details::find_contours(config, binary, icons, bullseyes);
