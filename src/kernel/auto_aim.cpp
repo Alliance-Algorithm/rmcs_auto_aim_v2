@@ -13,8 +13,6 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 
-#include "module/tracker/model/rune.hpp"
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -283,7 +281,7 @@ struct AutoAim::Impl {
 
                 for (std::size_t index = 0; index < polygon.blades.size(); ++index) {
                     const auto& begin = polygon.blades[index];
-                    const auto& end = polygon.blades[(index + 1) % polygon.blades.size()];
+                    const auto& end   = polygon.blades[(index + 1) % polygon.blades.size()];
                     visual.draw_later(Canvas::Line {
                         .begin = begin.make<cv::Point2i>(),
                         .end   = end.make<cv::Point2i>(),

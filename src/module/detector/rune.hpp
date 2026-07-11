@@ -18,12 +18,8 @@ public:
 
         double max_perspective = 60.;
 
-        int red_diff_threshold    = 30;
-        int blue_diff_threshold   = 30;
-        int min_channel_threshold = 60;
-
-        double match_threshold  = 0.2;
-        double active_threshold = 0.1;
+        double match_threshold  = 0.20;
+        double active_threshold = 0.08;
     } config;
 
     struct Elements {

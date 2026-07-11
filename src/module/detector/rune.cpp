@@ -1,7 +1,7 @@
 #include "rune.hpp"
 #include "utility/image/process.hpp"
 
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui.hpp> // FIXME:
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
@@ -547,6 +547,9 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
 
     auto binary = cv::Mat { };
     util::extract_channel(mat, config.color, binary);
+
+    cv::imshow("binary", binary);
+    cv::waitKey(1);
 
     auto icons     = std::vector<std::vector<cv::Point>> { };
     auto bullseyes = std::vector<std::vector<cv::Point>> { };
