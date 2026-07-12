@@ -131,6 +131,10 @@ struct FireController::Impl {
         auto aimpoints = trackable.get_aimpoints();
         auto omega     = trackable.get_rotation_speed();
 
+        if (aimpoints.size() == 1) {
+            return { 0, false };
+        }
+
         // 能量机关
         if (aimpoints.size() == 5) {
             single_shoot = true;

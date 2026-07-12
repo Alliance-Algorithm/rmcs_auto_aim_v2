@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
 #include "utility/robot/rune.hpp"
 
@@ -26,6 +27,17 @@ public:
 
         std::array<bool, 5> inactive;
 
+        bool   use_prediction_speed = false;
+        double prediction_cost      = 0.0;
+
+        double sine_C     = 0.0;
+        double sine_v     = 0.0;
+        double sine_a     = 0.0;
+        double sine_omega = 0.0;
+        double sine_phase = 0.0;
+        double sine_t     = 0.0;
+        bool   sine_valid = false;
+
         auto transition(double seconds) -> void;
 
         auto get_direction() const -> Point3d;
@@ -34,17 +46,17 @@ public:
     };
 
     struct Config {
-        double noise_x = 1e-4;
-        double noise_y = 1e-4;
-        double noise_z = 1e-4;
+        double noise_x = 1e-5;
+        double noise_y = 1e-5;
+        double noise_z = 1e-5;
 
         double noise_rotation_angle = 1e-3;
         double noise_rotation_speed = 1e-0;
-        double noise_face_yaw       = 1e-4;
+        double noise_face_yaw       = 1e-5;
 
         double noise_observation = 20.0;
 
-        double gate_threshold = 9.210;
+        double gate_threshold = 900.210;
 
         double init_seed_mean_error = 10.0;
         double init_seed_max_error  = 20.0;
@@ -66,7 +78,7 @@ public:
     auto update_transform(const Transform&) noexcept -> void;
 
     auto init(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> bool;
-    auto predict(double dt) noexcept -> void;
+    auto predict(double dt, Timestamp now) noexcept -> void;
     auto correct(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> void;
 
     auto converge() const -> bool;
