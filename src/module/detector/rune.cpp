@@ -2,13 +2,13 @@
 #include "utility/image/process.hpp"
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/ximgproc.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <numbers>
 #include <ranges>
-#include <string_view>
 #include <vector>
 
 namespace rmcs {
@@ -17,188 +17,80 @@ namespace details {
     constexpr auto kBullseyeRadius = 0.15;
     constexpr auto kRuneIconRadius = 0.05;
 
-    auto compute_distance_with_icon(const std::vector<cv::Point>& contour) -> double {
-        constexpr auto kBinsR     = 5;
-        constexpr auto kBinsTheta = 12;
-        constexpr auto kN         = 100;
+    auto compute_distance_with_icon(const cv::Mat& roi) -> double {
+        // 1. Otsu 二值化
+        auto binary = cv::Mat { };
+        cv::threshold(roi, binary, 0, 255, cv::THRESH_BINARY + cv::THRESH_OTSU);
 
-        using Hist = std::array<float, kBinsR * kBinsTheta>;
+        // 3. Zhang-Suen 骨架提取
+        auto skel = cv::Mat { };
+        cv::ximgproc::thinning(binary, skel, cv::ximgproc::THINNING_ZHANGSUEN);
 
-        static const auto kTemplateContour = [] {
-            constexpr auto kTemplate = std::array {
-                std::string_view { " ###################    " },
-                std::string_view { " ####################   " },
-                std::string_view { "  ####################  " },
-                std::string_view { "   #################### " },
-                std::string_view { "   #################### " },
-                std::string_view { "    #######       ######" },
-                std::string_view { "     #######       #####" },
-                std::string_view { "     #######       #####" },
-                std::string_view { "      #######      #####" },
-                std::string_view { "   #################### " },
-                std::string_view { "   #################### " },
-                std::string_view { "   ###################  " },
-                std::string_view { "  ###################   " },
-                std::string_view { "  #################     " },
-                std::string_view { "  ######    #######     " },
-                std::string_view { "  ######     ######     " },
-                std::string_view { " ######      #######    " },
-                std::string_view { " ######       #######   " },
-                std::string_view { " ######        #######  " },
-                std::string_view { " ######    ############ " },
-                std::string_view { "######      ########### " },
-                std::string_view { "######        #####     " },
-                std::string_view { "                ####    " },
-                std::string_view { "                  ###   " },
-                std::string_view { "                    ##  " },
-                std::string_view { "                      # " },
-            };
-
-            const auto rows = static_cast<int>(kTemplate.size());
-            const auto cols = static_cast<int>(kTemplate[0].size());
-
-            auto mat = cv::Mat(rows, cols, CV_8UC1, cv::Scalar { 0 });
-            for (const auto [r, row] : kTemplate | std::views::enumerate) {
-                for (const auto [c, ch] : row | std::views::enumerate) {
-                    if (ch == '#')
-                        mat.at<std::uint8_t>(static_cast<int>(r), static_cast<int>(c)) = 255;
-                }
-            }
-
-            auto contours = std::vector<std::vector<cv::Point>> { };
-            cv::findContours(mat, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-            if (contours.empty()) return std::vector<cv::Point> { };
-
-            return *std::ranges::max_element(
-                contours, { }, [](const auto& c) { return cv::contourArea(c); });
-        }();
-
-        auto resample = [](const std::vector<cv::Point>& c,
-                            std::size_t n) -> std::vector<cv::Point2f> {
-            if (c.size() < 2 || n < 2) return { };
-
-            auto seg_len = std::vector<double> { };
-            seg_len.reserve(c.size());
-            auto total = 0.0;
-            for (std::size_t i = 1; i < c.size(); ++i) {
-                const auto dx = static_cast<double>(c[i].x - c[i - 1].x);
-                const auto dy = static_cast<double>(c[i].y - c[i - 1].y);
-                seg_len.push_back(std::hypot(dx, dy));
-                total += seg_len.back();
-            }
-            {
-                const auto dx = static_cast<double>(c[0].x - c.back().x);
-                const auto dy = static_cast<double>(c[0].y - c.back().y);
-                seg_len.push_back(std::hypot(dx, dy));
-                total += seg_len.back();
-            }
-
-            auto sampled = std::vector<cv::Point2f> { };
-            sampled.reserve(n);
-            const auto step  = total / static_cast<double>(n);
-            const auto seg_n = seg_len.size();
-            auto acc         = 0.0;
-            auto seg_idx     = std::size_t { 0 };
-
-            for (std::size_t i = 0; i < n; ++i) {
-                const auto target = static_cast<double>(i) * step;
-                while (seg_idx < seg_n && acc + seg_len[seg_idx] < target) {
-                    acc += seg_len[seg_idx];
-                    ++seg_idx;
-                }
-                if (seg_idx >= seg_n) seg_idx = seg_n - 1;
-                const auto alpha = seg_len[seg_idx] > 0.0 ? (target - acc) / seg_len[seg_idx] : 0.0;
-                const auto& p0   = c[seg_idx % c.size()];
-                const auto& p1   = c[(seg_idx + 1) % c.size()];
-                sampled.emplace_back(static_cast<float>(p0.x + alpha * (p1.x - p0.x)),
-                    static_cast<float>(p0.y + alpha * (p1.y - p0.y)));
-            }
-
-            return sampled;
-        };
-
-        static const auto kLogDistRange = [&] {
-            const auto sampled  = resample(kTemplateContour, kN);
-            constexpr auto kEps = 1e-6;
-
-            auto all_dists = std::vector<double> { };
-            all_dists.reserve(sampled.size() * sampled.size() / 2);
-            for (std::size_t i = 0; i < sampled.size(); ++i) {
-                for (std::size_t j = i + 1; j < sampled.size(); ++j) {
-                    const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
-                    const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
-                    all_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + kEps));
-                }
-            }
-
-            const auto [r_min, r_max] = std::ranges::minmax(all_dists);
-            auto range                = r_max - r_min;
-            if (range < 1.0) range = 1.0;
-            return std::pair { r_min - 0.2 * range, r_max + 0.2 * range };
-        }();
-
-        const auto [global_r_min, global_r_max] = kLogDistRange;
-        auto global_r_range                     = global_r_max - global_r_min;
-        if (global_r_range < 1e-3) global_r_range = 1.0;
-
-        auto compute_hist = [&](const std::vector<cv::Point>& c) -> Hist {
-            const auto sampled = resample(c, kN);
-            if (sampled.size() != kN) return { };
-
-            auto hist            = Hist { };
-            constexpr auto n_r   = static_cast<double>(kBinsR);
-            constexpr auto n_t   = static_cast<double>(kBinsTheta);
-            constexpr auto pi    = std::numbers::pi;
-            constexpr auto twopi = 2.0 * pi;
-
-            for (std::size_t i = 0; i < kN; ++i) {
-                auto log_dists = std::vector<double> { };
-                auto angles    = std::vector<double> { };
-                log_dists.reserve(kN - 1);
-                angles.reserve(kN - 1);
-                for (std::size_t j = 0; j < kN; ++j) {
-                    if (i == j) continue;
-                    const auto dx = static_cast<double>(sampled[j].x - sampled[i].x);
-                    const auto dy = static_cast<double>(sampled[j].y - sampled[i].y);
-                    log_dists.push_back(std::log(std::sqrt(dx * dx + dy * dy) + 1e-6));
-                    angles.push_back(std::atan2(dy, dx));
-                }
-
-                for (std::size_t k = 0; k < log_dists.size(); ++k) {
-                    const auto r_bin = std::clamp(
-                        static_cast<int>((log_dists[k] - global_r_min) / global_r_range * n_r), 0,
-                        kBinsR - 1);
-                    const auto theta_bin = std::clamp(
-                        static_cast<int>((angles[k] + pi) / twopi * n_t), 0, kBinsTheta - 1);
-                    hist[static_cast<std::size_t>(r_bin) * kBinsTheta
-                        + static_cast<std::size_t>(theta_bin)] += 1.0f;
-                }
-            }
-
-            for (auto& h : hist)
-                h /= static_cast<float>(kN);
-            auto sum = 0.0f;
-            for (const auto& h : hist)
-                sum += h;
-            if (sum > 0.0f)
-                for (auto& h : hist)
-                    h /= sum;
-
-            return hist;
-        };
-        static const auto kTemplateSc = compute_hist(kTemplateContour);
-
-        const auto sc = compute_hist(contour);
-
-        auto dist = 0.0;
-        for (std::size_t i = 0; i < sc.size(); ++i) {
-            const auto diff = static_cast<double>(sc[i]) - static_cast<double>(kTemplateSc[i]);
-            const auto sum =
-                static_cast<double>(sc[i]) + static_cast<double>(kTemplateSc[i]) + 1e-10;
-            dist += diff * diff / sum;
+        auto labels = cv::Mat { };
+        if (cv::connectedComponents(skel, labels, 8) - 1 != 1) {
+            return 0.0;
         }
 
-        return dist;
+        // 4. 统计骨架端点与分支点
+        const auto h  = skel.rows;
+        const auto cy = h / 2;
+
+        auto total_ep      = 0;
+        auto lower_ep      = 0;
+        auto branch_points = 0;
+
+        for (auto y : std::views::iota(1, h - 1)) {
+            for (auto x : std::views::iota(1, skel.cols - 1)) {
+                if (skel.at<std::uint8_t>(y, x) == 0) continue;
+
+                auto neighbors = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dy == 0 && dx == 0) continue;
+                        if (skel.at<std::uint8_t>(y + dy, x + dx) > 0) ++neighbors;
+                    }
+                }
+
+                if (neighbors == 1) {
+                    ++total_ep;
+                    if (y >= cy) ++lower_ep;
+                } else if (neighbors >= 3) {
+                    ++branch_points;
+                }
+            }
+        }
+
+        // 5. 洞检测：统计最外层轮廓的内部孔洞数
+        auto contours  = std::vector<std::vector<cv::Point>> { };
+        auto hierarchy = std::vector<cv::Vec4i> { };
+        cv::findContours(binary, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+
+        auto holes = 0;
+        if (!contours.empty() && !hierarchy.empty()) {
+            auto outer_idx = std::size_t { 0 };
+            auto max_area  = 0.0;
+            for (const auto& [i, h] : hierarchy | std::views::enumerate) {
+                if (h[3] != -1) continue;
+                const auto area = cv::contourArea(contours[i]);
+                if (area > max_area) {
+                    max_area  = area;
+                    outer_idx = i;
+                }
+            }
+            for (const auto& [i, h] : hierarchy | std::views::enumerate) {
+                if (h[3] == static_cast<int>(outer_idx)) {
+                    ++holes;
+                }
+            }
+        }
+
+        // 6. 判据
+        if (total_ep >= 1 && lower_ep >= 1 && branch_points >= 8 && branch_points <= 50
+            && holes <= 2) {
+            return 0.5 + 0.1 * total_ep;
+        }
+
+        return 0.0;
     }
 
     auto compute_bullseye_feature(const cv::Mat& roi, cv::Point2f center,
@@ -646,10 +538,23 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
             .score   = score,
         });
     }
-
     for (const auto& icon : icons) {
-        const auto score = details::compute_distance_with_icon(icon);
-        if (score >= config.match_threshold) continue;
+        constexpr auto kIconMargin = 5;
+
+        auto box  = cv::boundingRect(icon) & cv::Rect { 0, 0, mat.cols, mat.rows };
+        auto rect = cv::Rect {
+            box.x - kIconMargin,
+            box.y - kIconMargin,
+            box.width + 2 * kIconMargin,
+            box.height + 2 * kIconMargin,
+        };
+        rect &= cv::Rect { 0, 0, mat.cols, mat.rows };
+
+        auto roi = cv::Mat { };
+        cv::cvtColor(mat(rect), roi, cv::COLOR_BGR2GRAY);
+
+        const auto score = details::compute_distance_with_icon(roi);
+        if (score < config.match_threshold) continue;
 
         const auto rc = cv::minAreaRect(icon);
         result.icons.emplace_back(Point2d { rc.center }, score);
@@ -658,4 +563,4 @@ auto RuneDetector::detect(const cv::Mat& mat) const -> Elements {
     return result;
 }
 
-} // namespace rmcs
+}
