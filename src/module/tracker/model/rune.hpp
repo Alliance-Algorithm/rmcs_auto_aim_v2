@@ -27,8 +27,8 @@ public:
 
         std::array<bool, 5> inactive;
 
-        bool   use_prediction_speed = false;
-        double prediction_cost      = 0.0;
+        bool use_prediction_speed = false;
+        double prediction_cost    = 0.0;
 
         double sine_C     = 0.0;
         double sine_v     = 0.0;
@@ -36,7 +36,7 @@ public:
         double sine_omega = 0.0;
         double sine_phase = 0.0;
         double sine_t     = 0.0;
-        bool   sine_valid = false;
+        bool sine_valid   = false;
 
         auto transition(double seconds) -> void;
 
@@ -56,11 +56,12 @@ public:
 
         double noise_observation = 20.0;
 
-        double gate_threshold = 900.210;
+        double gate_threshold = 13.816;
 
         double init_seed_mean_error = 10.0;
         double init_seed_max_error  = 20.0;
         double init_center_gate     = 30.0;
+        double init_pitch_bound     = 20.0;
     };
 
     struct Addition {

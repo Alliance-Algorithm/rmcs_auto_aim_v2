@@ -354,10 +354,17 @@ auto SingleRunePnpSolution::solve() -> bool {
             }
         }
 
-        const auto object_points = std::ranges::to<std::vector>(RunePagePoints::kPoints
-            | std::views::transform(
-                [](const Point3d& point) { return point.make<cv::Point3f>(); }));
-        const auto image_points  = std::vector { icon, t, l, b, r };
+        const auto object_points = std::ranges::to<std::vector>(
+            RunePagePoints::kPoints | std::views::transform([](const Point3d& point) {
+                const auto p_ros = point.make<Eigen::Vector3d>();
+                const auto p_ocv = ros2opencv_position(p_ros);
+                return cv::Point3f {
+                    static_cast<float>(p_ocv.x()),
+                    static_cast<float>(p_ocv.y()),
+                    static_cast<float>(p_ocv.z()),
+                };
+            }));
+        const auto image_points = std::vector { icon, t, l, b, r };
 
         auto rota_vec      = cv::Vec3d { };
         auto tran_vec      = cv::Vec3d { };

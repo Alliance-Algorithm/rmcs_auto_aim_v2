@@ -15,6 +15,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <limits>
 #include <numbers>
@@ -216,14 +217,26 @@ struct RuneModel::Impl {
 
     struct InitCandidate {
         Eigen::Vector3d center_odom { Eigen::Vector3d::Zero() };
-        double face_yaw_odom = 0.0;
+        double face_yaw_odom  = 0.0;
+        double rotation_angle = 0.0;
 
-        int inactive_inliers = 0;
-        double icon_error    = std::numeric_limits<double>::max();
+        Point2d icon_pixel;
+        Point2d seed_pixel;
+
+        int inactive_inliers     = 0;
+        double icon_error        = std::numeric_limits<double>::max();
+        double seed_center_error = std::numeric_limits<double>::max();
 
         double seed_sse       = std::numeric_limits<double>::max();
         double seed_max_error = std::numeric_limits<double>::max();
 
+        double inactive_center_sse = std::numeric_limits<double>::max();
+    };
+
+    struct InitLayoutScore {
+        double icon_error          = std::numeric_limits<double>::max();
+        double seed_center_error   = std::numeric_limits<double>::max();
+        int inactive_inliers       = 0;
         double inactive_center_sse = std::numeric_limits<double>::max();
     };
 
@@ -321,8 +334,9 @@ struct RuneModel::Impl {
 
         auto camera_points = std::array<cv::Point3f, 5> { };
         for (const auto& [index, point] : RunePagePoints::kPoints | std::views::enumerate) {
-            const auto p_local  = point.make<Eigen::Vector3d>();
-            const auto p_camera = rotation_opencv * p_local + translation_opencv;
+            const auto p_local_ros = point.make<Eigen::Vector3d>();
+            const auto p_local_ocv = util::ros2opencv_position(p_local_ros);
+            const auto p_camera    = rotation_opencv * p_local_ocv + translation_opencv;
             camera_points[static_cast<std::size_t>(index)] = cv::Point3f {
                 static_cast<float>(p_camera.x()),
                 static_cast<float>(p_camera.y()),
@@ -349,101 +363,68 @@ struct RuneModel::Impl {
         return std::pair { sse, max_error };
     }
 
-    auto evaluate_inactive_centers(std::span<const RuneBullseye> inactive_bullseyes,
-        const Eigen::Vector3d& center_odom, double face_yaw_odom) const -> std::pair<int, double> {
+    auto evaluate_reduced_layout(const RuneIcon& icon, const RuneBullseye& seed,
+        std::span<const RuneBullseye> other_inactive_bullseyes, const Eigen::Vector3d& center_odom,
+        double face_yaw_odom, double rotation_angle) const -> std::optional<InitLayoutScore> {
 
         auto simulated    = observable;
         StateVector state = StateVector::Zero();
         state[kX]         = center_odom.x();
         state[kY]         = center_odom.y();
         state[kZ]         = center_odom.z();
-        state[kW]         = 0.0;
-        state[kA]         = 0.0;
+        state[kA]         = rotation_angle;
         state[kPsi]       = face_yaw_odom;
         simulated.update(state);
 
-        constexpr auto kBladeBegin = 1;
-        constexpr auto kBladeEnd   = Observable::kFeatureCount;
-        const auto gate2           = config.init_center_gate * config.init_center_gate;
-
-        auto obs_points = std::array<Eigen::Vector2d, 2> { };
-        for (const auto& [index, bullseye] : inactive_bullseyes | std::views::enumerate) {
-            obs_points[static_cast<std::size_t>(index)] =
-                Eigen::Vector2d { bullseye.center.x, bullseye.center.y };
-        }
-
-        auto single_best = std::array<double, 2> {
-            std::numeric_limits<double>::max(),
-            std::numeric_limits<double>::max(),
-        };
-        for (const auto& [obs_index, obs_point] : obs_points | std::views::enumerate) {
-            for (int blade = kBladeBegin; blade < kBladeEnd; ++blade) {
-                if (!simulated.visible[blade]) continue;
-                const auto diff = obs_point - simulated.projected[blade];
-                const auto err2 = diff.squaredNorm();
-                if (err2 < single_best[static_cast<std::size_t>(obs_index)]) {
-                    single_best[static_cast<std::size_t>(obs_index)] = err2;
-                }
-            }
-        }
-
-        if (inactive_bullseyes.size() == 1) {
-            if (single_best[0] <= gate2) return { 1, single_best[0] };
-            return { 0, std::numeric_limits<double>::max() };
-        }
-
-        auto partial_inliers = 0;
-        auto partial_sse     = 0.0;
-        for (double err2 : single_best) {
-            if (err2 <= gate2) {
-                partial_inliers += 1;
-                partial_sse += err2;
-            }
-        }
-
-        auto best_pair = std::numeric_limits<double>::max();
-        for (int lhs = kBladeBegin; lhs < kBladeEnd; ++lhs) {
-            if (!simulated.visible[lhs]) continue;
-            for (int rhs = kBladeBegin; rhs < kBladeEnd; ++rhs) {
-                if (lhs == rhs || !simulated.visible[rhs]) continue;
-
-                const auto lhs_err2 = (obs_points[0] - simulated.projected[lhs]).squaredNorm();
-                const auto rhs_err2 = (obs_points[1] - simulated.projected[rhs]).squaredNorm();
-                if (lhs_err2 > gate2 || rhs_err2 > gate2) continue;
-
-                best_pair = std::min(best_pair, lhs_err2 + rhs_err2);
-            }
-        }
-        if (best_pair != std::numeric_limits<double>::max()) return { 2, best_pair };
-        if (partial_inliers > 0) return { 1, std::min(single_best[0], single_best[1]) };
-        return { 0, std::numeric_limits<double>::max() };
-    }
-
-    auto evaluate_reduced_layout(const RuneIcon& icon,
-        std::span<const RuneBullseye> inactive_bullseyes, const Eigen::Vector3d& center_odom,
-        double face_yaw_odom) const -> std::optional<std::pair<double, std::pair<int, double>>> {
-
-        auto simulated    = observable;
-        StateVector state = StateVector::Zero();
-        state[kX]         = center_odom.x();
-        state[kY]         = center_odom.y();
-        state[kZ]         = center_odom.z();
-        state[kPsi]       = face_yaw_odom;
-        simulated.update(state);
-
+        constexpr auto kSeedBlade = 1;
         if (!simulated.visible[Observable::kFeatureIcon]) return std::nullopt;
+        if (!simulated.visible[kSeedBlade]) return std::nullopt;
 
+        const auto gate2 = config.init_center_gate * config.init_center_gate;
+
+        auto score                  = InitLayoutScore { };
         const auto icon_observation = Eigen::Vector2d { icon.center.x, icon.center.y };
-        const auto icon_error =
+        score.icon_error =
             (icon_observation - simulated.projected[Observable::kFeatureIcon]).squaredNorm();
 
-        const auto inactive_score =
-            evaluate_inactive_centers(inactive_bullseyes, center_odom, face_yaw_odom);
-        return std::pair { icon_error, inactive_score };
+        const auto seed_observation = Eigen::Vector2d { seed.center.x, seed.center.y };
+        score.seed_center_error =
+            (seed_observation - simulated.projected[kSeedBlade]).squaredNorm();
+        if (score.seed_center_error > gate2) return std::nullopt;
+
+        if (other_inactive_bullseyes.empty()) {
+            score.inactive_inliers    = 0;
+            score.inactive_center_sse = 0.0;
+            return score;
+        }
+
+        constexpr auto kBladeBegin = 2;
+        constexpr auto kBladeEnd   = Observable::kFeatureCount;
+
+        auto total_sse = 0.0;
+        auto inliers   = 0;
+        for (const auto& bullseye : other_inactive_bullseyes) {
+            const auto observation = Eigen::Vector2d { bullseye.center.x, bullseye.center.y };
+            auto best_err2         = std::numeric_limits<double>::max();
+            for (int blade = kBladeBegin; blade < kBladeEnd; ++blade) {
+                if (!simulated.visible[blade]) continue;
+                best_err2 =
+                    std::min(best_err2, (observation - simulated.projected[blade]).squaredNorm());
+            }
+            if (best_err2 > gate2) continue;
+
+            inliers += 1;
+            total_sse += best_err2;
+        }
+
+        score.inactive_inliers    = inliers;
+        score.inactive_center_sse = inliers > 0 ? total_sse : std::numeric_limits<double>::max();
+        return score;
     }
 
     auto make_init_candidate(const RuneIcon& icon, const RuneBullseye& seed,
-        std::span<const RuneBullseye> inactive_bullseyes) const -> std::optional<InitCandidate> {
+        std::span<const RuneBullseye> other_inactive_bullseyes) const
+        -> std::optional<InitCandidate> {
 
         auto pnp          = SingleRunePnpSolution { };
         pnp.input.cam     = camera_feature;
@@ -466,72 +447,51 @@ struct RuneModel::Impl {
         const auto q_odom_camera = camera_feature.orientation.make<Eigen::Quaterniond>();
         const auto t_odom_camera = camera_feature.translation.make<Eigen::Vector3d>();
 
-        auto candidate           = InitCandidate { };
-        const auto q_face_odom   = (q_odom_camera * q_camera_rune).normalized();
-        const auto face_x_odom   = q_face_odom * Eigen::Vector3d::UnitX();
+        auto candidate         = InitCandidate { };
+        const auto r_page_odom = (q_odom_camera * q_camera_rune).normalized().toRotationMatrix();
+        const auto face_x_odom = r_page_odom.col(0);
+        constexpr auto kYawEps = 1e-6;
+        if (face_x_odom.head<2>().squaredNorm() <= kYawEps) return std::nullopt;
+
+        const auto pitch = std::asin(std::abs(face_x_odom.z()));
+        if (pitch > util::deg2rad(config.init_pitch_bound)) return std::nullopt;
+
         const auto base_yaw      = std::atan2(face_x_odom.y(), face_x_odom.x());
         candidate.center_odom    = q_odom_camera * t_camera_rune + t_odom_camera;
         candidate.seed_sse       = seed_error->first;
         candidate.seed_max_error = seed_error->second;
 
-        static constexpr std::array kYawOffsets = {
-            0.0,
-            std::numbers::pi / 2.0,
-            -std::numbers::pi / 2.0,
-            std::numbers::pi,
-        };
+        {
+            const auto face_x_camera = q_odom_camera.conjugate()
+                * Eigen::Vector3d { std::cos(base_yaw), std::sin(base_yaw), 0.0 };
+            if (face_x_camera.x() <= 0.0) return std::nullopt;
 
-        auto best_yaw_score = std::optional<std::tuple<double, double, int, double>> { };
-        for (double offset : kYawOffsets) {
-            const auto yaw = util::normalize_angle(base_yaw + offset);
+            const auto r_yaw_inv =
+                Eigen::AngleAxisd { -base_yaw, Eigen::Vector3d::UnitZ() }.toRotationMatrix();
+            const auto r_seed_local = r_yaw_inv * r_page_odom;
+            const auto seed_angle   = std::atan2(-r_seed_local(1, 2), r_seed_local(2, 2));
 
-            const auto face_x_candidate_odom =
-                Eigen::Vector3d { std::cos(yaw), std::sin(yaw), 0.0 };
-            const auto face_x_candidate_camera = q_odom_camera.conjugate() * face_x_candidate_odom;
-            if (face_x_candidate_camera.x() <= 0.0) continue;
+            const auto layout_score = evaluate_reduced_layout(
+                icon, seed, other_inactive_bullseyes, candidate.center_odom, base_yaw, seed_angle);
+            if (!layout_score) return std::nullopt;
 
-            const auto layout_score =
-                evaluate_reduced_layout(icon, inactive_bullseyes, candidate.center_odom, yaw);
-            if (!layout_score) continue;
-
-            const auto& [icon_error, inactive_score]           = *layout_score;
-            const auto [inactive_inliers, inactive_center_sse] = inactive_score;
-
-            const auto current = std::tuple {
-                icon_error,
-                yaw,
-                inactive_inliers,
-                inactive_center_sse,
-            };
-            if (!best_yaw_score) {
-                best_yaw_score = current;
-                continue;
-            }
-
-            const auto& [best_icon_error, best_yaw, best_inliers, best_center_sse] =
-                *best_yaw_score;
-            std::ignore = best_yaw;
-            if (inactive_inliers > best_inliers
-                || (inactive_inliers == best_inliers
-                    && (icon_error < best_icon_error
-                        || (icon_error == best_icon_error
-                            && inactive_center_sse < best_center_sse)))) {
-                best_yaw_score = current;
-            }
+            candidate.face_yaw_odom       = base_yaw;
+            candidate.rotation_angle      = seed_angle;
+            candidate.inactive_inliers    = layout_score->inactive_inliers;
+            candidate.icon_error          = layout_score->icon_error;
+            candidate.seed_center_error   = layout_score->seed_center_error;
+            candidate.inactive_center_sse = layout_score->inactive_center_sse;
         }
 
-        if (!best_yaw_score) return std::nullopt;
-
-        candidate.icon_error          = std::get<0>(*best_yaw_score);
-        candidate.face_yaw_odom       = std::get<1>(*best_yaw_score);
-        candidate.inactive_inliers    = std::get<2>(*best_yaw_score);
-        candidate.inactive_center_sse = std::get<3>(*best_yaw_score);
         return candidate;
     }
 
     static auto better_init_candidate(const InitCandidate& lhs, const InitCandidate& rhs) {
         if (lhs.inactive_inliers != rhs.inactive_inliers) {
             return lhs.inactive_inliers > rhs.inactive_inliers;
+        }
+        if (lhs.seed_center_error != rhs.seed_center_error) {
+            return lhs.seed_center_error < rhs.seed_center_error;
         }
         if (lhs.icon_error != rhs.icon_error) {
             return lhs.icon_error < rhs.icon_error;
@@ -671,7 +631,7 @@ struct RuneModel::Impl {
 
     auto init(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept
         -> bool {
-        // fprintf(stderr, "fuck\n");
+        if (icons.empty()) return false;
 
         auto inactive_bullseyes = std::vector<const RuneBullseye*> { };
         for (const auto& bullseye : bullseyes) {
@@ -680,40 +640,44 @@ struct RuneModel::Impl {
 
         if (inactive_bullseyes.empty()) return false;
         if (inactive_bullseyes.size() > 2) return false;
-        if (icons.empty()) return false;
 
         auto best_candidate = std::optional<InitCandidate> { };
         for (const auto& icon : icons) {
             for (const auto* seed : inactive_bullseyes) {
                 if (!seed) continue;
 
-                auto inactive_storage = std::array<RuneBullseye, 2> { };
-                for (const auto& [index, item] : inactive_bullseyes | std::views::enumerate) {
-                    inactive_storage[static_cast<std::size_t>(index)] = *item;
-                }
-                const auto inactive = std::span<const RuneBullseye> { inactive_storage.data(),
-                    inactive_bullseyes.size() };
+                auto other_inactive_storage = std::array<RuneBullseye, 1> { };
+                auto other_inactive_count   = std::size_t { 0 };
+                for (const auto* item : inactive_bullseyes) {
+                    if (item == seed) continue;
+                    if (other_inactive_count >= other_inactive_storage.size()) break;
 
-                auto candidate = make_init_candidate(icon, *seed, inactive);
+                    other_inactive_storage[other_inactive_count] = *item;
+                    other_inactive_count++;
+                }
+                const auto other_inactive = std::span<const RuneBullseye> {
+                    other_inactive_storage.data(),
+                    other_inactive_count,
+                };
+
+                auto candidate = make_init_candidate(icon, *seed, other_inactive);
                 if (!candidate) continue;
                 if (!best_candidate || better_init_candidate(*candidate, *best_candidate)) {
-                    best_candidate = *candidate;
+                    candidate->icon_pixel = icon.center;
+                    candidate->seed_pixel = seed->center;
+                    best_candidate        = *candidate;
                 }
             }
         }
 
         if (!best_candidate) return false;
-        fprintf(stderr, "fuck yes\n");
-        // if (best_candidate->inactive_inliers != static_cast<int>(inactive_bullseyes.size())) {
-        //     return false;
-        // }
 
         context.posteriors_state       = StateVector::Zero();
         context.posteriors_state[kX]   = best_candidate->center_odom.x();
         context.posteriors_state[kY]   = best_candidate->center_odom.y();
         context.posteriors_state[kZ]   = best_candidate->center_odom.z();
         context.posteriors_state[kW]   = 0.0;
-        context.posteriors_state[kA]   = 0.0;
+        context.posteriors_state[kA]   = best_candidate->rotation_angle;
         context.posteriors_state[kPsi] = best_candidate->face_yaw_odom;
 
         context.reset_covariance();
@@ -722,6 +686,20 @@ struct RuneModel::Impl {
         fitter.reset();
 
         observable.update(context.posteriors_state);
+
+        update(Eigen::Vector2d { best_candidate->icon_pixel.x, best_candidate->icon_pixel.y }, 0);
+        update(Eigen::Vector2d { best_candidate->seed_pixel.x, best_candidate->seed_pixel.y }, 1);
+
+        addition.tracked.clear();
+        addition.predicted.clear();
+        for (int feature_id = 0; feature_id < Observable::kFeatureCount; ++feature_id) {
+            if (!observable.visible[feature_id]) continue;
+            addition.predicted.push_back({
+                feature_id,
+                Point2d {
+                    observable.projected[feature_id].x(), observable.projected[feature_id].y() },
+            });
+        }
 
         return true;
     }

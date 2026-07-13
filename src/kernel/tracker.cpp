@@ -74,6 +74,7 @@ struct Tracker::Impl {
             &RuneConfig::init_seed_mean_error, "init_seed_mean_error",
             &RuneConfig::init_seed_max_error, "init_seed_max_error",
             &RuneConfig::init_center_gate, "init_center_gate",
+            &RuneConfig::init_pitch_bound, "init_pitch_bound",
             // clang-format on
         };
     } rune_config;
@@ -284,8 +285,7 @@ struct Tracker::Impl {
             if (!stored.icons.empty() || !stored.bullseyes.empty()) {
                 if (rune == nullptr) {
                     auto model = std::make_unique<RuneModel>(rune_config);
-                    model->update_camera(
-                        std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
+                    model->update_camera(std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
                         camera.distort_coeff);
                     model->update_transform({
                         .translation = camera.translation,
@@ -431,23 +431,16 @@ struct Tracker::Impl {
                         if (ok) addition.rune_polygon = polygon;
                     }
 
-                    const auto a = state.rotation_angle;
-                    const auto v = state.rotation_speed;
+                    const auto a          = state.rotation_angle;
+                    const auto v          = state.rotation_speed;
                     const auto model_text = state.sine_valid
-                        ? std::format(
-                              "spd(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), e={:.3f}",
-                              state.sine_v,
-                              state.sine_a,
-                              state.sine_phase,
-                              state.sine_omega,
+                        ? std::format("spd(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), e={:.3f}",
+                              state.sine_v, state.sine_a, state.sine_phase, state.sine_omega,
                               state.prediction_cost)
-                        : state.use_prediction_speed
-                        ? std::format(
-                              "th(t)={:+.2f}{:+.2f}t, e={:.3f}",
-                              a,
-                              v,
-                              state.prediction_cost)
-                        : std::format("theta_ekf={:+.2f}", a);
+                        : state.use_prediction_speed ? std::format("th(t)={:+.2f}{:+.2f}t, "
+                                                                   "e={:.3f}",
+                                                           a, v, state.prediction_cost)
+                                                     : std::format("theta_ekf={:+.2f}", a);
                     addition.infos.push_back({
                         .text  = model_text,
                         .point = Point3d { state.x, state.y, state.z },
