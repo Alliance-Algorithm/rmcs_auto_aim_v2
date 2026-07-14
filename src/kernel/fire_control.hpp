@@ -23,8 +23,9 @@ public:
     };
 
     struct Aimed {
-        double yaw   = 0;
-        double pitch = 0;
+        double aim_yaw = 0;
+        double raw_yaw = 0;
+        double pitch   = 0;
 
         bool shoot   = false;
         bool pre_aim = false;

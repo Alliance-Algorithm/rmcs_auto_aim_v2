@@ -25,7 +25,7 @@ struct FireController::Impl {
         double offset_yaw { 0.0 };
         double offset_pitch { 0.0 };
 
-        std::array<double, 2> attack_window { 20.0, 20.0 };
+        double attack_window { 40.0 };
 
         double yaw_tolerance   = 0.07;
         double pitch_tolerance = 0.04;
@@ -89,16 +89,6 @@ struct FireController::Impl {
         return (cross_z >= 0.0) ? abs_angle : -abs_angle;
     }
 
-    static auto get_cycle_time(const Trackable& trackable) {
-        const auto omega = std::abs(trackable.get_rotation_speed());
-        if (omega < 1e-6) return 0.0;
-
-        const auto n = static_cast<double>(trackable.get_aimpoints().size());
-        if (n < 1.0) return 0.0;
-
-        return 2.0 * std::numbers::pi / (n * omega);
-    }
-
     explicit Impl(const YAML::Node& yaml) {
         if (const auto ret = config.serialize(yaml); !ret.has_value()) {
             throw std::runtime_error { std::format("FireControllerV2: {}", ret.error()) };
@@ -111,10 +101,9 @@ struct FireController::Impl {
             throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
         }
 
-        config.offset_yaw       = util::deg2rad(config.offset_yaw);
-        config.offset_pitch     = util::deg2rad(config.offset_pitch);
-        config.attack_window[0] = util::deg2rad(config.attack_window[0]);
-        config.attack_window[1] = util::deg2rad(config.attack_window[1]);
+        config.offset_yaw    = util::deg2rad(config.offset_yaw);
+        config.offset_pitch  = util::deg2rad(config.offset_pitch);
+        config.attack_window = util::deg2rad(config.attack_window);
 
         shoot_evaluator = std::make_unique<ShootEvaluator>(ShootEvaluator::Config {
             .yaw_tolerance          = config.yaw_tolerance,
@@ -124,8 +113,112 @@ struct FireController::Impl {
         });
     }
 
-    // @return 序号, 是否预瞄
-    auto get_aimed_id(const Trackable& trackable, std::tuple<double, double> window)
+    /// @brief 锯齿波动态攻击窗口计算。
+    /// 将四板目标的 Yaw 跟踪信号建模为锯齿波：每块装甲板扫过视野时 Yaw 近似线性变化，
+    /// 切换板时瞬时跳变。在云台最大速度和最大加速度约束下判断是否具备匀速跟踪段。
+    /// 若无，则判定为退化，下游改为瞄准中心射击。
+    ///
+    /// 预瞄时间采用时间最优的 bang-bang（加速度主导）或梯形曲线（速度饱和）建模。
+    /// 跟踪角速度阈值由云台视角的装甲板轨道真实角跨度计算：2·arcsin(r·sin45°/L)。
+    ///
+    /// 返回值经几何反解转为目标本体角度半幅，与 yaw_angle() 的 delta 同帧。
+    ///
+    /// @param  trackable  跟踪目标
+    /// @return (window_half, degraded)
+    ///         - window_half: 目标本体角度半幅 (rad)，供下游与配置窗口取 min 夹紧
+    ///         - degraded:    是否退化
+    auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, bool> {
+        const auto omega = std::abs(trackable.get_rotation_speed());
+        if (omega < 1e-6) {
+            return { std::numeric_limits<double>::infinity(), false };
+        }
+        if (state.max_yaw_vel <= 0.0 || state.max_yaw_acc <= 0.0) {
+            return { std::numeric_limits<double>::infinity(), false };
+        }
+
+        const auto center = trackable.get_direction();
+
+        // 几何模型：云台-目标中心-装甲板中心，夹角 45°
+        auto radius   = double { };
+        auto distance = double { };
+        auto stroke   = double { };
+        {
+            const auto aimpoints = trackable.get_aimpoints();
+
+            radius   = std::hypot(aimpoints[0].x - center.x, aimpoints[0].y - center.y);
+            distance = std::hypot(center.x, center.y);
+
+            if (radius <= 0.0 || distance <= 0.0) {
+                return { std::numeric_limits<double>::infinity(), false };
+            }
+
+            constexpr auto kHalfAngle = std::numbers::pi / 4.0;
+
+            const auto L = std::sqrt(distance * distance + radius * radius
+                - 2.0 * distance * radius * std::cos(kHalfAngle));
+            const auto A = std::asin(radius * std::sin(kHalfAngle) / L);
+
+            stroke = 2.0 * A;
+        }
+
+        // 退化窗口：yaw_tolerance 距离量对应的目标本体角度半幅
+        const auto degraded_window = [&](double radius) -> double {
+            const auto ratio = config.yaw_tolerance / radius;
+            if (ratio >= 1.0) {
+                return std::numeric_limits<double>::infinity();
+            }
+            return std::asin(ratio);
+        };
+
+        // 锯齿波参数
+        const auto cycle_time = std::numbers::pi / (2.0 * omega);
+        const auto v_track    = stroke / cycle_time;
+
+        const auto v_max = state.max_yaw_vel;
+        const auto a_max = state.max_yaw_acc;
+
+        // 第一重退化：匀速跟踪段斜率超过云台最大速度
+        if (v_track > v_max) {
+            return { degraded_window(radius), true };
+        }
+
+        // 预瞄时间计算
+        auto stable_window = double { };
+        {
+            const auto sqrt_stroke_acc = std::sqrt(stroke * a_max);
+            if (sqrt_stroke_acc <= v_max + v_track) {
+                stable_window = stroke - 2.0 * v_track * std::sqrt(stroke / a_max);
+            } else {
+                stable_window =
+                    v_max * stroke / (v_max + v_track) - v_track * (v_max + v_track) / a_max;
+            }
+        }
+
+        // 第二重退化：预瞄时间占满整个周期，无稳定跟踪段
+        if (stable_window <= 0.0) {
+            return { degraded_window(radius), true };
+        }
+
+        // 将云月视角半幅转换回目标本体角度半幅
+        auto half_window = double { };
+        {
+            const auto phi     = stable_window * 0.5;
+            const auto sin_sum = (distance / radius) * std::sin(phi);
+            if (sin_sum >= 1.0) {
+                half_window = std::numeric_limits<double>::infinity();
+            } else {
+                half_window = std::asin(sin_sum) - phi;
+            }
+        }
+
+        // logging.info("cycle: {:.2f}, v_track: {:.3f}, stroke: {:.3f}, stable: {:.3f}, body:
+        // {:.3f}",
+        // cycle_time, v_track, stroke, stable_window, half_window);
+
+        return { half_window, false };
+    }
+
+    auto evaluate_aimed(const Trackable& trackable, bool use_pre_aim = true)
         -> std::tuple<std::int8_t, bool> {
 
         auto aimpoints = trackable.get_aimpoints();
@@ -174,74 +267,71 @@ struct FireController::Impl {
                 }
             }
 
-            return { -1, true }; // 不存在的情况
+            return { -1, true };
         }
         single_shoot = false;
 
-        // 前哨站与机器人
+        // 窗口计算
+        auto degraded    = false;
+        auto half_window = double { };
+
+        if (use_pre_aim) {
+            auto dynamic_window = std::numeric_limits<double>::infinity();
+            if (aimpoints.size() == 4) {
+                std::tie(dynamic_window, degraded) = get_attack_window(trackable);
+
+                // logging.info("dynamic_window: {:.1f}, degraded: {}", dynamic_window, degraded);
+            }
+            half_window = std::min(config.attack_window / 2, dynamic_window);
+        } else {
+            half_window = config.attack_window / 2;
+        }
+
+        // 装甲板选择
         {
-            // 倾向于使用上一帧的有效装甲板
-            // FIXME: 在边界时会疯狂跳变
             const auto length = static_cast<std::int8_t>(aimpoints.size());
-            if ((last_armor_idx >= 0) && (last_armor_idx < length)) {
-                const auto idx = last_armor_idx;
-                const auto delta =
-                    util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[idx]));
-                const auto abs_delta = std::abs(delta);
-                const auto threshold = (delta > 0) ? std::get<0>(window) : std::get<1>(window);
-                if (abs_delta <= threshold) {
-                    return std::tuple { last_armor_idx, false };
+            if (last_armor_idx >= 0 && last_armor_idx < length) {
+                const auto delta = util::normalize_angle(
+                    yaw_angle(trackable.get_direction(), aimpoints[last_armor_idx]));
+                if (std::abs(delta) <= half_window) {
+                    return { last_armor_idx, false };
                 }
             }
-        }
 
-        auto best_idx   = std::optional<std::int8_t> { };
-        auto best_delta = std::numeric_limits<double>::max();
-        auto next_idx   = std::optional<std::int8_t> { };
-        auto next_delta = std::numeric_limits<double>::max();
+            auto best_index = std::optional<std::int8_t> { };
+            auto best_delta = std::numeric_limits<double>::max();
+            auto next_index = std::optional<std::int8_t> { };
+            auto next_delta = std::numeric_limits<double>::max();
 
-        for (std::size_t i = 0; i < aimpoints.size(); ++i) {
-            const auto delta =
-                util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[i]));
-            const auto abs_delta = std::abs(delta);
+            for (auto i = std::size_t { 0 }; i < aimpoints.size(); ++i) {
+                const auto delta =
+                    util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[i]));
+                const auto abs_delta = std::abs(delta);
 
-            // 窗口内：找最接近中心的
-            const auto threshold = (delta > 0) ? std::get<0>(window) : std::get<1>(window);
-            if (abs_delta <= threshold && abs_delta < best_delta) {
-                best_delta = abs_delta;
-                best_idx   = i;
+                if (abs_delta <= half_window && abs_delta < best_delta) {
+                    best_delta = abs_delta;
+                    best_index = static_cast<std::int8_t>(i);
+                }
+
+                if (use_pre_aim && !degraded) {
+                    const auto dominated = (omega < 0) ? (delta > 0) : (delta < 0);
+                    if (dominated && abs_delta < next_delta) {
+                        next_delta = abs_delta;
+                        next_index = static_cast<std::int8_t>(i);
+                    }
+                }
             }
 
-            // 窗口外：根据旋转方向选下一个即将进入的
-            const auto dominated = (omega < 0) ? (delta > 0) : (delta < 0);
-            if (dominated && abs_delta < next_delta) {
-                next_delta = abs_delta;
-                next_idx   = i;
+            if (best_index) {
+                // logging.info("aimed: {}", *best_index);
+                return { *best_index, false };
             }
+            if (next_index && use_pre_aim) {
+                // logging.info(" next: {}", *next_index);
+                return { *next_index, true };
+            }
+            return { -1, false };
         }
-        return { best_idx ? *best_idx : next_idx.value_or(-1), !best_idx.has_value() };
-    }
-
-    auto get_attack_window(const Trackable& trackable) const -> std::tuple<double, double> {
-        if (state.max_yaw_vel <= 0.0 || state.max_yaw_acc <= 0.0) {
-            return { config.attack_window[0], config.attack_window[1] };
-        }
-
-        const auto cycle_time = get_cycle_time(trackable);
-        if (cycle_time == 0.0) {
-            return { config.attack_window[0], config.attack_window[1] };
-        }
-
-        // 正弦拟合区间
-        const auto vel_limit = state.max_yaw_vel * cycle_time / (2.0 * std::numbers::pi);
-        const auto acc_limit = state.max_yaw_acc * cycle_time * cycle_time
-            / (4.0 * std::numbers::pi * std::numbers::pi);
-        const auto min_limit = std::min(vel_limit, acc_limit);
-
-        return {
-            std::min(config.attack_window[0], min_limit),
-            std::min(config.attack_window[1], min_limit),
-        };
     }
 
     auto aim(const Trackable& trackable) -> std::optional<Aimed> {
@@ -254,18 +344,37 @@ struct FireController::Impl {
         const auto increment = config.shoot_delay
             + std::chrono::duration<double>(state.timestamp - trackable.get_timestamp()).count();
 
-        auto selected = std::int8_t { -1 };
-        auto pre_aim  = false;
-        {
+        auto aim_selected = std::int8_t { -1 };
+        auto raw_selected = std::int8_t { -1 };
+        auto pre_aim      = false;
+        { // FIXME: 这里也需要迭代飞行时间，和下面的一起共用一段逻辑，不应该分开处理
             auto future = trackable.clone();
             future->jump_into(fly_time + increment);
+            std::tie(aim_selected, pre_aim)     = evaluate_aimed(*future);
+            std::tie(raw_selected, std::ignore) = evaluate_aimed(*future, false);
 
-            const auto window = get_attack_window(*future);
-
-            std::tie(selected, pre_aim) = get_aimed_id(*future, window);
+            if (aim_selected < 0) {
+                const auto center = future->get_direction();
+                TrajectorySolution solution { };
+                solution.input.v0    = config.bullet_speed;
+                solution.input.point = center;
+                const auto result    = solution.solve();
+                if (!result) return std::nullopt;
+                const auto aim_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
+                return Aimed {
+                    .aim_yaw      = aim_yaw,
+                    .raw_yaw      = aim_yaw,
+                    .pitch        = result->pitch + config.offset_pitch,
+                    .shoot        = true,
+                    .pre_aim      = false,
+                    .single_shoot = false,
+                    .center       = center,
+                    .attack       = center,
+                };
+            }
         }
 
-        if (selected >= 0) { // 迭代收敛飞行时间
+        if (aim_selected >= 0) { // 迭代收敛飞行时间
             constexpr auto kMaxIterate = std::size_t { 5 };
             constexpr auto kEpsilon    = 0.001;
 
@@ -277,13 +386,13 @@ struct FireController::Impl {
             auto new_time = double { fly_time };
 
             auto solution = TrajectorySolution { };
-            for (std::size_t i = 0; i < kMaxIterate; ++i) {
+            for (auto i = std::size_t { 0 }; i < kMaxIterate; ++i) {
                 auto clone = trackable.clone();
                 clone->jump_into(new_time + increment);
 
                 const auto aimpoints = clone->get_aimpoints();
 
-                attack = aimpoints[selected];
+                attack = aimpoints[aim_selected];
                 center = clone->get_direction();
 
                 solution.input.v0    = config.bullet_speed;
@@ -305,6 +414,25 @@ struct FireController::Impl {
             yaw   = util::normalize_angle(yaw + config.offset_yaw);
             pitch = pitch + config.offset_pitch;
 
+            // 原始 yaw 计算
+            auto raw_yaw = double { yaw };
+            if (raw_selected >= 0 && raw_selected != aim_selected) {
+                auto raw_clone = trackable.clone();
+                raw_clone->jump_into(new_time + increment);
+
+                const auto raw_aimpoints = raw_clone->get_aimpoints();
+                const auto raw_attack    = raw_aimpoints[raw_selected];
+
+                TrajectorySolution solution { };
+                solution.input.v0    = config.bullet_speed;
+                solution.input.point = raw_attack;
+
+                const auto result = solution.solve();
+                if (!result) return std::nullopt;
+
+                raw_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
+            }
+
             // 射击评估
             auto should_shoot = true;
             if (pre_aim) {
@@ -322,7 +450,8 @@ struct FireController::Impl {
             }
 
             return Aimed {
-                .yaw          = yaw,
+                .aim_yaw      = yaw,
+                .raw_yaw      = raw_yaw,
                 .pitch        = pitch,
                 .shoot        = should_shoot,
                 .pre_aim      = pre_aim,

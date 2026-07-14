@@ -77,7 +77,7 @@ fire_control:
   offset_yaw: -0.0 # degree
   offset_pitch: +0.0 # degree
 
-  attack_window: [60.0, 60.0] # degree [left, right]
+  attack_window: 120.0 # degree (total window)
 
   is_lazy_gimbal: false
   require_stable_command: true

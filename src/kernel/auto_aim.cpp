@@ -130,12 +130,13 @@ struct AutoAim::Impl {
             id          = context.id;
             track_ids   = context.track_ids;
         }
-        // id = RobotId::BLUE_SENTRY;
+        id = RobotId::RED_SENTRY; // FIXME:
 
         iso.orientation = image.imu_orientation();
 
         visual.publish(iso, "camera_link");
         visual.publish(yaw, "yaw");
+        visual.publish(pitch, "pitch");
 
         if (counter.tick()) {
             node.info(
@@ -320,12 +321,14 @@ struct AutoAim::Impl {
             if (auto aimed = fire->aim(*trackable)) {
                 cmd.should_track = true;
                 cmd.should_shoot = aimed->shoot;
-                cmd.yaw          = aimed->yaw;
+                cmd.yaw          = aimed->aim_yaw;
                 cmd.pitch        = aimed->pitch;
                 cmd.robot_center = aimed->center;
 
                 visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                visual.publish(aimed->yaw, "aim_yaw");
+                visual.publish(aimed->aim_yaw, "aim_yaw");
+                visual.publish(aimed->raw_yaw, "raw_yaw");
+                visual.publish(aimed->pitch, "aim_pitch");
 
                 if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
                     const auto color = aimed->shoot ? kRed : aimed->pre_aim ? kYellow : kGreen;
