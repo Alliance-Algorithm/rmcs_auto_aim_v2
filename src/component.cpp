@@ -1,4 +1,5 @@
 #include "kernel/auto_aim.hpp"
+#include "utility/rclcpp/node.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -15,11 +16,16 @@
 
 namespace rmcs {
 
+using namespace rmcs::util;
+
 class AutoAimComponent final : public rmcs_executor::Component {
     static inline const auto kTNaN = Eigen::Vector3d { kNaN, kNaN, kNaN };
 
 private:
     AutoAim auto_aim { };
+    RclcppNode rclcpp { get_component_name() };
+
+    bool manual_shoot = false;
 
     EventInputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> camera_frame {
         [this](const std::shared_ptr<const rmcs_msgs::CameraFrame>& frame) {
@@ -54,7 +60,8 @@ private:
     InputInterface<Eigen::Vector3d> barrel_direction;
     InputInterface<double> yaw_velocity;
     InputInterface<rmcs_msgs::RobotId> robot_id;
-    InputInterface<rmcs_msgs::Switch> switch_right;
+    InputInterface<rmcs_msgs::Switch> rswitch;
+    InputInterface<rmcs_msgs::Switch> lswitch;
     InputInterface<rmcs_msgs::Mouse> mouse;
 
     OutputInterface<bool> should_track;
@@ -75,7 +82,8 @@ public:
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
         register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
         register_input("/referee/id", robot_id, false);
-        register_input("/remote/switch/right", switch_right, false);
+        register_input("/remote/switch/right", rswitch, false);
+        register_input("/remote/switch/left", lswitch, false);
         register_input("/remote/mouse", mouse, false);
 
         register_output("/auto_aim/should_control", should_track, false);
@@ -83,6 +91,10 @@ public:
         register_output("/auto_aim/single_shoot", single_shoot, false);
         register_output("/auto_aim/control_direction", target_direction, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
+
+        const auto& params = rclcpp.params();
+
+        manual_shoot = params.get_bool("manual_shoot");
     }
 
     ~AutoAimComponent() override {
@@ -142,8 +154,8 @@ public:
             }
 
             using namespace rmcs_msgs;
-            ctx.aim_intent = (mouse.ready() && mouse->right)
-                || (switch_right.ready() && *switch_right == Switch::UP);
+            ctx.track_intent =
+                (mouse.ready() && mouse->right) || (rswitch.ready() && *rswitch == Switch::UP);
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
@@ -158,12 +170,17 @@ public:
 
         const auto now = std::chrono::steady_clock::now();
         if (auto_aim.command_updated()) {
-            auto_aim.with_command([this](const AutoAim::Command& cmd) {
+            auto_aim.with_command([=, this](const AutoAim::Command& cmd) {
                 using namespace std::chrono_literals;
                 if (Clock::now() - cmd.timestamp > 100ms) return;
 
+                using namespace rmcs_msgs;
+                const auto shoot_intent =
+                    (mouse.ready() && mouse->left) || (lswitch.ready() && *lswitch == Switch::DOWN);
+                *should_shoot =
+                    manual_shoot ? (cmd.should_shoot && shoot_intent) : cmd.should_shoot;
+
                 *should_track = cmd.should_track;
-                *should_shoot = cmd.should_shoot;
                 *single_shoot = cmd.single_shoot;
                 *robot_center = cmd.robot_center.make<Eigen::Vector3d>();
 

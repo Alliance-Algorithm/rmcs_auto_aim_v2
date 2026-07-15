@@ -14,26 +14,36 @@
 
 ### 项目构建
 
-先确保海康相机的 SDK 正确构建，再保证 `rmcs_executor` 正确构建
+先保证 `rmcs_executor` 正确构建，然后克隆本项目并构建：
 
 ```sh
 # 进入工作空间的 src/ 目录下
-git clone https://github.com/Alliance-Algorithm/ros2-hikcamera.git --depth 1
 git clone https://github.com/Alliance-Algorithm/rmcs_auto_aim_v2.git
 
 # 构建依赖
 build-rmcs
 ```
 
+若需使用 `AutoAimCapturerComponent`（连接海康相机实机采集），运行环境/镜像需已安装 `mvs-usb3-core` 海康 MVS SDK。开发镜像与机器人部署镜像通常已预装该依赖，位于 `/opt/mvs-usb3-core`。
+
 ### 运行自瞄
 
-自瞄系统以 Component 的形式集成到 RMCS 控制系统中。在机器人配置文件（如 `sentry.yaml`）的 `components` 列表中添加：
+自瞄系统由多个 Component 组成，以 Component 的形式集成到 RMCS 控制系统中。完整配置与参数说明见 [`config/executor.yaml`](config/executor.yaml)。
 
-```yaml
-- rmcs::AutoAimComponent -> auto_aim_component
-```
+各组件用途如下：
 
-这是一份可以在本机运行的最小配置:
+- `AutoAimComponent`：核心自瞄组件（必需）
+- `AutoAimCapturerComponent`：连接海康相机采集图像
+- `AutoAimRecorderComponent`：录制相机及 IMU 数据
+- `AutoAimPlayerComponent`：回放 `AutoAimRecorderComponent` 录制的数据
+- `AutoAimVideoPlayerComponent`：播放本地视频文件作为图像输入
+
+典型组合示例：
+
+- **实机运行**：`AutoAimCapturerComponent + AutoAimComponent`（可再挂 `AutoAimRecorderComponent` 进行录制）
+- **离线调试**：`AutoAimVideoPlayerComponent + AutoAimComponent`（或 `AutoAimPlayerComponent + AutoAimComponent` 回放录制数据）
+
+这是一份可以在本机运行的最小配置，具体配置参考 [`executor.yaml`](./config/executor.yaml) 中的说明：
 
 ```yaml
 # mock-autoaim.yaml
@@ -41,33 +51,42 @@ rmcs_executor:
   ros__parameters:
     update_rate: 1000.0
     components:
+      - rmcs::AutoAimPlayerComponent -> auto_aim_player
       - rmcs::AutoAimComponent -> auto_aim_component
 
+auto_aim_player:
+  ros__parameters:
+    # ......
+
+auto_aim_component:
+  ros__parameters:
+    # ......
 ```
 
-你可以用如下方式在本机启动自瞄:
+你可以用如下方式在本机启动自瞄：
 
 ```bash
 # 持久化指定运行配置
 set-robot mock-autoaim
 launch-rmcs
 
-# 或者临时手动指定
+# 或者临时手动指定，mock-autoaim 为 yaml 配置的文件名
 ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
 ```
 
-与其他 RMCS 组件不同，自瞄组件的参数不由机器人 YAML 管理，而是由本项目自己的配置文件统一配置，因此实例名可以随意取，不影响参数读取。
+自瞄组件的参数由两部分组成：
 
-配置文件按以下优先级加载（位于运行时 share 目录下），默认只提供 `config.yaml`：
+1. **组件配置**：由 RMCS executor YAML 管理，实例名与 YAML 中的参数命名空间绑定。若修改实例名，需同步修改对应的参数节。
+2. **算法配置**：由本项目自己的配置文件统一配置，加载优先级如下（位于运行时 share 目录下），默认只提供 `config.yaml`：
 
-1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
-2. `custom.yaml` / `custom.yml`
-3. `config.override.yaml` / `config.override.yml`
-4. `config.yaml` / `config.yml`
+   1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
+   2. `custom.yaml` / `custom.yml`
+   3. `config.override.yaml` / `config.override.yml`
+   4. `config.yaml` / `config.yml`
 
-所以我们可以在 `config/` 下面创建一个 `custom.yaml`，作为自己机器人的配置文件，同步至远端时，自瞄会自动选用优先级更高的配置文件，同时除了 `config.yaml` 以外的上述优先级列表中的名字，都写入了 `.gitignore` 中，避免更新仓库时会和本地配置冲突
+所以我们可以在 `config/` 下面创建一个 `custom.yaml`，作为自己机器人的配置文件，同步至远端时，自瞄会自动选用优先级更高的配置文件，同时除了 `config.yaml` 以外的上述优先级列表中的名字，都写入了 `.gitignore` 中，避免更新仓库时会和本地配置冲突。
 
-我们也可以简单用 `export AUTOAIM_CONFIG=unreal.yaml` 来选择默认优先级列表没有的配置文件名，方便本地调试
+我们也可以简单用 `export AUTOAIM_CONFIG=unreal.yaml` 来选择默认优先级列表没有的配置文件名，方便本地调试。
 
 ### 接入自瞄
 

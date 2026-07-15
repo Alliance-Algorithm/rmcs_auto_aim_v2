@@ -124,7 +124,7 @@ struct AutoAim::Impl {
                 pitch = best->pitch;
             }
 
-            intent      = context.aim_intent;
+            intent      = context.track_intent;
             max_yaw_vel = context.max_yaw_vel;
             max_yaw_acc = context.max_yaw_acc;
             id          = context.id;

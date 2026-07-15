@@ -1,3 +1,5 @@
+# 自瞄 RMCS 配置参考
+
 rmcs_executor:
   ros__parameters:
     update_rate: 1000.0
@@ -5,25 +7,59 @@ rmcs_executor:
       - rmcs::AutoAimCapturerComponent -> auto_aim_capturer
       - rmcs::AutoAimRecorderComponent -> auto_aim_recorder
 
+      - rmcs::AutoAimPlayerComponent -> auto_aim_player
+      - rmcs::AutoAimVideoPlayerComponent -> auto_aim_video_player
+
+      - rmcs::AutoAimComponent -> auto_aim_component
+
 auto_aim_capturer:
   ros__parameters:
+    # 相机设备名，空字符串表示自动选择第一台可用相机
     camera_name: ""
+    # 曝光时间，单位微秒
     exposure_us: 2000.0
+    # 模拟增益
     gain: 16.9807
+    # 采集帧率
     framerate: 249.1
+    # 是否垂直翻转图像
     invert_image: false
+    # RLS 同步模型的时间常数，单位秒，用于估计触发信号与帧到达时刻的延迟
     rls_tau_sec: 10.0
 
 auto_aim_recorder:
   ros__parameters:
+    # 录制文件输出目录
     output_path: "/tmp/autoaim/records"
+    # 帧队列深度
     queue_depth: 16
+    # 每累计多少帧执行一次磁盘刷新
     flush_every_n_frames: 64
+    # 单次录制最大时长，单位秒；0 表示不限制
     max_duration_seconds: 0
+    # 录制文件总大小上限，单位 GB；0 表示不限制
     max_videos_size_gb: 0.0
 
 auto_aim_player:
   ros__parameters:
-    input_path: "/tmp/autoaim/records/<timestamp>"
+    # 录制数据目录路径，通常为 AutoAimRecorderComponent 输出的文件夹
+    input_path: "/path/to/<name>"
+    # 是否循环播放
     loop_play: false
+    # 播放暂停帧率，控制帧间间隔
     pause_fps: 30.0
+
+auto_aim_video_player:
+  ros__parameters:
+    # 输入视频文件路径
+    input_path: "/path/to/<name>.avi"
+    # 播放帧率
+    framerate: 40.0
+    # 是否循环播放
+    loop_play: true
+
+auto_aim_component:
+  ros__parameters:
+    # 手动开火开关，若开启，右键自瞄并锁定后，还需要按下鼠标左键
+    # 或者左拨杆向下确认才能发射
+    manual_shoot: false

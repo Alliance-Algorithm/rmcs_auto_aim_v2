@@ -10,35 +10,35 @@ struct ParamsAdapter : public IParams {
     explicit ParamsAdapter(rclcpp::Node& n)
         : node(n) { }
 
-    auto get_string(const std::string& name) -> std::string override {
+    auto get_string(const std::string& name) const -> std::string override {
         return node.get_parameter(name).as_string();
     }
-    auto get_string_array(const std::string& name) -> std::vector<std::string> override {
+    auto get_string_array(const std::string& name) const -> std::vector<std::string> override {
         return node.get_parameter(name).as_string_array();
     }
 
-    auto get_int64(const std::string& name) -> std::int64_t override {
+    auto get_int64(const std::string& name) const -> std::int64_t override {
         return node.get_parameter(name).as_int();
     }
-    auto get_int64_array(const std::string& name) -> std::vector<std::int64_t> override {
+    auto get_int64_array(const std::string& name) const -> std::vector<std::int64_t> override {
         return node.get_parameter(name).as_integer_array();
     }
 
-    auto get_bool(const std::string& name) -> bool override {
+    auto get_bool(const std::string& name) const -> bool override {
         return node.get_parameter(name).as_bool();
     }
-    auto get_bool_array(const std::string& name) -> std::vector<bool> override {
+    auto get_bool_array(const std::string& name) const -> std::vector<bool> override {
         return node.get_parameter(name).as_bool_array();
     }
 
-    auto get_double(const std::string& name) -> double override {
+    auto get_double(const std::string& name) const -> double override {
         return node.get_parameter(name).as_double();
     }
-    auto get_double_array(const std::string& name) -> std::vector<double> override {
+    auto get_double_array(const std::string& name) const -> std::vector<double> override {
         return node.get_parameter(name).as_double_array();
     }
 
-    auto get_uint8_array(const std::string& name) -> std::vector<std::uint8_t> override {
+    auto get_uint8_array(const std::string& name) const -> std::vector<std::uint8_t> override {
         return node.get_parameter(name).as_byte_array();
     }
 };

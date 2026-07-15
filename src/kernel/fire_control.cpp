@@ -434,20 +434,14 @@ struct FireController::Impl {
             }
 
             // 射击评估
-            auto should_shoot = true;
-            if (pre_aim) {
-                should_shoot = false;
-            } else if (config.skip_pose_check) {
-                should_shoot = true;
-            } else {
-                const auto cmd = ShootEvaluator::Command {
+            const auto should_shoot = shoot_evaluator->evaluate(
+                {
                     .yaw    = yaw,
                     .pitch  = pitch,
                     .center = center,
                     .armor  = attack,
-                };
-                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
-            }
+                },
+                state.yaw, state.pitch);
 
             return Aimed {
                 .aim_yaw      = yaw,

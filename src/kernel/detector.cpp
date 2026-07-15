@@ -119,11 +119,12 @@ struct Detector::Impl {
     auto detect(const cv::Mat& mat) noexcept -> Result {
         auto result = Result { };
 
-        const auto elements = rune_detector.detect(mat);
-        {
-            result.icons     = elements.icons;
-            result.bullseyes = elements.bullseyes;
-        }
+        // FIXME: 临时注释，记得改回来
+        // const auto elements = rune_detector.detect(mat);
+        // {
+        //     result.icons     = elements.icons;
+        //     result.bullseyes = elements.bullseyes;
+        // }
 
         auto detected = armor_detection.sync_detect(mat);
         if (detected.empty()) return result;

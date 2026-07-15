@@ -1,5 +1,6 @@
 #pragma once
 #include "utility/pimpl.hpp"
+#include "utility/rclcpp/parameters.hpp"
 
 #include <format>
 #include <string>
@@ -16,6 +17,8 @@ public:
 
     auto set_pub_topic_prefix(const std::string&) noexcept -> void;
     auto get_pub_topic_prefix() const noexcept -> std::string;
+
+    auto params() const noexcept -> const IParams&;
 
     template <typename... Args>
     auto info(std::format_string<Args...> fmt, Args&&... args) const noexcept {

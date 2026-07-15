@@ -1,5 +1,6 @@
 #pragma once
 #include "node.hpp"
+#include "param_adapter.hpp"
 #include "rclcpp/node.hpp"
 #include <rclcpp/executors.hpp>
 
@@ -21,10 +22,12 @@ namespace prefix {
 struct RclcppNode::Details {
 
     std::shared_ptr<rclcpp::Node> rclcpp;
+    ParamsAdapter params_adapter;
 
     explicit Details(const std::string& name) noexcept
-        : rclcpp { std::make_shared<rclcpp::Node>(name,
-              rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true)) } { }
+        : rclcpp { std::make_shared<rclcpp::Node>(
+              name, rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true)) }
+        , params_adapter { *rclcpp } { }
 
     auto spin_once() const noexcept {
         if (rclcpp::ok()) rclcpp::spin_some(rclcpp);
