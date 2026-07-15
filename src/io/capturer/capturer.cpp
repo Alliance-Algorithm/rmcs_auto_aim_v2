@@ -11,10 +11,10 @@
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
+#include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
-#include <pluginlib/class_list_macros.hpp>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/board_clock.hpp>
 #include <rmcs_msgs/camera_frame.hpp>
@@ -28,36 +28,33 @@
 
 namespace rmcs {
 
-class AutoAimCapturerComponent final
-    : public rmcs_executor::Component
-    , public rclcpp::Node {
+class AutoAimCapturerComponent final : public rmcs_executor::Component, public rclcpp::Node {
 public:
     AutoAimCapturerComponent()
-        : Node(
-              get_component_name(),
+        : Node(get_component_name(),
               rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true))
-        , camera_config_(
-              Hikcamera::CameraConfig::cs016_default()
-                  .set_device_name(get_parameter_or<std::string>("camera_name", ""))
-                  .set_exposure_us(
-                      static_cast<float>(get_parameter_or<double>("exposure_us", 2000.0)))
-                  .set_gain(static_cast<float>(
-                      get_parameter_or<double>("gain", Hikcamera::Cs016MaxGain)))
-                  .set_framerate(static_cast<float>(
-                      get_parameter_or<double>("framerate", Hikcamera::Cs016MaxFramerate)))
-                  .set_invert_image(get_parameter_or<bool>("invert_image", false)))
-        , half_exposure_time_(
-              std::chrono::duration_cast<rmcs_msgs::BoardClock::duration>(
-                  std::chrono::duration<float, std::micro>(camera_config_.exposure_us)))
+        , camera_config_ { Hikcamera::CameraConfig::cs016_default()
+                .set_device_name(get_parameter_or<std::string>("camera_name", ""))
+                .set_exposure_us(
+                    static_cast<float>(get_parameter_or<double>("exposure_us", 2000.0)))
+                .set_gain(
+                    static_cast<float>(get_parameter_or<double>("gain", Hikcamera::Cs016MaxGain)))
+                .set_framerate(static_cast<float>(
+                    get_parameter_or<double>("framerate", Hikcamera::Cs016MaxFramerate)))
+                .set_invert_image(get_parameter_or<bool>("invert_image", false)) }
+        , half_exposure_time_(std::chrono::duration_cast<rmcs_msgs::BoardClock::duration>(
+              std::chrono::duration<float, std::micro>(camera_config_.exposure_us)))
         , matching_array_([] {
-              auto arr = std::vector<LinearSyncModel::TimestampPair> { };
-              arr.reserve(1000);
-              return arr;
-          }())
+            auto arr = std::vector<LinearSyncModel::TimestampPair> { };
+            arr.reserve(1000);
+            return arr;
+        }())
         , sync_model_(
-              get_parameter_or<double>("rls_tau_sec", 10.0),
-              (1.0 / camera_config_.framerate) / 2.0) {
-        register_input("/gimbal/auto_aim/exposure_signal", signal_input_);
+              get_parameter_or<double>("rls_tau_sec", 10.0), (1.0 / camera_config_.framerate) / 2.0)
+        , use_hardware_sync_(get_parameter_or<bool>("use_hardware_sync", true)) {
+        if (use_hardware_sync_) {
+            register_input("/gimbal/auto_aim/exposure_signal", signal_input_);
+        }
         register_output("/gimbal/auto_aim/camera_frame", frame_output_);
     }
 
@@ -78,8 +75,7 @@ private:
     void signal_callback(rmcs_msgs::BoardClock::time_point timestamp) {
         const auto now = std::chrono::steady_clock::now();
         if (!unmatched_signal_buffer_.emplace_back(timestamp, now)) {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
                 "Dropping trigger signal: unmatched signal buffer full (capacity=%zu)",
                 unmatched_signal_buffer_.max_size());
             return;
@@ -91,8 +87,7 @@ private:
     void frame_callback(const Hikcamera::Frame& frame) {
         if (frame.width != Hikcamera::Cs016FrameWidth || frame.height != Hikcamera::Cs016FrameHeight
             || frame.data.size() != kExpectedFrameSize) {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
                 "Skipping malformed frame #%u: width=%u (expected %u), height=%u (expected %u), "
                 "size=%zu (expected %zu)",
                 frame.frame_id, frame.width, Hikcamera::Cs016FrameWidth, frame.height,
@@ -110,8 +105,7 @@ private:
         } else if (frame.pixel_type == PixelType_Gvsp_BayerGB8) {
             opencv_cvt_color_code = cv::COLOR_BayerGBRG2BGR_EA;
         } else {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
                 "Skipping frame #%u with unsupported pixel type: 0x%lX", frame.frame_id,
                 static_cast<long>(frame.pixel_type));
             return;
@@ -120,15 +114,14 @@ private:
         last_frame_time_.store(frame.host_timestamp, std::memory_order::release);
         auto output_frame = output_frame_factory_.try_make();
         if (!output_frame) {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
                 "Dropping frame #%u: frame pool exhausted (capacity=%zu)", frame.frame_id,
                 output_frame_factory_.max_size());
             return;
         }
 
         std::memcpy(output_frame->data_raw.data(), frame.data.data(), kExpectedFrameSize);
-        output_frame->opencv_cvt_color_code   = opencv_cvt_color_code;
+        output_frame->opencv_cvt_color_code     = opencv_cvt_color_code;
         output_frame->image_reception_timestamp = frame.host_timestamp;
 
         if (!unmatched_image_buffer_.emplace_back_n(
@@ -136,8 +129,7 @@ private:
                     new (storage) UnmatchedImage { output_frame, frame.frame_id, frame.timestamp };
                 },
                 1)) {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
                 "Dropping frame #%u: unmatched image buffer full (capacity=%zu)", frame.frame_id,
                 unmatched_image_buffer_.max_size());
             return;
@@ -172,10 +164,14 @@ private:
             matching_array_.clear();
             sync_model_.reset();
 
-            if (!worker_fsm_resetting()) continue;
-            if (!worker_fsm_matching()) continue;
-            if (!worker_fsm_confirming()) continue;
-            worker_fsm_locked();
+            if (use_hardware_sync_) {
+                if (!worker_fsm_resetting()) continue;
+                if (!worker_fsm_matching()) continue;
+                if (!worker_fsm_confirming()) continue;
+                worker_fsm_locked();
+            } else {
+                worker_fsm_free_running();
+            }
         }
     }
 
@@ -230,17 +226,16 @@ private:
         }
 
         if (const auto signal_readable = unmatched_signal_buffer_.readable(),
-            image_readable = unmatched_image_buffer_.readable();
+            image_readable             = unmatched_image_buffer_.readable();
             signal_readable || image_readable) {
-            RCLCPP_ERROR(
-                logger_, "[CONFIRMING] Buffer count mismatch after drain: %zu != %zu",
+            RCLCPP_ERROR(logger_, "[CONFIRMING] Buffer count mismatch after drain: %zu != %zu",
                 signal_readable + matching_array_.size(), image_readable + matching_array_.size());
             return false;
         }
 
         if (matching_array_.size() < 50) {
-            RCLCPP_ERROR(
-                logger_, "[CONFIRMING] Too few frames matched: collected (%zu) < minimum (50)",
+            RCLCPP_ERROR(logger_,
+                "[CONFIRMING] Too few frames matched: collected (%zu) < minimum (50)",
                 matching_array_.size());
             return false;
         }
@@ -252,22 +247,20 @@ private:
         }
 
         if (ls_result->a <= 0.8 || ls_result->a >= 1.2) {
-            RCLCPP_ERROR(
-                logger_, "[CONFIRMING] LS slope out of range: a=%.3f (expected 0.8..1.2)",
+            RCLCPP_ERROR(logger_, "[CONFIRMING] LS slope out of range: a=%.3f (expected 0.8..1.2)",
                 ls_result->a);
             return false;
         }
 
         if (ls_result->max_abs_residual_sec >= sync_model_.residual_threshold_sec()) {
-            RCLCPP_ERROR(
-                logger_, "[CONFIRMING] LS max residual=%.3f ms >= threshold=%.3f ms",
+            RCLCPP_ERROR(logger_, "[CONFIRMING] LS max residual=%.3f ms >= threshold=%.3f ms",
                 ls_result->max_abs_residual_sec * 1000.0,
                 sync_model_.residual_threshold_sec() * 1000.0);
             return false;
         }
 
-        RCLCPP_INFO(
-            logger_, "[CONFIRMING] Locked from %zu frames: a=%.3f, b=%.3f, max_residual=%.3f ms",
+        RCLCPP_INFO(logger_,
+            "[CONFIRMING] Locked from %zu frames: a=%.3f, b=%.3f, max_residual=%.3f ms",
             matching_array_.size(), ls_result->a, ls_result->b,
             ls_result->max_abs_residual_sec * 1000.0);
         return true;
@@ -276,10 +269,10 @@ private:
     void worker_fsm_locked() {
         if (!worker_set_check_camera_trigger_mode(false)) return;
 
-        auto locked_frame_count      = std::size_t { 0 };
-        auto last_locked_frame_id    = std::uint32_t { 0 };
-        auto max_residual_sec        = 0.0;
-        auto last_locked_summary_time = std::chrono::steady_clock::now();
+        auto locked_frame_count        = std::size_t { 0 };
+        auto last_locked_frame_id      = std::uint32_t { 0 };
+        auto max_residual_sec          = 0.0;
+        auto last_locked_summary_time  = std::chrono::steady_clock::now();
         auto last_locked_summary_count = std::size_t { 0 };
 
         while (true) {
@@ -300,8 +293,8 @@ private:
                 const auto expected_frame_id = last_locked_frame_id + 1;
 
                 if (next_frame_id < expected_frame_id) {
-                    RCLCPP_ERROR(
-                        logger_, "[LOCKED] Frame ID moved backward: expected >= %u, got %u",
+                    RCLCPP_ERROR(logger_,
+                        "[LOCKED] Frame ID moved backward: expected >= %u, got %u",
                         expected_frame_id, next_frame_id);
                     return;
                 }
@@ -310,8 +303,7 @@ private:
                 if (frame_gap > 0) {
                     static constexpr std::uint32_t allowed_frame_id_gap = 2;
                     if (frame_gap > allowed_frame_id_gap) {
-                        RCLCPP_ERROR(
-                            logger_,
+                        RCLCPP_ERROR(logger_,
                             "[LOCKED] Frame ID gap too large: expected %u, got %u, gap %u > %u",
                             expected_frame_id, next_frame_id, frame_gap, allowed_frame_id_gap);
                         return;
@@ -319,18 +311,18 @@ private:
 
                     if (const auto readable = unmatched_signal_buffer_.readable();
                         readable < static_cast<std::size_t>(frame_gap) + 1) {
-                        RCLCPP_ERROR(
-                            logger_,
-                            "[LOCKED] Unable to tolerate camera frame gap: expected %u signals, got %zu",
+                        RCLCPP_ERROR(logger_,
+                            "[LOCKED] Unable to tolerate camera frame gap: expected %u signals, "
+                            "got %zu",
                             frame_gap + 1, readable);
                         return;
                     }
                     unmatched_signal_buffer_.pop_front_n(
                         [](UnmatchedSignal&&) noexcept { }, frame_gap);
 
-                    RCLCPP_WARN(
-                        logger_,
-                        "[LOCKED] Tolerating camera frame gap: expected %u, got %u, dropped %u queued signals",
+                    RCLCPP_WARN(logger_,
+                        "[LOCKED] Tolerating camera frame gap: expected %u, got %u, dropped %u "
+                        "queued signals",
                         expected_frame_id, next_frame_id, frame_gap);
                 }
             }
@@ -341,10 +333,9 @@ private:
             if (const auto now = std::chrono::steady_clock::now();
                 now - last_locked_summary_time >= std::chrono::milliseconds { 5000 }) {
                 const auto window_frames = locked_frame_count - last_locked_summary_count;
-                const auto fps = static_cast<double>(window_frames)
+                const auto fps           = static_cast<double>(window_frames)
                     / std::chrono::duration<double>(now - last_locked_summary_time).count();
-                RCLCPP_INFO(
-                    logger_,
+                RCLCPP_INFO(logger_,
                     "[LOCKED] %zu frames total, avg %.1f FPS, a=%.3f, b=%.3f, max_residual=%.3f ms",
                     locked_frame_count, fps, sync_model_.a(), sync_model_.b(),
                     max_residual_sec * 1000.0);
@@ -356,9 +347,9 @@ private:
                 timestamp_pair.camera_timestamp_sec, timestamp_pair.board_timestamp_sec);
             max_residual_sec = std::max(max_residual_sec, std::abs(residual));
             if (!(std::abs(residual) < sync_model_.residual_threshold_sec())) {
-                RCLCPP_ERROR(
-                    logger_,
-                    "[LOCKED] RLS residual too large: residual=%.3f ms, threshold=%.3f ms, camera_ts=%.3f ms, signal_ts=%.3f ms",
+                RCLCPP_ERROR(logger_,
+                    "[LOCKED] RLS residual too large: residual=%.3f ms, threshold=%.3f ms, "
+                    "camera_ts=%.3f ms, signal_ts=%.3f ms",
                     residual * 1000.0, sync_model_.residual_threshold_sec() * 1000.0,
                     timestamp_pair.camera_timestamp_sec * 1000.0,
                     timestamp_pair.board_timestamp_sec * 1000.0);
@@ -374,10 +365,46 @@ private:
         }
     }
 
+    void worker_fsm_free_running() {
+        RCLCPP_INFO(logger_, "[FALLBACK] Entering free-running camera mode");
+
+        if (!worker_set_check_camera_trigger_mode(false)) return;
+
+        auto frame_count        = std::size_t { 0 };
+        auto last_summary_time  = std::chrono::steady_clock::now();
+        auto last_summary_count = std::size_t { 0 };
+
+        while (true) {
+            if (test_and_reconnect_camera()) {
+                if (!worker_set_check_camera_trigger_mode(false)) return;
+                continue;
+            }
+
+            using namespace std::chrono_literals;
+            if (!worker_wait_until([this] noexcept { return unmatched_image_buffer_.readable(); },
+                    std::chrono::steady_clock::now() + 50ms)) {
+                continue;
+            }
+
+            consume_frame_fallback();
+
+            ++frame_count;
+            if (const auto now = std::chrono::steady_clock::now();
+                now - last_summary_time >= std::chrono::milliseconds { 5000 }) {
+                const auto window_frames = frame_count - last_summary_count;
+                const auto fps           = static_cast<double>(window_frames)
+                    / std::chrono::duration<double>(now - last_summary_time).count();
+                RCLCPP_INFO(logger_, "[FALLBACK] %zu frames total, avg %.1f FPS", frame_count, fps);
+                last_summary_count = frame_count;
+                last_summary_time  = now;
+            }
+        }
+    }
+
     [[nodiscard]] auto consume_frame() -> LinearSyncModel::TimestampPair {
-        auto frame_id        = std::uint32_t { 0 };
-        auto timestamp_pair  = LinearSyncModel::TimestampPair { };
-        auto output_frame    = std::shared_ptr<OutputFrame> { };
+        auto frame_id       = std::uint32_t { 0 };
+        auto timestamp_pair = LinearSyncModel::TimestampPair { };
+        auto output_frame   = std::shared_ptr<OutputFrame> { };
 
         if (!unmatched_image_buffer_.pop_front([&](UnmatchedImage&& image) noexcept {
                 frame_id = image.frame_id;
@@ -402,44 +429,67 @@ private:
         }
 
         if (auto imu_snapshot = imu_buffer_.pop(exposure_midpoint)) {
-            output_frame->imu_snapshot          = *imu_snapshot;
+            output_frame->imu_snapshot           = *imu_snapshot;
             output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
 
-            const auto src = cv::Mat {
-                OutputFrame::kHeight,
-                OutputFrame::kWidth,
-                CV_8UC1,
+            const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
                 reinterpret_cast<char*>(output_frame->data_raw.data()) };
-            auto mat = cv::Mat {
-                OutputFrame::kHeight,
-                OutputFrame::kWidth,
-                CV_8UC3,
+            auto mat       = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC3,
                 reinterpret_cast<char*>(output_frame->data.data()) };
             cv::demosaicing(src, mat, output_frame->opencv_cvt_color_code);
 
             frame_output_.emit(output_frame);
         } else {
-            RCLCPP_WARN_THROTTLE(
-                logger_, *get_clock(), 1000,
-                "Dropping frame #%u: no IMU snapshot available for exposure board timestamp %lld ticks",
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
+                "Dropping frame #%u: no IMU snapshot available for exposure board timestamp %lld "
+                "ticks",
                 frame_id, static_cast<long long>(exposure_midpoint.time_since_epoch().count()));
         }
 
         return timestamp_pair;
     }
 
+    void consume_frame_fallback() {
+        auto frame_id     = std::uint32_t { 0 };
+        auto output_frame = std::shared_ptr<OutputFrame> { };
+
+        if (!unmatched_image_buffer_.pop_front([&](UnmatchedImage&& image) noexcept {
+                frame_id     = image.frame_id;
+                output_frame = std::move(image.frame);
+            })) {
+            RCLCPP_FATAL(logger_, "Image buffer unexpectedly empty");
+            std::terminate();
+        }
+
+        output_frame->exposure_timestamp = output_frame->image_reception_timestamp;
+
+        if (auto imu_snapshot = imu_buffer_.pop_latest()) {
+            output_frame->imu_snapshot           = *imu_snapshot;
+            output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
+
+            const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
+                reinterpret_cast<char*>(output_frame->data_raw.data()) };
+            auto mat       = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC3,
+                reinterpret_cast<char*>(output_frame->data.data()) };
+            cv::demosaicing(src, mat, output_frame->opencv_cvt_color_code);
+
+            frame_output_.emit(output_frame);
+        } else {
+            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
+                "Dropping frame #%u: no IMU snapshot available in fallback mode", frame_id);
+        }
+    }
+
     [[nodiscard]] auto test_and_reconnect_camera() -> bool {
         if (camera_) {
             if (const auto fault_message = camera_->take_transport_fault_message()) {
-                RCLCPP_ERROR(
-                    logger_, "[CAMERA] Runtime fault 0x%08x (%s), reconnecting...", *fault_message,
-                    Hikcamera::sdk_transport_exception_to_string(*fault_message));
-            } else if (
-                auto frame_age = std::chrono::steady_clock::now()
-                       - last_frame_time_.load(std::memory_order::relaxed);
+                RCLCPP_ERROR(logger_, "[CAMERA] Runtime fault 0x%08x (%s), reconnecting...",
+                    *fault_message, Hikcamera::sdk_transport_exception_to_string(*fault_message));
+            } else if (auto frame_age = std::chrono::steady_clock::now()
+                    - last_frame_time_.load(std::memory_order::relaxed);
                 frame_age > std::chrono::milliseconds { 5000 }) {
-                RCLCPP_ERROR(
-                    logger_, "[CAMERA] Frame watchdog timeout: no frame for %ld ms, reconnecting...",
+                RCLCPP_ERROR(logger_,
+                    "[CAMERA] Frame watchdog timeout: no frame for %ld ms, reconnecting...",
                     std::chrono::duration_cast<std::chrono::milliseconds>(frame_age).count());
             } else {
                 return false;
@@ -449,16 +499,15 @@ private:
 
         for (auto attempt_count = 1;; attempt_count++) {
             try {
-                camera_ = std::make_unique<Hikcamera>(
-                    camera_config_, [this](const Hikcamera::Frame& frame) noexcept { frame_callback(frame); });
+                camera_          = std::make_unique<Hikcamera>(camera_config_,
+                    [this](const Hikcamera::Frame& frame) noexcept { frame_callback(frame); });
                 last_frame_time_ = std::chrono::steady_clock::now();
                 RCLCPP_INFO(logger_, "[CAMERA] Connected successfully");
 
                 break;
             } catch (const std::runtime_error& error) {
-                RCLCPP_ERROR(
-                    logger_, "[CAMERA] Connect attempt #%d: %s, retry in 2500 ms", attempt_count,
-                    error.what());
+                RCLCPP_ERROR(logger_, "[CAMERA] Connect attempt #%d: %s, retry in 2500 ms",
+                    attempt_count, error.what());
                 using namespace std::chrono_literals;
                 worker_sleep_for(2500ms);
             }
@@ -471,8 +520,7 @@ private:
         const auto code = static_cast<std::uint32_t>(camera_->set_soft_trigger(soft));
 
         if (code != MV_OK) {
-            RCLCPP_ERROR(
-                logger_, "[CAMERA] Set trigger mode failed: 0x%08x (%s)", code,
+            RCLCPP_ERROR(logger_, "[CAMERA] Set trigger mode failed: 0x%08x (%s)", code,
                 Hikcamera::sdk_error_to_string(code));
 
             camera_.reset();
@@ -491,7 +539,8 @@ private:
 
     template <typename FunctorT>
         requires(std::is_nothrow_invocable_v<FunctorT>)
-    auto worker_wait_until(FunctorT&& check, std::chrono::steady_clock::time_point deadline) -> bool {
+    auto worker_wait_until(FunctorT&& check, std::chrono::steady_clock::time_point deadline)
+        -> bool {
         while (true) {
             const auto old = event_count_.load(std::memory_order::acquire);
             if (stop_requested_.test(std::memory_order::relaxed)) throw StopRequestException { };
@@ -504,9 +553,11 @@ private:
     }
 
 private:
-    static constexpr std::size_t kExpectedFrameWidth  = static_cast<std::size_t>(Hikcamera::Cs016FrameWidth);
-    static constexpr std::size_t kExpectedFrameHeight = static_cast<std::size_t>(Hikcamera::Cs016FrameHeight);
-    static constexpr std::size_t kExpectedFrameSize   = kExpectedFrameWidth * kExpectedFrameHeight;
+    static constexpr std::size_t kExpectedFrameWidth =
+        static_cast<std::size_t>(Hikcamera::Cs016FrameWidth);
+    static constexpr std::size_t kExpectedFrameHeight =
+        static_cast<std::size_t>(Hikcamera::Cs016FrameHeight);
+    static constexpr std::size_t kExpectedFrameSize = kExpectedFrameWidth * kExpectedFrameHeight;
 
     const rclcpp::Logger logger_ { get_logger() };
     const Hikcamera::CameraConfig camera_config_;
@@ -543,6 +594,8 @@ private:
 
     std::vector<LinearSyncModel::TimestampPair> matching_array_;
     LinearSyncModel sync_model_;
+
+    bool use_hardware_sync_;
 
     class StopRequestException : public std::exception {
     public:

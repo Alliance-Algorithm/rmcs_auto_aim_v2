@@ -26,6 +26,9 @@ auto_aim_capturer:
     invert_image: false
     # RLS 同步模型的时间常数，单位秒，用于估计触发信号与帧到达时刻的延迟
     rls_tau_sec: 10.0
+    # 是否使用硬件同步（exposure_signal + RLS 线性同步模型）
+    # 关闭后将退化为自由采集模式，IMU snapshot 直接取最新可用值
+    use_hardware_sync: true
 
 auto_aim_recorder:
   ros__parameters:

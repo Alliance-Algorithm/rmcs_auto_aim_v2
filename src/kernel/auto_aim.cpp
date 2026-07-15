@@ -130,7 +130,7 @@ struct AutoAim::Impl {
             id          = context.id;
             track_ids   = context.track_ids;
         }
-        id = RobotId::RED_SENTRY; // FIXME:
+        // id = RobotId::RED_SENTRY; // FIXME:
 
         iso.orientation = image.imu_orientation();
 

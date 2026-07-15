@@ -32,7 +32,6 @@ struct FireController::Impl {
 
         bool require_stable_command = true;
         bool is_lazy_gimbal         = false;
-        bool skip_pose_check        = false; // TODO:
 
         static constexpr std::tuple metas {
             // clang-format off
@@ -434,14 +433,20 @@ struct FireController::Impl {
             }
 
             // 射击评估
-            const auto should_shoot = shoot_evaluator->evaluate(
-                {
+            auto should_shoot = true;
+            if (pre_aim) {
+                // TODO: 设置为标志，英雄在预瞄时不打，或者实际再判断一次装甲板的 Yaw
+                // 是否可以真的打到，英雄弹速较慢，预瞄的板比较提前
+                should_shoot = false;
+            } else {
+                const auto cmd = ShootEvaluator::Command {
                     .yaw    = yaw,
                     .pitch  = pitch,
                     .center = center,
                     .armor  = attack,
-                },
-                state.yaw, state.pitch);
+                };
+                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+            }
 
             return Aimed {
                 .aim_yaw      = yaw,

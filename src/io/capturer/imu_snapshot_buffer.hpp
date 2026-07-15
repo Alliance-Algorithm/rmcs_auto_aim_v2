@@ -59,6 +59,18 @@ public:
         return orientation;
     }
 
+    auto pop_latest() -> std::optional<Eigen::Quaterniond> {
+        const auto guard = std::scoped_lock { consumer_mutex_ };
+
+        auto view = buffer_.const_readable_view();
+        if (view.empty()) return std::nullopt;
+
+        const auto latest = view.end() - 1;
+        auto orientation    = latest->orientation;
+        buffer_.pop_front_until(latest);
+        return orientation;
+    }
+
 private:
     void push(const rmcs_msgs::ImuSnapshot& snapshot) {
         if (snapshot.timestamp < last_push_time) return;
