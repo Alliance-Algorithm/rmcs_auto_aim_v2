@@ -2,31 +2,105 @@
 """AutoAim 流媒体服务器
 
 启动 MediaMTX 和 HTTP 服务器，提供视频播放页面和录制控制 API。
+父进程异常退出（含 SIGKILL）时，由内核回收 MediaMTX 子进程。
 """
 
+import atexit
+import ctypes
+import ctypes.util
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import threading
+import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 # ── 配置常量 ──────────────────────────────────────────────────────────────────
 
-defaultInstallRoot = Path("/opt/autoaim")
-defaultPlayerPort = 18080
-defaultMediamtxPort = 8889
-playerRoute = "/res/playing.html"
-playerFile = "playing.html"
-fifoRecorderStart = "/tmp/autoaim/recorder/start"
-fifoRecorderStop = "/tmp/autoaim/recorder/stop"
-contextRecorderPath = "/tmp/autoaim/recorder/context"
-fifoPlayerPause = "/tmp/autoaim/player/pause"
-fifoPlayerStep = "/tmp/autoaim/player/step"
-contextPlayerPath = "/tmp/autoaim/player/context"
+DEFAULT_INSTALL_ROOT = Path("/opt/autoaim")
+DEFAULT_PLAYER_PORT = 18080
+DEFAULT_MEDIAMTX_PORT = 8889
+PLAYER_ROUTE = "/res/playing.html"
+PLAYER_FILE = "playing.html"
+FIFO_RECORDER_START = "/tmp/autoaim/recorder/start"
+FIFO_RECORDER_STOP = "/tmp/autoaim/recorder/stop"
+CONTEXT_RECORDER_PATH = "/tmp/autoaim/recorder/context"
+FIFO_PLAYER_PAUSE = "/tmp/autoaim/player/pause"
+FIFO_PLAYER_STEP = "/tmp/autoaim/player/step"
+CONTEXT_PLAYER_PATH = "/tmp/autoaim/player/context"
+AUTOAIM_PROCESS_NAME = "rmcs_executor"
+MEDIAMTX_STOP_TIMEOUT = 5
+PR_SET_PDEATHSIG = 1
+CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
+CPU_COUNT = os.cpu_count() or 1
+
+
+# ── 系统状态采集 ──────────────────────────────────────────────────────────────
+
+
+def read_proc_stat() -> tuple[int, int]:
+    """读取 /proc/stat，返回 (空闲节拍, 总节拍)。"""
+    with open("/proc/stat", "r") as f:
+        fields = f.readline().split()
+    values = [int(x) for x in fields[1:]]
+    idle = values[3] + (values[4] if len(values) > 4 else 0)
+    return idle, sum(values)
+
+
+def read_mem_info() -> tuple[int, int]:
+    """读取 /proc/meminfo，返回 (总内存 KB, 可用内存 KB)。"""
+    total = available = 0
+    with open("/proc/meminfo", "r") as f:
+        for line in f:
+            name, _, content = line.partition(":")
+            if name == "MemTotal":
+                total = int(content.split()[0])
+            elif name == "MemAvailable":
+                available = int(content.split()[0])
+    if not total:
+        raise OSError("Empty /proc/meminfo")
+    return total, available
+
+
+def read_load_avg() -> str:
+    with open("/proc/loadavg", "r") as f:
+        return " ".join(f.read().split()[:3])
+
+
+def find_autoaim_pid() -> int | None:
+    """按 comm 匹配自瞄宿主进程，返回 pid。"""
+    self_pid = os.getpid()
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) == self_pid:
+            continue
+        try:
+            with open(f"/proc/{entry}/comm", "r") as f:
+                if f.read().strip() == AUTOAIM_PROCESS_NAME:
+                    return int(entry)
+        except OSError:
+            continue
+    return None
+
+
+def read_process_ticks(pid: int) -> int:
+    """读取 /proc/<pid>/stat，返回用户态与内核态节拍之和。"""
+    with open(f"/proc/{pid}/stat", "r") as f:
+        content = f.read()
+    fields = content[content.rindex(")") + 1:].split()
+    return int(fields[11]) + int(fields[12])
+
+
+def read_process_rss_kb(pid: int) -> int:
+    with open(f"/proc/{pid}/status", "r") as f:
+        for line in f:
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+    raise OSError(f"No VmRSS for pid {pid}")
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────────────────
@@ -35,69 +109,73 @@ contextPlayerPath = "/tmp/autoaim/player/context"
 class AutoAimHandler(SimpleHTTPRequestHandler):
     """处理 HTTP 请求，提供静态文件服务和录制控制 API。"""
 
-    rootDirectory: str = str(defaultInstallRoot)
+    root_directory: str = str(DEFAULT_INSTALL_ROOT)
+    last_system_sample: tuple[int, int] | None = None
+    last_proc_sample: tuple[int, int, float] | None = None
+    sample_lock = threading.Lock()
 
     def do_GET(self) -> None:
         if self.path in ("/autoaim", "/autoaim/"):
-            self.path = playerRoute
+            self.path = PLAYER_ROUTE
         elif self.path == "/api/context":
-            self.handleContext()
+            self._api_context()
             return
-        return super().do_GET()
+        super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path == "/api/record":
-            self.handleRecord()
+        handler = self._POST_ROUTES.get(self.path)
+        if handler is None:
+            self.send_error(404, "Not Found")
             return
-        if self.path == "/api/play_pause":
-            try:
-                paused = self.readPlayerPaused()
-            except OSError as e:
-                self.jsonResponse(503, {"status": "error", "message": str(e)})
-                return
-            self.write_to_fifo(fifoPlayerPause, "false" if paused else "true")
-            return
-        if self.path == "/api/step_forward":
-            self.write_to_fifo(fifoPlayerStep, "1")
-            return
-        if self.path == "/api/step_backward":
-            self.write_to_fifo(fifoPlayerStep, "-1")
-            return
-        self.send_error(404, "Not Found")
+        handler(self)
 
-    def handleRecord(self) -> None:
-        contentLength = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(contentLength).decode().strip()
+    def _api_record(self) -> None:
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length).decode().strip()
 
         if body in ("1", "true"):
-            self.write_to_fifo(fifoRecorderStart, "1")
+            self._write_fifo(FIFO_RECORDER_START, "1")
         elif body in ("0", "false"):
-            self.write_to_fifo(fifoRecorderStop, "1")
+            self._write_fifo(FIFO_RECORDER_STOP, "1")
         else:
-            self.jsonResponse(
+            self._json_response(
                 400, {"status": "error", "message": "invalid value"})
 
-    def write_to_fifo(self, path: str, value: str) -> None:
+    def _api_play_pause(self) -> None:
+        try:
+            paused = self._read_player_paused()
+        except OSError as e:
+            self._json_response(503, {"status": "error", "message": str(e)})
+            return
+        self._write_fifo(FIFO_PLAYER_PAUSE, "false" if paused else "true")
+
+    def _api_step_forward(self) -> None:
+        self._write_fifo(FIFO_PLAYER_STEP, "1")
+
+    def _api_step_backward(self) -> None:
+        self._write_fifo(FIFO_PLAYER_STEP, "-1")
+
+    def _api_context(self) -> None:
+        try:
+            context = self._read_context()
+        except OSError as e:
+            self._json_response(503, {"status": "error", "message": str(e)})
+            return
+        self._json_response(200, {"status": "ok", "context": context})
+
+    def _write_fifo(self, path: str, value: str) -> None:
         fd = None
         try:
             fd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
             os.write(fd, value.encode())
-            self.jsonResponse(200, {"status": "ok"})
+            self._json_response(200, {"status": "ok"})
         except OSError as e:
-            self.jsonResponse(500, {"status": "error", "message": str(e)})
+            self._json_response(500, {"status": "error", "message": str(e)})
         finally:
             if fd is not None:
                 os.close(fd)
 
-    def handleContext(self) -> None:
-        try:
-            recordContext = self.readContext()
-        except OSError as e:
-            self.jsonResponse(503, {"status": "error", "message": str(e)})
-            return
-        self.jsonResponse(200, {"status": "ok", "context": recordContext})
-
-    def readContext(self) -> dict[str, object]:
+    def _read_context(self) -> dict[str, object]:
         context: dict[str, object] = {
             "filename": "not started",
             "recordStatus": "unavailable",
@@ -109,7 +187,7 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
 
         parsed_recorder = False
         try:
-            with open(contextRecorderPath, "r") as f:
+            with open(CONTEXT_RECORDER_PATH, "r") as f:
                 for line in f:
                     name, separator, content = line.partition(":")
                     if not separator:
@@ -134,17 +212,90 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
                 context["recordStatus"] = "ready"
 
         try:
-            context["playing"] = not self.readPlayerPaused()
+            context["playing"] = not self._read_player_paused()
             context["playerAvailable"] = True
         except OSError:
             pass
 
+        context["system"] = self._read_system_status()
+
         return context
 
-    def readPlayerPaused(self) -> bool:
+    def _read_system_status(self) -> dict[str, object]:
+        """采集系统资源占用，单项失败时对应字段为 None。"""
+        status: dict[str, object] = {
+            "cpuPercent": None,
+            "loadAvg": None,
+            "memUsedMb": None,
+            "memTotalMb": None,
+            "memPercent": None,
+            "diskUsedGb": None,
+            "diskTotalGb": None,
+            "diskPercent": None,
+            "procName": None,
+            "procCpuPercent": None,
+            "procMemMb": None,
+        }
+
+        try:
+            idle, total = read_proc_stat()
+            with AutoAimHandler.sample_lock:
+                last = AutoAimHandler.last_system_sample
+                AutoAimHandler.last_system_sample = (idle, total)
+            if last is not None and total > last[1]:
+                busy = (total - last[1]) - (idle - last[0])
+                status["cpuPercent"] = round(busy / (total - last[1]) * 100, 1)
+        except OSError:
+            pass
+
+        try:
+            status["loadAvg"] = read_load_avg()
+        except OSError:
+            pass
+
+        try:
+            total_kb, available_kb = read_mem_info()
+            used_kb = total_kb - available_kb
+            status["memUsedMb"] = used_kb // 1024
+            status["memTotalMb"] = total_kb // 1024
+            status["memPercent"] = round(used_kb / total_kb * 100, 1)
+        except OSError:
+            pass
+
+        try:
+            usage = shutil.disk_usage(AutoAimHandler.root_directory)
+            status["diskUsedGb"] = round(usage.used / 1e9, 1)
+            status["diskTotalGb"] = round(usage.total / 1e9, 1)
+            status["diskPercent"] = round(usage.used / usage.total * 100, 1)
+        except OSError:
+            pass
+
+        pid = find_autoaim_pid()
+        if pid is not None:
+            status["procName"] = AUTOAIM_PROCESS_NAME
+            try:
+                status["procMemMb"] = read_process_rss_kb(pid) // 1024
+            except OSError:
+                pass
+            try:
+                ticks = read_process_ticks(pid)
+                now = time.monotonic()
+                with AutoAimHandler.sample_lock:
+                    last = AutoAimHandler.last_proc_sample
+                    AutoAimHandler.last_proc_sample = (pid, ticks, now)
+                if last is not None and last[0] == pid and now > last[2]:
+                    delta = ticks - last[1]
+                    status["procCpuPercent"] = round(
+                        delta / CLOCK_TICKS / (now - last[2]) / CPU_COUNT * 100, 1)
+            except OSError:
+                pass
+
+        return status
+
+    def _read_player_paused(self) -> bool:
         parsed = False
         paused = False
-        with open(contextPlayerPath, "r") as f:
+        with open(CONTEXT_PLAYER_PATH, "r") as f:
             for line in f:
                 name, separator, content = line.partition(":")
                 if not separator:
@@ -154,10 +305,10 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
                 paused = content.strip() in ("1", "true")
                 parsed = True
         if not parsed:
-            raise OSError(f"Empty player context: {contextPlayerPath}")
+            raise OSError(f"Empty player context: {CONTEXT_PLAYER_PATH}")
         return paused
 
-    def jsonResponse(self, code: int, data: dict) -> None:
+    def _json_response(self, code: int, data: dict) -> None:
         body = json.dumps(data).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -168,32 +319,53 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         sys.stderr.write(f"[HTTP] {format % args}\n")
 
+    _POST_ROUTES = {
+        "/api/record": _api_record,
+        "/api/play_pause": _api_play_pause,
+        "/api/step_forward": _api_step_forward,
+        "/api/step_backward": _api_step_backward,
+    }
+
 
 # ── 进程管理 ──────────────────────────────────────────────────────────────────
 
+# 父进程内预加载 libc，避免 fork 出的子进程在 preexec 阶段 dlopen
+_libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
 
-class ProcessManager:
-    """管理子进程的生命周期。"""
+
+def _set_pdeathsig() -> None:
+    """Popen preexec 钩子：父进程死亡时，子进程收到 SIGTERM。"""
+    _libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+
+
+class MediamtxProcess:
+    """管理 MediaMTX 子进程的生命周期。"""
 
     def __init__(self) -> None:
         self.process: subprocess.Popen[str] | None = None
 
-    def start(self, args: list[str], cwd: Path) -> subprocess.Popen[str]:
+    def start(self, args: list[str], cwd: Path) -> None:
         self.process = subprocess.Popen(
             args, cwd=cwd, start_new_session=True,
+            preexec_fn=_set_pdeathsig,
         )
-        return self.process
 
     def terminate(self) -> None:
         proc = self.process
         if proc is None or proc.poll() is not None:
             return
-        os.killpg(proc.pid, signal.SIGTERM)
         try:
-            proc.wait(timeout=5)
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=MEDIAMTX_STOP_TIMEOUT)
         except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait(timeout=5)
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                return
+            proc.wait(timeout=MEDIAMTX_STOP_TIMEOUT)
 
 
 # ── 服务器 ────────────────────────────────────────────────────────────────────
@@ -204,89 +376,91 @@ class StreamServer:
 
     def __init__(
         self,
-        installRoot: Path,
-        playerPort: int,
-        mediamtxPort: int,
+        install_root: Path,
+        player_port: int,
+        mediamtx_port: int,
     ) -> None:
-        self.installRoot = installRoot
-        self.playerPort = playerPort
-        self.mediamtxPort = mediamtxPort
-        self.binDir = installRoot / "bin"
-        self.resDir = installRoot / "res"
-        self.mediamtxProcess = ProcessManager()
-        self.httpServer: ThreadingHTTPServer | None = None
-        self.shutdownEvent = threading.Event()
+        self.install_root = install_root
+        self.player_port = player_port
+        self.mediamtx_port = mediamtx_port
+        self.bin_dir = install_root / "bin"
+        self.res_dir = install_root / "res"
+        self.mediamtx = MediamtxProcess()
+        self.http_server: ThreadingHTTPServer | None = None
+        self.shutdown_event = threading.Event()
+        self.cleanup_event = threading.Event()
 
     def run(self) -> int:
-        self.validateFiles()
-        self.startMediamtx()
-        self.startHttpServer()
-        self.setupSignalHandlers()
-
-        host = os.environ.get("HOSTNAME", "<ip>")
-        self.printStartupInfo(host)
-
+        atexit.register(self.cleanup)
         try:
-            self.httpServer.serve_forever()
+            self.validate_files()
+            self.start_mediamtx()
+            self.start_http_server()
+            self.setup_signal_handlers()
+            self.print_startup_info()
+            assert self.http_server is not None
+            self.http_server.serve_forever()
         finally:
             self.cleanup()
-
         return 0
 
-    def validateFiles(self) -> None:
+    def validate_files(self) -> None:
         required = [
-            self.binDir / "mediamtx",
-            self.resDir / "mediamtx.yml",
-            self.resDir / playerFile,
+            self.bin_dir / "mediamtx",
+            self.res_dir / "mediamtx.yml",
+            self.res_dir / PLAYER_FILE,
         ]
         for path in required:
             if not path.is_file():
                 raise SystemExit(f"Missing file: {path}")
 
-    def startMediamtx(self) -> None:
+    def start_mediamtx(self) -> None:
         args = [
-            str(self.binDir / "mediamtx"),
-            str(self.resDir / "mediamtx.yml"),
+            str(self.bin_dir / "mediamtx"),
+            str(self.res_dir / "mediamtx.yml"),
         ]
-        self.mediamtxProcess.start(args, self.installRoot)
-        threading.Thread(target=self.watchMediamtx, daemon=True).start()
+        self.mediamtx.start(args, self.install_root)
+        threading.Thread(target=self.watch_mediamtx, daemon=True).start()
 
-    def watchMediamtx(self) -> None:
-        proc = self.mediamtxProcess.process
+    def watch_mediamtx(self) -> None:
+        proc = self.mediamtx.process
         if proc is None:
             return
-        exitCode = proc.wait()
-        if exitCode != 0:
-            print(f"MediaMTX exited with code {exitCode}", file=sys.stderr)
+        exit_code = proc.wait()
+        if exit_code != 0:
+            print(f"MediaMTX exited with code {exit_code}", file=sys.stderr)
         self.shutdown()
 
-    def startHttpServer(self) -> None:
-        AutoAimHandler.rootDirectory = str(self.installRoot)
-        self.httpServer = ThreadingHTTPServer(
-            ("0.0.0.0", self.playerPort),
-            partial(AutoAimHandler, directory=str(self.installRoot)),
+    def start_http_server(self) -> None:
+        AutoAimHandler.root_directory = str(self.install_root)
+        self.http_server = ThreadingHTTPServer(
+            ("0.0.0.0", self.player_port),
+            partial(AutoAimHandler, directory=str(self.install_root)),
         )
 
-    def setupSignalHandlers(self) -> None:
+    def setup_signal_handlers(self) -> None:
         signal.signal(signal.SIGINT, lambda *_: self.shutdown())
         signal.signal(signal.SIGTERM, lambda *_: self.shutdown())
 
     def shutdown(self) -> None:
-        if self.shutdownEvent.is_set():
+        if self.shutdown_event.is_set():
             return
-        self.shutdownEvent.set()
-        if self.httpServer:
-            threading.Thread(target=self.httpServer.shutdown,
+        self.shutdown_event.set()
+        if self.http_server:
+            threading.Thread(target=self.http_server.shutdown,
                              daemon=True).start()
 
     def cleanup(self) -> None:
-        if self.httpServer:
-            self.httpServer.server_close()
-        self.mediamtxProcess.terminate()
+        if self.cleanup_event.is_set():
+            return
+        self.cleanup_event.set()
+        self.mediamtx.terminate()
+        if self.http_server:
+            self.http_server.server_close()
 
-    def printStartupInfo(self, host: str) -> None:
+    def print_startup_info(self) -> None:
         print("AutoAim stream server started.\n")
-        print(f"Please access -> http://<ip>:{self.playerPort}/autoaim\n")
+        print(f"Please access -> http://<ip>:{self.player_port}/autoaim\n")
         print("Press Ctrl+C to stop.")
 
 
@@ -294,14 +468,12 @@ class StreamServer:
 
 
 def main() -> int:
-    installRoot = Path(sys.argv[1]) if len(
-        sys.argv) > 1 else defaultInstallRoot
-    playerPort = int(os.environ.get(
-        "AUTOAIM_PLAYER_PORT", str(defaultPlayerPort)))
-    mediamtxPort = int(os.environ.get(
-        "AUTOAIM_MEDIAMTX_PORT", str(defaultMediamtxPort)))
+    install_root = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INSTALL_ROOT
+    player_port = int(os.environ.get("AUTOAIM_PLAYER_PORT", DEFAULT_PLAYER_PORT))
+    mediamtx_port = int(
+        os.environ.get("AUTOAIM_MEDIAMTX_PORT", DEFAULT_MEDIAMTX_PORT))
 
-    server = StreamServer(installRoot, playerPort, mediamtxPort)
+    server = StreamServer(install_root, player_port, mediamtx_port)
     return server.run()
 
 

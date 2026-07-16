@@ -4,31 +4,38 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#fefbff">
+    <meta name="theme-color" content="#f6f7fc">
+    <script>try {const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t;} catch { }</script>
     <title>AutoAim Stream</title>
     <style>
         :root {
-            color-scheme: light;
-            --color-page: #fefbff;
-            --color-page-glow: rgba(0, 89, 199, 0.12);
-            --color-panel: #f2f3fc;
-            --color-panel-strong: #eaeefb;
-            --color-card: #e2e8f8;
-            --color-video: #10131a;
-            --color-text: #1b1b1f;
-            --color-muted: #44464f;
-            --color-subtle: #575e71;
-            --color-line: #c5c6d0;
-            --color-primary: #0059c7;
-            --color-primary-strong: #0059c7;
-            --color-primary-soft: #d9e2ff;
-            --color-danger-soft: #d9e2ff;
-            --shadow-panel: 0 10px 24px -18px rgba(0, 0, 0, 0.08);
+            color-scheme: light dark;
+            --page: light-dark(#f6f7fc, #0e1015);
+            --surface: light-dark(#ffffff, #171922);
+            --surface-2: light-dark(#eef0f8, #20232e);
+            --outline: light-dark(rgba(23, 26, 33, 0.09), rgba(228, 226, 236, 0.1));
+            --text: light-dark(#171a21, #e4e2ec);
+            --muted: light-dark(#5c6272, #a3a8b8);
+            --primary: light-dark(#0b57d0, #a8c7fa);
+            --primary-container: light-dark(#d3e3fd, #0842a0);
+            --on-primary-container: light-dark(#041e49, #d3e3fd);
+            --danger-container: light-dark(#f9dedc, #8c1d18);
+            --on-danger-container: light-dark(#410e0b, #f9dedc);
+            --danger: light-dark(#b3261e, #f2b8b5);
+            --ok: light-dark(#146c2e, #7ddba3);
+            --video-bg: #0a0c10;
+            --shadow: 0 1px 3px light-dark(rgba(16, 24, 40, 0.08), rgba(0, 0, 0, 0.4)),
+                0 12px 32px -16px light-dark(rgba(16, 24, 40, 0.18), rgba(0, 0, 0, 0.5));
             --radius-xl: 24px;
-            --radius-lg: 18px;
-            --radius-md: 14px;
-            --gap-lg: 16px;
-            --gap-sm: 10px;
+            --radius-md: 16px;
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
         }
 
         *,
@@ -41,51 +48,40 @@
         body {
             height: 100%;
             margin: 0;
-            background: var(--color-page);
-            color: var(--color-text);
-            font-family: "Noto Sans", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            font-family: system-ui, "Noto Sans", "Microsoft YaHei", sans-serif;
         }
 
         body {
             overflow: hidden;
             touch-action: manipulation;
-            -webkit-tap-highlight-color: rgba(0, 89, 199, 0.16);
-            background: var(--color-page);
+            -webkit-tap-highlight-color: transparent;
+            background:
+                radial-gradient(120% 70% at 80% -20%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 60%),
+                var(--page);
         }
 
         .layout {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-            gap: var(--gap-lg);
+            gap: 16px;
             height: 100%;
-            padding:
-                max(var(--gap-lg), env(safe-area-inset-top)) max(var(--gap-lg), env(safe-area-inset-right)) max(var(--gap-lg), env(safe-area-inset-bottom)) max(var(--gap-lg), env(safe-area-inset-left));
-            overflow-x: hidden;
+            padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
         }
 
         .stream-pane,
         .side-panel {
-            border: 1px solid var(--color-line);
-            background: var(--color-panel);
-            box-shadow: var(--shadow-panel);
+            border: 1px solid var(--outline);
+            border-radius: var(--radius-xl);
+            background: var(--surface);
+            box-shadow: var(--shadow);
         }
 
         .stream-pane {
+            position: relative;
             min-height: 0;
             overflow: hidden;
-            border-radius: var(--radius-xl);
-            position: relative;
-        }
-
-        .stream-pane::before {
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            pointer-events: none;
-            content: "";
-            border: 1px solid rgba(255, 255, 255, 0.48);
-            border-radius: inherit;
-            box-shadow: inset 0 0 0 1px rgba(0, 89, 199, 0.08);
+            background: var(--video-bg);
         }
 
         video {
@@ -93,130 +89,322 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: var(--color-video);
         }
 
-        .side-panel,
-        .panel-group {
+        .stream-overlay {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            z-index: 2;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stream-status,
+        .stream-toggle {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(10, 12, 16, 0.55);
+            color: #e7e9f2;
+            backdrop-filter: blur(10px);
+        }
+
+        .stream-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .stream-toggle {
+            display: grid;
+            place-items: center;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background-color 160ms ease;
+        }
+
+        .stream-toggle:hover {
+            background: rgba(10, 12, 16, 0.75);
+        }
+
+        .stream-toggle:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.6);
+            outline-offset: 2px;
+        }
+
+        .stream-toggle .icon {
+            width: 15px;
+            height: 15px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9aa0ab;
+        }
+
+        .stream-status[data-tone="live"] .status-dot {
+            background: #34d399;
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
+        }
+
+        .stream-status[data-tone="idle"] .status-dot {
+            background: #fbbf24;
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            50% {
+                opacity: 0.35;
+            }
         }
 
         .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
             min-height: 0;
-            gap: var(--gap-lg);
             padding: 18px;
-            border-radius: var(--radius-xl);
-            backdrop-filter: none;
+            overflow-y: auto;
+            scrollbar-width: thin;
         }
 
-        .panel-group h1,
-        .panel-group h2,
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 2px;
+        }
+
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 44px;
+            height: 44px;
+            flex: none;
+            border-radius: 14px;
+            background: var(--primary-container);
+            color: var(--on-primary-container);
+        }
+
+        .brand-mark img {
+            display: none;
+            width: 100%;
+            height: 100%;
+            border-radius: inherit;
+            object-fit: cover;
+        }
+
+        .brand-mark.has-image img {
+            display: block;
+        }
+
+        .brand-mark.has-image svg {
+            display: none;
+        }
+
+        .brand h1,
+        .panel-group h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1.25;
+            text-wrap: balance;
+        }
+
+        .brand p,
         .panel-group p {
             margin: 0;
-        }
-
-        .panel-group p {
-            color: var(--color-muted);
+            color: var(--muted);
+            font-size: 13px;
             line-height: 1.5;
             overflow-wrap: anywhere;
         }
 
+        .theme-toggle {
+            position: relative;
+            flex: none;
+            width: 52px;
+            height: 32px;
+            margin-left: auto;
+            padding: 0;
+            border: 2px solid var(--outline);
+            border-radius: 999px;
+            background: var(--surface-2);
+            cursor: pointer;
+            transition: background-color 200ms ease, border-color 200ms ease;
+        }
+
+        .theme-toggle:hover {
+            border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+        }
+
+        .theme-toggle[aria-checked="true"] {
+            border-color: transparent;
+            background: var(--primary-container);
+        }
+
+        .theme-toggle[aria-checked="true"] .theme-thumb {
+            left: calc(100% - 25px);
+        }
+
+        .theme-toggle .icon-moon,
+        .theme-toggle[aria-checked="true"] .icon-sun {
+            display: none;
+        }
+
+        .theme-toggle[aria-checked="true"] .icon-moon {
+            display: block;
+        }
+
+        .theme-thumb {
+            position: absolute;
+            top: 50%;
+            left: 3px;
+            display: grid;
+            place-items: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: light-dark(#ffffff, #0e1015);
+            transform: translateY(-50%);
+            transition: left 200ms ease;
+        }
+
+        .theme-thumb .icon {
+            width: 13px;
+            height: 13px;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
         .panel-group {
-            gap: var(--gap-sm);
-            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
             padding: 16px;
-            border: 1px solid var(--color-line);
+            border: 1px solid var(--outline);
             border-radius: var(--radius-md);
-            background: linear-gradient(180deg, var(--color-panel-strong), var(--color-card));
+            background: var(--surface-2);
         }
 
-        .panel-group h1,
-        .panel-group h2 {
-            color: var(--color-text);
-            font-size: 18px;
-            font-weight: 700;
-            line-height: 1.2;
-            text-wrap: balance;
-        }
-
-        .capture-button,
-        .record-button {
+        .btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-height: 46px;
-            padding: 12px 24px;
-            border: 1px solid var(--color-line);
+            gap: 8px;
+            min-height: 44px;
+            padding: 10px 20px;
+            border: 1px solid var(--outline);
             border-radius: 999px;
-            background: var(--color-card);
-            color: var(--color-primary-strong);
+            background: var(--surface);
+            color: var(--primary);
             font: inherit;
             font-size: 14px;
-            font-weight: 700;
-            line-height: 20px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
             user-select: none;
+            transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
         }
 
-        .capture-button:not(:disabled):hover,
-        .record-button:not(:disabled):hover {
-            border-color: var(--color-primary);
-            background: var(--color-primary-soft);
-            color: var(--color-primary);
+        .btn:not(:disabled):hover {
             transform: translateY(-1px);
+            border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+            box-shadow: var(--shadow);
         }
 
-        .capture-button:focus-visible,
-        .record-button:focus-visible {
-            outline: 3px solid rgba(0, 89, 199, 0.42);
-            outline-offset: 3px;
+        .btn:not(:disabled):active {
+            transform: translateY(0) scale(0.98);
+            box-shadow: none;
         }
 
-        .capture-button:not(:disabled):active,
-        .record-button:not(:disabled):active {
-            transform: translateY(0);
-            background: #cfdcff;
+        .btn:focus-visible,
+        .theme-toggle:focus-visible {
+            outline: 3px solid color-mix(in srgb, var(--primary) 40%, transparent);
+            outline-offset: 2px;
         }
 
-        .record-button.is-recording {
-            border-color: var(--color-primary);
-            background: var(--color-danger-soft);
-            color: var(--color-primary);
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn--primary {
+            border-color: transparent;
+            background: var(--primary-container);
+            color: var(--on-primary-container);
+        }
+
+        .btn.is-recording {
+            border-color: transparent;
+            background: var(--danger-container);
+            color: var(--on-danger-container);
+        }
+
+        .icon {
+            width: 18px;
+            height: 18px;
+            flex: none;
+        }
+
+        .icon-stop,
+        .icon-play {
+            display: none;
+        }
+
+        .is-recording .icon-stop,
+        .is-paused .icon-play {
+            display: block;
+        }
+
+        .is-recording .icon-record,
+        .is-paused .icon-pause {
+            display: none;
         }
 
         .record-context {
             display: grid;
-            gap: 8px;
-            color: var(--color-muted);
             font-size: 13px;
-            line-height: 1.4;
             font-variant-numeric: tabular-nums;
         }
 
         .context-row {
             display: grid;
-            grid-template-columns: max-content minmax(0, 1fr);
-            gap: var(--gap-sm);
+            grid-template-columns: 3em minmax(0, 1fr);
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        .context-row+.context-row {
+            border-top: 1px dashed var(--outline);
         }
 
         .context-row>span:first-child {
-            color: var(--color-subtle);
+            color: var(--muted);
         }
 
         .context-value {
             min-width: 0;
             overflow-wrap: anywhere;
-            color: var(--color-text);
-            font-family: monospace;
+            font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
         }
 
-        .capture-button:disabled,
-        .record-button:disabled {
-            cursor: not-allowed;
-            opacity: 0.55;
-            transform: none;
+        .context-value[data-on="true"] {
+            color: var(--ok);
+            font-weight: 700;
         }
 
         .playback-row {
@@ -224,8 +412,52 @@
             gap: 8px;
         }
 
-        .playback-row > button {
+        .system-stats {
+            display: grid;
+            gap: 10px;
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: 2.5em minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .stat-label {
+            color: var(--muted);
+        }
+
+        .stat-value {
+            font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .meter {
+            height: 6px;
+            border-radius: 999px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .meter-fill {
+            height: 100%;
+            width: 0;
+            border-radius: inherit;
+            background: var(--primary);
+            transition: width 300ms ease, background-color 300ms ease;
+        }
+
+        .meter-fill.is-high {
+            background: var(--danger);
+        }
+
+        .playback-row>.btn {
             flex: 1;
+            padding: 10px 12px;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -254,10 +486,6 @@
             .stream-pane {
                 min-height: 52vh;
             }
-
-            .side-panel {
-                border-radius: var(--radius-lg);
-            }
         }
 
         @media (max-width: 520px) {
@@ -268,16 +496,12 @@
 
             .stream-pane {
                 min-height: 42vh;
-                border-radius: var(--radius-lg);
+                border-radius: var(--radius-md);
             }
 
             .side-panel {
                 padding: 12px;
-            }
-
-            .capture-button,
-            .record-button {
-                width: 100%;
+                border-radius: var(--radius-md);
             }
         }
     </style>
@@ -286,23 +510,76 @@
 <body>
     <main class="layout" aria-label="自瞄串流播放器">
         <section class="stream-pane" aria-label="视频串流">
-            <video id="video" autoplay muted controls playsinline aria-label="AutoAim 实时视频"></video>
+            <video id="video" autoplay muted playsinline aria-label="AutoAim 实时视频"></video>
+            <div class="stream-overlay">
+                <div class="stream-status" id="stream-status" data-tone="off">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span id="stream-status-text">未连接</span>
+                </div>
+                <button id="video-toggle" class="stream-toggle" type="button" aria-label="播放">
+                    <svg class="icon icon-pause" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="7" y="5" width="3.5" height="14" rx="1.2" />
+                        <rect x="13.5" y="5" width="3.5" height="14" rx="1.2" />
+                    </svg>
+                    <svg class="icon icon-play" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2a.8.8 0 0 0-1.2.7Z" />
+                    </svg>
+                </button>
+            </div>
         </section>
+
         <aside class="side-panel">
+            <header class="brand">
+                <span class="brand-mark" id="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <circle cx="12" cy="12" r="7" />
+                        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                    </svg>
+                    <img id="brand-icon" alt="">
+                </span>
+                <div>
+                    <h1>自瞄串流播放器</h1>
+                    <p>关注 <span translate="no">Alliance</span> 战队喵！</p>
+                </div>
+                <button id="theme-toggle" class="theme-toggle" type="button" role="switch" aria-checked="false"
+                    aria-label="切换深色模式">
+                    <span class="theme-thumb">
+                        <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round">
+                            <circle cx="12" cy="12" r="4" />
+                            <path
+                                d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+                        </svg>
+                        <svg class="icon icon-moon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+                        </svg>
+                    </span>
+                </button>
+            </header>
+
+            <div class="actions">
+                <button id="capture-button" class="btn" type="button" disabled>
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+                        <circle cx="12" cy="13" r="3.5" />
+                    </svg>
+                    捕获画面
+                </button>
+                <button id="record-button" class="btn btn--primary" type="button" disabled>
+                    <svg class="icon icon-record" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="6" />
+                    </svg>
+                    <svg class="icon icon-stop" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="7" y="7" width="10" height="10" rx="2" />
+                    </svg>
+                    <span class="record-button-label">开始录制</span>
+                </button>
+            </div>
 
             <section class="panel-group">
-                <h1>自瞄串流播放器</h1>
-                <p>关注 <span translate="no">Alliance</span> 战队喵！</p>
-            </section>
-            <button id="capture-button" class="capture-button" type="button" disabled>捕获画面</button>
-            <button id="record-button" class="record-button" type="button" disabled>
-                <span class="record-button-label">开始录制</span>
-            </button>
-
-            <div style="height: 10px; flex: 0 0 auto;" aria-hidden="true"></div>
-
-            <section class="panel-group">
-                <h2>远程录制控制</h2>
+                <h2>远程录制</h2>
                 <p>HFYU 录制格式，约 1.4&nbsp;MB 每帧，压缩比 3:1，注意硬盘空间哦</p>
                 <div class="record-context" aria-live="polite">
                     <div class="context-row">
@@ -318,22 +595,85 @@
                         <span id="backend-filename-value" class="context-value">-</span>
                     </div>
                 </div>
+                <button id="backend-record-button" class="btn" type="button" disabled>
+                    <svg class="icon icon-record" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="6" />
+                    </svg>
+                    <svg class="icon icon-stop" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="7" y="7" width="10" height="10" rx="2" />
+                    </svg>
+                    <span id="backend-record-label">等待录制状态</span>
+                </button>
             </section>
-            <button id="backend-record-button" class="record-button" type="button" disabled>等待录制状态</button>
 
-            <div style="height: 10px; flex: 0 0 auto;" aria-hidden="true"></div>
+            <section class="panel-group">
+                <h2>系统状态</h2>
+                <p id="system-loadavg">负载 -</p>
+                <div class="system-stats">
+                    <div class="stat-row">
+                        <span class="stat-label">CPU</span>
+                        <div class="meter">
+                            <div class="meter-fill" id="sys-cpu-meter"></div>
+                        </div>
+                        <span class="stat-value" id="sys-cpu-value">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">内存</span>
+                        <div class="meter">
+                            <div class="meter-fill" id="sys-mem-meter"></div>
+                        </div>
+                        <span class="stat-value" id="sys-mem-value">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">磁盘</span>
+                        <div class="meter">
+                            <div class="meter-fill" id="sys-disk-meter"></div>
+                        </div>
+                        <span class="stat-value" id="sys-disk-value">-</span>
+                    </div>
+                    <div class="stat-row" id="sys-proc-row">
+                        <span class="stat-label">进程</span>
+                        <div class="meter">
+                            <div class="meter-fill" id="sys-proc-meter"></div>
+                        </div>
+                        <span class="stat-value" id="sys-proc-value">-</span>
+                    </div>
+                </div>
+            </section>
 
             <section class="panel-group">
                 <h2>播放控制</h2>
                 <p>适用于 player 回放</p>
                 <div class="playback-row">
-                    <button id="prev-btn" class="capture-button" type="button">-1</button>
-                    <button id="play-pause-btn" class="capture-button" type="button">暂停</button>
-                    <button id="next-btn" class="capture-button" type="button">+1</button>
+                    <button id="prev-btn" class="btn" type="button">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7 5v14" />
+                            <path d="m17 6-6 6 6 6" />
+                        </svg>
+                        -1
+                    </button>
+                    <button id="play-pause-btn" class="btn" type="button">
+                        <svg class="icon icon-pause" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="7" y="5" width="3.5" height="14" rx="1.2" />
+                            <rect x="13.5" y="5" width="3.5" height="14" rx="1.2" />
+                        </svg>
+                        <svg class="icon icon-play" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l10-6.2a.8.8 0 0 0 0-1.4l-10-6.2a.8.8 0 0 0-1.2.7Z" />
+                        </svg>
+                        <span id="play-pause-label">暂停</span>
+                    </button>
+                    <button id="next-btn" class="btn" type="button">
+                        +1
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 5v14" />
+                            <path d="m7 6 6 6-6 6" />
+                        </svg>
+                    </button>
                 </div>
             </section>
-
-
         </aside>
     </main>
 
@@ -348,66 +688,101 @@
         let retryTimer = null;
         /** @type {string[]} */
         let pendingIceCandidates = [];
-        let connectAttempts = 0;
         /** @type {MediaStream | null} */
         let currentStream = null;
         /** @type {MediaRecorder | null} */
         let recorder = null;
-
-        let stopped = false;
-        let lastFrameAt = 0;
-        let lastPlaybackTime = 0;
-        let recordingWanted = false;
         /** @type {boolean | null} */
         let backendRecordOn = null;
-        /** @type {boolean} */
-        let recorderAvailable = false;
         /** @type {BlobPart[]} */
         let recordedChunks = [];
         /** @type {'playing' | 'paused'} */
         let playbackStatus = 'playing';
-        /** @type {boolean} */
+        let connectAttempts = 0;
+        let stopped = false;
+        let lastFrameAt = 0;
+        let lastPlaybackTime = 0;
+        let recordingWanted = false;
+        let recorderAvailable = false;
         let playerAvailable = false;
+        let isPlaying = true;
 
-        /** @type {HTMLVideoElement} */
-        const video = document.getElementById('video');
-        /** @type {HTMLButtonElement} */
-        const recordButton = document.getElementById('record-button');
-        /** @type {HTMLButtonElement} */
-        const captureButton = document.getElementById('capture-button');
-        /** @type {HTMLSpanElement} */
-        const recordButtonLabel = document.querySelector('.record-button-label');
-        /** @type {HTMLButtonElement} */
-        const backendRecordButton = document.getElementById('backend-record-button');
-        /** @type {HTMLButtonElement} */
-        const prevButton = document.getElementById('prev-btn');
-        /** @type {HTMLButtonElement} */
-        const playPauseButton = document.getElementById('play-pause-btn');
-        /** @type {HTMLButtonElement} */
-        const nextButton = document.getElementById('next-btn');
-        /** @type {HTMLSpanElement} */
-        const backendRecordOnValue = document.getElementById('backend-record-on-value');
-        /** @type {HTMLSpanElement} */
-        const backendStatusValue = document.getElementById('backend-status-value');
-        /** @type {HTMLSpanElement} */
-        const backendFilenameValue = document.getElementById('backend-filename-value');
+        const $ = (id) => document.getElementById(id);
+        const video = $('video'), videoToggle = $('video-toggle');
+        const statusChip = $('stream-status'), statusText = $('stream-status-text');
+        const brandMark = $('brand-mark'), brandIcon = $('brand-icon');
+        const themeToggle = $('theme-toggle'), metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        const captureButton = $('capture-button'), recordButton = $('record-button'), recordButtonLabel = document.querySelector('.record-button-label');
+        const backendRecordButton = $('backend-record-button'), backendRecordLabel = $('backend-record-label');
+        const backendRecordOnValue = $('backend-record-on-value'), backendStatusValue = $('backend-status-value'), backendFilenameValue = $('backend-filename-value');
+        const prevButton = $('prev-btn'), playPauseButton = $('play-pause-btn'), playPauseLabel = $('play-pause-label'), nextButton = $('next-btn');
+        const systemLoadavg = $('system-loadavg');
+        const sysCpuMeter = $('sys-cpu-meter'), sysCpuValue = $('sys-cpu-value');
+        const sysMemMeter = $('sys-mem-meter'), sysMemValue = $('sys-mem-value');
+        const sysDiskMeter = $('sys-disk-meter'), sysDiskValue = $('sys-disk-value');
+        const sysProcRow = $('sys-proc-row'), sysProcMeter = $('sys-proc-meter'), sysProcValue = $('sys-proc-value');
+
+        // CDN 图标：加载成功才替换默认准星图标，失败保持静默
+        brandIcon.addEventListener('load', () => brandMark.classList.add('has-image'));
+        brandIcon.src = 'https://r2.creeper5820.com/creeper-qt/ohtoai.png';
+
+        // 主题：默认跟随系统，手动切换后记住选择
+        const systemDark = matchMedia('(prefers-color-scheme: dark)');
+
+        /** @param {'light' | 'dark' | null} theme null 表示跟随系统 */
+        function applyTheme(theme) {
+            if (theme) {
+                document.documentElement.dataset.theme = theme;
+            } else {
+                delete document.documentElement.dataset.theme;
+            }
+            const dark = theme ? theme === 'dark' : systemDark.matches;
+            themeToggle.setAttribute('aria-checked', String(dark));
+            metaThemeColor.content = dark ? '#0e1015' : '#f6f7fc';
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const theme = themeToggle.getAttribute('aria-checked') === 'true' ? 'light' : 'dark';
+            localStorage.setItem('theme', theme);
+            applyTheme(theme);
+        });
+
+        systemDark.addEventListener('change', () => applyTheme(localStorage.getItem('theme')));
+        applyTheme(localStorage.getItem('theme'));
+
+        /** @param {string} text @param {'live' | 'idle' | 'off'} tone */
+        function setStreamStatus(text, tone) {
+            statusText.textContent = text;
+            statusChip.dataset.tone = tone;
+        }
 
         video.addEventListener('play', () => {
             playbackStatus = 'playing';
             lastFrameAt = Date.now();
             lastPlaybackTime = video.currentTime;
+            updateVideoToggle();
         });
 
         video.addEventListener('pause', () => {
             playbackStatus = 'paused';
+            updateVideoToggle();
         });
-        recordButton.addEventListener('click', () => {
-            if (recordingWanted) {
-                stopRecording();
+
+        function updateVideoToggle() {
+            videoToggle.classList.toggle('is-paused', video.paused);
+            videoToggle.setAttribute('aria-label', video.paused ? '播放' : '暂停');
+        }
+
+        videoToggle.addEventListener('click', () => {
+            if (video.paused) {
+                video.play().catch(() => { });
             } else {
-                startRecording();
+                video.pause();
             }
         });
+        updateVideoToggle();
+
+        recordButton.addEventListener('click', () => recordingWanted ? stopRecording() : startRecording());
         captureButton.addEventListener('click', captureFrame);
         backendRecordButton.addEventListener('click', toggleBackendRecording);
         prevButton.addEventListener('click', () => sendPlaybackCommand('/api/step_backward'));
@@ -421,49 +796,55 @@
         }
 
         function updateRecordButton() {
-            if (recordingWanted) {
-                recordButtonLabel.textContent = '录制中';
-            } else {
-                recordButtonLabel.textContent = '开始录制';
-            }
+            recordButtonLabel.textContent = recordingWanted ? '录制中' : '开始录制';
             recordButton.classList.toggle('is-recording', recordingWanted);
             updateLocalActionButtons();
         }
 
         function updateBackendRecordButton() {
-            if (!recorderAvailable || backendRecordOn === null) {
-                backendRecordButton.textContent = '等待录制状态';
-                backendRecordButton.disabled = true;
-                return;
-            }
-
-            backendRecordButton.textContent = backendRecordOn ? '停止远程录制' : '开启远程录制';
-            backendRecordButton.disabled = false;
+            const ready = recorderAvailable && backendRecordOn !== null;
+            backendRecordButton.disabled = !ready;
+            backendRecordButton.classList.toggle('is-recording', ready && backendRecordOn);
+            backendRecordLabel.textContent = !ready ? '等待录制状态' : backendRecordOn ? '停止远程录制' : '开启远程录制';
         }
 
-        /** @type {boolean} */
-        let isPlaying = true;
-
         function updatePlaybackButtons() {
-            if (!playerAvailable) {
-                prevButton.disabled = true;
-                playPauseButton.disabled = true;
-                nextButton.disabled = true;
-                playPauseButton.textContent = '暂停';
-                return;
-            }
-            prevButton.disabled = isPlaying;
-            playPauseButton.disabled = false;
-            nextButton.disabled = isPlaying;
-            playPauseButton.textContent = isPlaying ? '暂停' : '播放';
+            prevButton.disabled = !playerAvailable || isPlaying;
+            nextButton.disabled = !playerAvailable || isPlaying;
+            playPauseButton.disabled = !playerAvailable;
+            playPauseButton.classList.toggle('is-paused', !isPlaying);
+            playPauseLabel.textContent = isPlaying ? '暂停' : '播放';
         }
 
         async function sendPlaybackCommand(url) {
             try {
-                await fetch(url, { method: 'POST', body: '1' });
+                await fetch(url, {method: 'POST', body: '1'});
             } catch (error) {
                 console.error('Playback command failed:', error);
             }
+        }
+
+        function setMeter(fill, percent) {
+            const valid = typeof percent === 'number';
+            fill.style.width = `${valid ? Math.max(0, Math.min(100, percent)) : 0}%`;
+            fill.classList.toggle('is-high', valid && percent > 80);
+        }
+
+        function updateSystemStats(system) {
+            const s = system || {};
+            systemLoadavg.textContent = s.loadAvg ? `负载 ${s.loadAvg}` : '负载 -';
+            sysCpuValue.textContent = s.cpuPercent == null ? '-' : `${s.cpuPercent.toFixed(1)}%`;
+            setMeter(sysCpuMeter, s.cpuPercent);
+            sysMemValue.textContent = s.memUsedMb == null || s.memTotalMb == null ? '-'
+                : `${(s.memUsedMb / 1024).toFixed(1)}/${(s.memTotalMb / 1024).toFixed(1)} GB`;
+            setMeter(sysMemMeter, s.memPercent);
+            sysDiskValue.textContent = s.diskUsedGb == null || s.diskTotalGb == null ? '-'
+                : `${s.diskUsedGb.toFixed(1)}/${s.diskTotalGb.toFixed(1)} GB`;
+            setMeter(sysDiskMeter, s.diskPercent);
+            sysProcValue.textContent = !system ? '-' : s.procName == null ? '未运行'
+                : `${s.procCpuPercent == null ? '-' : s.procCpuPercent.toFixed(1) + '%'} · ${s.procMemMb == null ? '-' : s.procMemMb + ' MB'}`;
+            sysProcRow.title = s.procName || '';
+            setMeter(sysProcMeter, s.procCpuPercent);
         }
 
         async function fetchRecordContext() {
@@ -473,23 +854,26 @@
                     throw new Error(`HTTP ${response.status}`);
                 }
 
-                const data = await response.json();
-                const recordContext = data.context || {};
+                const recordContext = (await response.json()).context || {};
                 recorderAvailable = Boolean(recordContext.recorderAvailable);
                 backendRecordOn = Boolean(recordContext.recordOn);
                 backendRecordOnValue.textContent = backendRecordOn ? '开启' : '关闭';
+                backendRecordOnValue.dataset.on = backendRecordOn;
                 backendStatusValue.textContent = recordContext.recordStatus || '-';
                 backendFilenameValue.textContent = recordContext.filename || '-';
                 playerAvailable = Boolean(recordContext.playerAvailable);
                 isPlaying = Boolean(recordContext.playing);
+                updateSystemStats(recordContext.system);
             } catch (error) {
                 recorderAvailable = false;
                 backendRecordOn = null;
                 backendRecordOnValue.textContent = '未知';
+                delete backendRecordOnValue.dataset.on;
                 backendStatusValue.textContent = '状态不可用';
                 backendFilenameValue.textContent = '-';
                 playerAvailable = false;
                 isPlaying = true;
+                updateSystemStats(null);
                 console.error('Failed to fetch record context:', error);
             }
 
@@ -500,10 +884,7 @@
         async function sendRecordCommand(value) {
             backendRecordButton.disabled = true;
             try {
-                const response = await fetch('/api/record', {
-                    method: 'POST',
-                    body: value,
-                });
+                const response = await fetch('/api/record', {method: 'POST', body: value});
                 if (!response.ok) {
                     console.error('Record command failed:', response.status);
                     return;
@@ -637,6 +1018,7 @@
             lastFrameAt = 0;
             lastPlaybackTime = 0;
             currentStream = null;
+            setStreamStatus('未连接', 'off');
             updateLocalActionButtons();
 
             if (retryTimer) {
@@ -693,9 +1075,7 @@
             }, delayMs);
         }
 
-        function computeBackoff(attempts) {
-            return Math.min(100 * Math.pow(2, attempts), 2000);
-        }
+        const computeBackoff = (attempts) => Math.min(100 * 2 ** attempts, 2000);
 
         function scheduleReconnectWithBackoff() {
             if (stopped || retryTimer) {
@@ -707,6 +1087,7 @@
 
         async function connect() {
             await cleanup();
+            setStreamStatus('连接中…', 'idle');
 
             const peer = new RTCPeerConnection({iceServers: []});
             peerConnection = peer;
@@ -740,6 +1121,7 @@
 
                 lastFrameAt = Date.now();
                 lastPlaybackTime = video.currentTime;
+                setStreamStatus('串流中', 'live');
 
                 event.track.onended = () => {
                     if (peer === peerConnection) {
@@ -760,11 +1142,13 @@
 
                 const state = peer.connectionState;
                 if (state === 'disconnected') {
+                    setStreamStatus('连接中断，重连中…', 'idle');
                     scheduleReconnect(0);
                     return;
                 }
 
                 if (state === 'failed' || state === 'closed') {
+                    setStreamStatus('连接失败，重试中…', 'idle');
                     scheduleReconnectWithBackoff();
                 }
             };
@@ -810,6 +1194,7 @@
                 }
 
                 console.error('[playing]', error);
+                setStreamStatus('连接失败，重试中…', 'idle');
                 scheduleReconnectWithBackoff();
             }
         }
