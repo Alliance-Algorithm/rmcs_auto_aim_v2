@@ -226,12 +226,8 @@ struct FireController::Impl {
         auto aimpoints = trackable.get_aimpoints();
         auto omega     = trackable.get_rotation_speed();
 
-        if (aimpoints.size() == 1) {
-            return { 0, false };
-        }
-
         // 能量机关
-        if (aimpoints.size() == 5) {
+        if (trackable.id() == DeviceId::RUNE) {
             if (!aimpoints.same_valid(last_aimpoints)) {
                 single_rune_actions.stop();
                 multiple_rune_actions.stop();
@@ -269,6 +265,7 @@ struct FireController::Impl {
 
             return { -1, true };
         }
+        if (aimpoints.size() == 1) return { 0, false };
 
         // 目标身份变化时重置滞回状态
         if (use_pre_aim && trackable.id() != last_device) {
@@ -444,7 +441,7 @@ struct FireController::Impl {
 
         // 射击评估
         auto should_shoot = true;
-        if (pre_aim && !config.attack_preaim) {
+        if (pre_aim && (!config.attack_preaim || trackable.id() == DeviceId::RUNE)) {
             should_shoot = false;
         } else {
             const auto cmd = ShootEvaluator::Command {
