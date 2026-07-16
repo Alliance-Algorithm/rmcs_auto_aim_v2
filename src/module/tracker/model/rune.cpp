@@ -16,7 +16,6 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -721,7 +720,7 @@ struct RuneModel::Impl {
     // ===== Correct =====
 
     auto correct(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept
-        -> void {
+        -> bool {
         observable.update(context.posteriors_state);
         std::ranges::fill(blade_inactive, false);
         addition.predicted.clear();
@@ -746,7 +745,7 @@ struct RuneModel::Impl {
             observations.push_back(
                 { Eigen::Vector2d(bs.center.x, bs.center.y), false, !bs.active });
 
-        if (observations.empty()) return;
+        if (observations.empty()) return false;
         const auto N = static_cast<int>(observations.size());
         const auto M = Observable::kFeatureCount;
 
@@ -787,7 +786,8 @@ struct RuneModel::Impl {
         auto assignments = util::hungarian_assign(cost, config.gate_threshold);
 
         addition.tracked.clear();
-        auto corrected = false;
+        auto inactive_corrected = false;
+        auto active_corrected   = false;
         for (int i = 0; i < N; ++i) {
             if (!assignments[i]) continue;
             auto j = *assignments[i];
@@ -800,9 +800,13 @@ struct RuneModel::Impl {
             if (!d2) continue;
 
             if (!update(observations[i].pixel, j)) continue;
-            corrected = true;
             if (!observations[i].is_icon && j != Observable::kFeatureIcon) {
                 blade_inactive[static_cast<std::size_t>(j - 1)] = observations[i].is_inactive;
+                if (observations[i].is_inactive) {
+                    inactive_corrected = true;
+                } else {
+                    active_corrected = true;
+                }
             }
             addition.tracked.push_back(
                 { j, Point2d { observations[i].pixel.x(), observations[i].pixel.y() } });
@@ -816,7 +820,7 @@ struct RuneModel::Impl {
             }
         }
 
-        if (corrected) {
+        if (inactive_corrected || active_corrected) {
             update_count += 1;
 
             auto state   = context.get_state(blade_inactive);
@@ -837,18 +841,6 @@ struct RuneModel::Impl {
                 context.sine_phase           = res_sine.omega * dt_now + res_sine.phi;
                 context.sine_t               = dt_now;
                 context.sine_valid           = true;
-
-                static auto* dump          = fopen("/tmp/rune_sine_dump.csv", "w");
-                static bool header_written = false;
-                if (dump) {
-                    if (!header_written) {
-                        fprintf(dump, "t_rel,ekf_theta,C,v,a,omega,phi,cost\n");
-                        header_written = true;
-                    }
-                    fprintf(dump, "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
-                        t_sec - fitter.base_t(), state.rotation_angle, res_sine.C, res_sine.v,
-                        res_sine.a, res_sine.omega, res_sine.phi, res_sine.cost);
-                }
             } else if (res_linear.valid) {
                 context.prediction_speed     = res_linear.speed;
                 context.use_prediction_speed = true;
@@ -856,6 +848,8 @@ struct RuneModel::Impl {
                 context.sine_valid           = false;
             }
         }
+
+        return inactive_corrected;
     }
 
     // ===== Convergence / Divergence =====
@@ -920,8 +914,8 @@ auto RuneModel::init(
 auto RuneModel::predict(double dt, Timestamp now) noexcept -> void { pimpl->predict(dt, now); }
 
 auto RuneModel::correct(
-    std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept -> void {
-    pimpl->correct(icons, bullseyes);
+    std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept -> bool {
+    return pimpl->correct(icons, bullseyes);
 }
 
 auto RuneModel::converge() const -> bool { return pimpl->converge(); }

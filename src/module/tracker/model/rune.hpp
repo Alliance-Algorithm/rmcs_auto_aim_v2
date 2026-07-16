@@ -80,7 +80,8 @@ public:
 
     auto init(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> bool;
     auto predict(double dt, Timestamp now) noexcept -> void;
-    auto correct(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> void;
+    [[nodiscard]] auto correct(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept
+        -> bool;
 
     auto converge() const -> bool;
     auto diverged() const -> bool;

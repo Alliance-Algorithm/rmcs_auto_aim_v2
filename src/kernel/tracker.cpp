@@ -101,7 +101,7 @@ struct Tracker::Impl {
     Timestamp outpost_stamp;
     std::unique_ptr<OutpostModel> outpost;
 
-    Timestamp rune_stamp;
+    Timestamp rune_stamp, rune_corrected_stamp;
     std::unique_ptr<RuneModel> rune;
 
     Printer logging { "TrackerV2" };
@@ -211,10 +211,10 @@ struct Tracker::Impl {
                 }
             }
         }
-        { // @NOTE: 假装这里有大符的超时处理
+        { // 大符超时处理
             if (rune != nullptr) {
                 const auto dt = std::chrono::duration<double> {
-                    timestamp - rune_stamp,
+                    timestamp - rune_corrected_stamp,
                 };
                 if (dt.count() > config.timeout_seconds) {
                     rune = nullptr;
@@ -281,7 +281,7 @@ struct Tracker::Impl {
                 }
             }
         }
-        { // @NOTE: 故作姿态地假装在迭代大符
+        { // 迭代大符
             if (!stored.icons.empty() || !stored.bullseyes.empty()) {
                 if (rune == nullptr) {
                     auto model = std::make_unique<RuneModel>(rune_config);
@@ -292,8 +292,9 @@ struct Tracker::Impl {
                         .orientation = camera.orientation,
                     });
                     if (model->init(stored.icons, stored.bullseyes)) {
-                        rune       = std::move(model);
-                        rune_stamp = timestamp;
+                        rune                 = std::move(model);
+                        rune_stamp           = timestamp;
+                        rune_corrected_stamp = timestamp;
                         logging.info("Init OK with {}", get_enum_name(DeviceId::RUNE));
                     }
                 } else {
@@ -306,13 +307,14 @@ struct Tracker::Impl {
                         .orientation = camera.orientation,
                     });
                     rune->predict(dt.count(), timestamp);
-                    rune->correct(stored.icons, stored.bullseyes);
+                    rune_stamp           = timestamp;
+                    const auto corrected = rune->correct(stored.icons, stored.bullseyes);
 
                     if (rune->diverged()) {
                         rune = nullptr;
                         logging.warn("{} is diverged", get_enum_name(DeviceId::RUNE));
-                    } else {
-                        rune_stamp = timestamp;
+                    } else if (corrected) {
+                        rune_corrected_stamp = timestamp;
                     }
                 }
             }
