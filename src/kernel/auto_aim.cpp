@@ -12,7 +12,6 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <experimental/scope>
@@ -94,32 +93,17 @@ struct AutoAim::Impl {
         auto max_yaw_vel = 0.0;
         auto max_yaw_acc = 0.0;
 
-        auto iso   = Transform::kIdentity();
         auto yaw   = 0.0;
         auto pitch = 0.0;
         auto id    = RobotId { RobotId::UNKNOWN };
 
-        auto track_ids = DeviceIds::Full();
-        auto addition  = Context::Addition { };
+        auto iso                = Transform { };
+        auto camera_translation = Translation { };
+        auto track_ids          = DeviceIds::Full();
+        auto addition           = Context::Addition { };
         {
-            using namespace std::chrono_literals;
-
             std::lock_guard lock { self.context_mutex };
             auto& context = self.current_context;
-
-            /// 8ms 是一个经验值，实际是多少延迟得进一步确定，
-            /// 但大部分情况下是有效的对齐
-            const auto time = image.timestamp() - 8ms;
-            const auto best = std::ranges::min_element(
-                context.transforms, [time](const auto& lhs, const auto& rhs) {
-                    return std::chrono::abs(lhs.timestamp - time)
-                        < std::chrono::abs(rhs.timestamp - time);
-                });
-            if (best != context.transforms.end()) {
-                iso   = best->transform;
-                yaw   = best->yaw;
-                pitch = best->pitch;
-            }
 
             intent      = context.track_intent;
             max_yaw_vel = context.max_yaw_vel;
@@ -127,10 +111,23 @@ struct AutoAim::Impl {
             id          = context.id;
             track_ids   = context.track_ids;
             addition    = context.addition;
+
+            camera_translation = context.camera_translation;
         }
         // id = RobotId::RED_SENTRY; // FIXME:
 
-        iso.orientation = image.imu_orientation();
+        {
+            /// 约定：imu_orientation 为 PitchLink 在 OdomImu 下的姿态，
+            /// 相机与其仅相差外参平移（装配不引入旋转）
+            const auto q = image.imu_orientation().make<Eigen::Quaterniond>();
+
+            iso.orientation = image.imu_orientation();
+            iso.translation = Translation { q * camera_translation.make<Eigen::Vector3d>() };
+
+            const auto d = q * Eigen::Vector3d::UnitX();
+            yaw          = std::atan2(d.y(), d.x());
+            pitch        = std::atan2(-d.z(), std::hypot(d.x(), d.y()));
+        }
 
         visual.publish(iso, "camera_link");
         visual.publish(yaw, "yaw");

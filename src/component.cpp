@@ -32,6 +32,14 @@ private:
 
     bool manual_shoot = false;
 
+    struct GimbalState {
+        Timestamp timestamp;
+
+        Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
+        Eigen::Vector3d gyro_body      = Eigen::Vector3d::Zero();
+    } gimbal;
+    std::mutex gimbal_mutex;
+
     EventInputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> camera_frame {
         [this](const std::shared_ptr<const rmcs_msgs::CameraFrame>& frame) {
             if (!frame || camera_frame_stop_requested.load(std::memory_order::relaxed)) return;
@@ -49,6 +57,12 @@ private:
         while (!stop.stop_requested()
             && !camera_frame_stop_requested.load(std::memory_order::relaxed)) {
             if (auto frame = latest_camera_frame.exchange(nullptr, std::memory_order::acq_rel)) {
+                {
+                    std::lock_guard lock { gimbal_mutex };
+                    gimbal.orientation = frame->imu_snapshot;
+                    gimbal.gyro_body   = frame->gyro_body;
+                    gimbal.timestamp   = frame->exposure_timestamp;
+                }
                 auto_aim.process(Image { std::move(frame) });
                 continue;
             }
@@ -61,9 +75,6 @@ private:
         }
     } };
 
-    InputInterface<Eigen::Isometry3d> camera_transform;
-    InputInterface<Eigen::Vector3d> barrel_direction;
-    InputInterface<double> yaw_velocity;
     InputInterface<rmcs_msgs::RobotId> robot_id;
     InputInterface<rmcs_msgs::Switch> rswitch;
     InputInterface<rmcs_msgs::Switch> lswitch;
@@ -86,9 +97,6 @@ private:
 public:
     AutoAimComponent() {
         register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
-        register_input("/auto_aim/camera_transform", camera_transform, false);
-        register_input("/auto_aim/barrel_direction", barrel_direction, false);
-        register_input("/auto_aim/yaw_velocity", yaw_velocity, false);
         register_input("/referee/id", robot_id, false);
         register_input("/remote/switch/right", rswitch, false);
         register_input("/remote/switch/left", lswitch, false);
@@ -109,6 +117,15 @@ public:
         } else {
             throw std::runtime_error { config.error() };
         }
+
+        const auto t = params.get<std::vector<double>>("camera_translation");
+        if (t.size() == 3) {
+            auto_aim.with_context([&](AutoAim::Context& ctx) {
+                ctx.camera_translation = Translation { t[0], t[1], t[2] };
+            });
+        } else {
+            rclcpp.error("Parameter 'camera_translation' expects 3 elements, got {}", t.size());
+        }
     }
 
     ~AutoAimComponent() override {
@@ -119,32 +136,37 @@ public:
     }
 
     auto before_updating() -> void override {
-        if (!camera_transform.ready()) {
-            camera_transform.make_and_bind_directly(Eigen::Isometry3d::Identity());
-        }
-        if (!barrel_direction.ready()) {
-            barrel_direction.make_and_bind_directly(Eigen::Vector3d::UnitX());
-        }
         if (!robot_id.ready()) {
             robot_id.make_and_bind_directly(rmcs_msgs::RobotId::UNKNOWN);
         }
     }
 
     auto update() -> void override {
-        if (yaw_velocity.ready() && std::isfinite(*yaw_velocity)) {
-            const auto now      = Clock::now();
-            const auto velocity = *yaw_velocity;
+        auto gimbal_q    = Eigen::Quaterniond { };
+        auto gimbal_gyro = Eigen::Vector3d { };
+        auto gimbal_time = Timestamp { };
+        {
+            std::lock_guard lock { gimbal_mutex };
+            gimbal_q    = gimbal.orientation;
+            gimbal_gyro = gimbal.gyro_body;
+            gimbal_time = gimbal.timestamp;
+        }
 
-            max_yaw_vel = std::max(max_yaw_vel, std::abs(velocity));
-            if (std::isfinite(last_yaw_velocity)) {
-                const auto dt = std::chrono::duration<double>(now - last_yaw_vel_timestamp).count();
-                if (dt > 1e-6) {
-                    max_yaw_acc =
-                        std::max(max_yaw_acc, std::abs((velocity - last_yaw_velocity) / dt));
+        if (gimbal_time != Timestamp { } && gimbal_time != last_yaw_vel_timestamp) {
+            const auto velocity = (gimbal_q * gimbal_gyro).z();
+            if (std::isfinite(velocity)) {
+                max_yaw_vel = std::max(max_yaw_vel, std::abs(velocity));
+                if (std::isfinite(last_yaw_velocity)) {
+                    const auto dt =
+                        std::chrono::duration<double>(gimbal_time - last_yaw_vel_timestamp).count();
+                    if (dt > 1e-6) {
+                        max_yaw_acc =
+                            std::max(max_yaw_acc, std::abs((velocity - last_yaw_velocity) / dt));
+                    }
                 }
+                last_yaw_vel_timestamp = gimbal_time;
+                last_yaw_velocity      = velocity;
             }
-            last_yaw_vel_timestamp = now;
-            last_yaw_velocity      = velocity;
         }
 
         using namespace rmcs_msgs;
@@ -154,22 +176,6 @@ public:
             (mouse.ready() && mouse->left) || (lswitch.ready() && *lswitch == Switch::DOWN);
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
-            auto frame      = AutoAim::Context::TransformFrame { };
-            frame.timestamp = Clock::now();
-
-            const auto& dir = *barrel_direction;
-            frame.yaw       = std::atan2(dir.y(), dir.x());
-            frame.pitch     = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y()));
-
-            const auto& iso             = *camera_transform;
-            frame.transform.translation = iso.translation();
-            frame.transform.orientation = Eigen::Quaterniond { iso.rotation() };
-
-            ctx.transforms.push_back(frame);
-            if (ctx.transforms.size() > 100) {
-                ctx.transforms.pop_front();
-            }
-
             ctx.track_intent = track_intent;
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
@@ -210,7 +216,7 @@ public:
         if (current_trackable) {
             *single_shoot = current_trackable->id() == DeviceId::RUNE;
 
-            const auto& dir = *barrel_direction;
+            const auto dir = gimbal_q * Eigen::Vector3d::UnitX();
             fire->update({
                 .timestamp   = now,
                 .yaw         = std::atan2(+dir.y(), dir.x()),

@@ -44,6 +44,8 @@ public:
                 .set_invert_image(get_parameter_or<bool>("invert_image", false)) }
         , half_exposure_time_(std::chrono::duration_cast<rmcs_msgs::BoardClock::duration>(
               std::chrono::duration<float, std::micro>(camera_config_.exposure_us)))
+        , imu_delay_(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+              std::chrono::duration<double, std::milli>(get_parameter_or<double>("delay_ms", 0.0))))
         , matching_array_([] {
             auto arr = std::vector<LinearSyncModel::TimestampPair> { };
             arr.reserve(1000);
@@ -429,7 +431,8 @@ private:
         }
 
         if (auto imu_snapshot = imu_buffer_.pop(exposure_midpoint)) {
-            output_frame->imu_snapshot           = *imu_snapshot;
+            output_frame->imu_snapshot           = imu_snapshot->orientation;
+            output_frame->gyro_body              = imu_snapshot->gyro_body;
             output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
 
             const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
@@ -461,10 +464,12 @@ private:
             std::terminate();
         }
 
-        output_frame->exposure_timestamp = output_frame->image_reception_timestamp;
+        const auto compensated_timestamp = output_frame->image_reception_timestamp - imu_delay_;
+        output_frame->exposure_timestamp = compensated_timestamp;
 
-        if (auto imu_snapshot = imu_buffer_.pop_latest()) {
-            output_frame->imu_snapshot           = *imu_snapshot;
+        if (auto imu_snapshot = imu_buffer_.pop_host(compensated_timestamp)) {
+            output_frame->imu_snapshot           = imu_snapshot->orientation;
+            output_frame->gyro_body              = imu_snapshot->gyro_body;
             output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
 
             const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
@@ -587,6 +592,7 @@ private:
     rmcs_utility::RingBuffer<UnmatchedImage> unmatched_image_buffer_ { 16 };
 
     const rmcs_msgs::BoardClock::duration half_exposure_time_;
+    const std::chrono::steady_clock::duration imu_delay_;
     ImuSnapshotBuffer imu_buffer_ { *this, 1024 };
     EventOutputInterface<std::shared_ptr<const OutputFrame>> frame_output_;
 

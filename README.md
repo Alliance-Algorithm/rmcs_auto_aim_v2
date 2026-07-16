@@ -96,25 +96,15 @@ ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
 
 | 接口名称 | 类型 | 说明 |
 |----------|------|------|
-| `/auto_aim/camera_transform` | `Eigen::Isometry3d` | 相机在 OdomImu 坐标系下的位姿 |
-| `/auto_aim/barrel_direction` | `Eigen::Vector3d` | 枪口在 OdomImu 坐标系下的方向 |
-| `/auto_aim/yaw_velocity` | `double` | 云台 yaw 角速度，单位 rad/s，用于估计极限射击窗口 |
 | `/referee/id` | `rmcs_msgs::RobotId` | 机器人 ID，用于判断敌方颜色 |
 
-通过类似下面的方式获取需要的变换：
+相机帧（`/gimbal/auto_aim/camera_frame`）自带曝光中点时刻的 imu 姿态与陀螺仪数据，
+约定 `imu_snapshot` 为 PitchLink 在 OdomImu 坐标系下的姿态（枪口与相机刚性连接、
+无姿态偏移）。相机在 PitchLink 下的平移外参由组件参数 `camera_translation` 给出，
+自瞄内部据此合成相机位姿；枪口方向与 yaw 角速度均由该姿态直接解算。
 
-```cpp
-#include <rmcs_description/tf_description.hpp>
-
-// 从 TF 树中查询相机位姿
-auto camera_transform = fast_tf::lookup_transform<
-    rmcs_description::OdomImu,
-    rmcs_description::CameraLink>(*tf);
-
-// 从 TF 树中查询枪口方向
-auto barrel_direction = *fast_tf::cast<rmcs_description::OdomImu>(
-    rmcs_description::PitchLink::DirectionVector { Eigen::Vector3d::UnitX() }, *tf);
-```
+自由采集（无硬件同步）模式下，采集组件按参数 `delay_ms`（图像与 imu 姿态间的时间差）
+以帧接收时刻为基准向前回退取 imu 快照。
 
 #### 输出接口
 

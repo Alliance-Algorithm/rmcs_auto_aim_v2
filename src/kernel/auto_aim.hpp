@@ -1,7 +1,6 @@
 #pragma once
 
 #include "module/tracker/trackable.hpp"
-#include "utility/clock.hpp"
 #include "utility/image/image.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/pimpl.hpp"
@@ -10,7 +9,6 @@
 #include <rmcs_msgs/robot_id.hpp>
 
 #include <atomic>
-#include <deque>
 #include <mutex>
 
 namespace rmcs {
@@ -26,14 +24,8 @@ public:
     struct Context {
         using RobotId = rmcs_msgs::RobotId;
 
-        struct TransformFrame {
-            Timestamp timestamp = { };
-            Transform transform = Transform::kIdentity();
-
-            double yaw   = kNaN;
-            double pitch = kNaN;
-        };
-        std::deque<TransformFrame> transforms;
+        /// 相机在 PitchLink 下的平移外参，由 component 构造时写入一次
+        Translation camera_translation = Translation::kZero();
 
         bool track_intent = false;
 

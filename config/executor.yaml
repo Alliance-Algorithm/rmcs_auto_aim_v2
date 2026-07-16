@@ -27,8 +27,11 @@ auto_aim_capturer:
     # RLS 同步模型的时间常数，单位秒，用于估计触发信号与帧到达时刻的延迟
     rls_tau_sec: 10.0
     # 是否使用硬件同步（exposure_signal + RLS 线性同步模型）
-    # 关闭后将退化为自由采集模式，IMU snapshot 直接取最新可用值
+    # 关闭后将退化为自由采集模式
     use_hardware_sync: true
+    # 自由采集模式下，图像与 imu 姿态间的时间差，单位毫秒
+    # 以帧接收时刻为基准向前回退该时长取 imu 快照
+    delay_ms: 0.0
 
 auto_aim_recorder:
   ros__parameters:
@@ -66,6 +69,9 @@ auto_aim_component:
     # 手动开火开关，若开启，右键自瞄并锁定后，还需要按下鼠标左键
     # 或者左拨杆向下确认才能发射
     manual_shoot: false
+
+    # 相机在 PitchLink 下的平移外参（米），仅平移，装配不引入旋转
+    camera_translation: [0.0, 0.0, 0.0]
 
     fire_control:
       bullet_speed: 23.5 # m/s
