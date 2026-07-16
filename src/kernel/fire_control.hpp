@@ -21,6 +21,8 @@ public:
 
         double attack_window { 40.0 };
 
+        double window_hysteresis { 0.2 };
+
         double yaw_tolerance   = 0.07;
         double pitch_tolerance = 0.04;
 
@@ -34,6 +36,7 @@ public:
             &Config::offset_yaw, "offset_yaw",
             &Config::offset_pitch, "offset_pitch",
             &Config::attack_window, "attack_window",
+            &Config::window_hysteresis, "window_hysteresis",
             &Config::yaw_tolerance, "yaw_tolerance",
             &Config::pitch_tolerance, "pitch_tolerance",
             &Config::require_stable_command, "require_stable_command",

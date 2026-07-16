@@ -181,8 +181,7 @@ public:
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
 
-            ctx.id = *robot_id; // FIXME: 临时调试
-            ctx.id = RobotId::RED_SENTRY;
+            ctx.id = *robot_id;
 
             /// TODO:
             /// 跟踪目标，用于适配后期可能存在的需求，

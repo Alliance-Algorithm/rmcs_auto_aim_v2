@@ -22,7 +22,8 @@ struct FireController::Impl {
 
     State state;
 
-    std::int8_t last_armor_idx = -1;
+    std::int8_t last_idx = -1;
+    DeviceId last_device = DeviceId::UNKNOWN;
 
     Repeat single_rune_actions {
         Repeat::Action { "idle", 0.4 },
@@ -78,6 +79,9 @@ struct FireController::Impl {
         if (!(config.pitch_tolerance > 0.0)) {
             throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
         }
+        if (!(config.window_hysteresis >= 0.0 && config.window_hysteresis < 1.0)) {
+            throw std::runtime_error { "FireControllerV2: window_hysteresis must be in [0, 1)" };
+        }
 
         config.offset_yaw    = util::deg2rad(config.offset_yaw);
         config.offset_pitch  = util::deg2rad(config.offset_pitch);
@@ -93,6 +97,16 @@ struct FireController::Impl {
 
     explicit Impl(const Config& cfg)
         : config { cfg } {
+        if (!(config.yaw_tolerance > 0.0)) {
+            throw std::runtime_error { "FireControllerV2: yaw_tolerance must be > 0" };
+        }
+        if (!(config.pitch_tolerance > 0.0)) {
+            throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
+        }
+        if (!(config.window_hysteresis >= 0.0 && config.window_hysteresis < 1.0)) {
+            throw std::runtime_error { "FireControllerV2: window_hysteresis must be in [0, 1)" };
+        }
+
         config.offset_yaw    = util::deg2rad(config.offset_yaw);
         config.offset_pitch  = util::deg2rad(config.offset_pitch);
         config.attack_window = util::deg2rad(config.attack_window);
@@ -203,10 +217,6 @@ struct FireController::Impl {
             }
         }
 
-        // logging.info("cycle: {:.2f}, v_track: {:.3f}, stroke: {:.3f}, stable: {:.3f}, body:
-        // {:.3f}",
-        // cycle_time, v_track, stroke, stable_window, half_window);
-
         return { half_window, false };
     }
 
@@ -260,6 +270,12 @@ struct FireController::Impl {
             return { -1, true };
         }
 
+        // 目标身份变化时重置滞回状态
+        if (use_pre_aim && trackable.id() != last_device) {
+            last_device = trackable.id();
+            last_idx    = -1;
+        }
+
         // 窗口计算
         auto degraded    = false;
         auto half_window = double { };
@@ -268,22 +284,34 @@ struct FireController::Impl {
             auto dynamic_window = std::numeric_limits<double>::infinity();
             if (aimpoints.size() == 4) {
                 std::tie(dynamic_window, degraded) = get_attack_window(trackable);
-
-                // logging.info("dynamic_window: {:.1f}, degraded: {}", dynamic_window, degraded);
             }
             half_window = std::min(config.attack_window / 2, dynamic_window);
         } else {
             half_window = config.attack_window / 2;
         }
 
+        // 退化：直接返回哨兵值，由 aim() 瞄准中心
+        if (degraded) {
+            if (last_idx >= 0) {
+                logging.info("degraded: {} -> max, omega: {:+.2f}", last_idx, omega);
+            }
+            last_idx = -1;
+            return { std::numeric_limits<std::int8_t>::max(), false };
+        }
+
+        // 施密特滞回：进入阈值收紧，退出阈值放宽；raw 评估保持无状态
+        const auto enter_window =
+            use_pre_aim ? half_window * (1.0 - config.window_hysteresis) : half_window;
+        const auto exit_window = half_window * (1.0 + config.window_hysteresis);
+
         // 装甲板选择
         {
             const auto length = static_cast<std::int8_t>(aimpoints.size());
-            if (last_armor_idx >= 0 && last_armor_idx < length) {
+            if (use_pre_aim && last_idx >= 0 && last_idx < length) {
                 const auto delta = util::normalize_angle(
-                    yaw_angle(trackable.get_direction(), aimpoints[last_armor_idx]));
-                if (std::abs(delta) <= half_window) {
-                    return { last_armor_idx, false };
+                    yaw_angle(trackable.get_direction(), aimpoints[last_idx]));
+                if (std::abs(delta) <= exit_window) {
+                    return { last_idx, false };
                 }
             }
 
@@ -297,12 +325,12 @@ struct FireController::Impl {
                     util::normalize_angle(yaw_angle(trackable.get_direction(), aimpoints[i]));
                 const auto abs_delta = std::abs(delta);
 
-                if (abs_delta <= half_window && abs_delta < best_delta) {
+                if (abs_delta <= enter_window && abs_delta < best_delta) {
                     best_delta = abs_delta;
                     best_index = static_cast<std::int8_t>(i);
                 }
 
-                if (use_pre_aim && !degraded) {
+                if (use_pre_aim) {
                     const auto dominated = (omega < 0) ? (delta > 0) : (delta < 0);
                     if (dominated && abs_delta < next_delta) {
                         next_delta = abs_delta;
@@ -312,12 +340,30 @@ struct FireController::Impl {
             }
 
             if (best_index) {
-                // logging.info("aimed: {}", *best_index);
+                if (use_pre_aim) {
+                    if (*best_index != last_idx) {
+                        logging.info("switch: {} -> {}, omega: {:+.2f}, delta: {:+.3f}, enter: "
+                                     "{:.3f}",
+                            last_idx, *best_index, omega, best_delta, enter_window);
+                    }
+                    last_idx = *best_index;
+                }
                 return { *best_index, false };
             }
             if (next_index && use_pre_aim) {
-                // logging.info(" next: {}", *next_index);
+                if (*next_index != last_idx) {
+                    logging.info("switch(pre): {} -> {}, omega: {:+.2f}, delta: {:+.3f}", last_idx,
+                        *next_index, omega, next_delta);
+                }
+                last_idx = *next_index;
                 return { *next_index, true };
+            }
+            if (use_pre_aim) {
+                if (last_idx >= 0) {
+                    logging.info("lost: {} -> -1, omega: {:+.2f}, exit: {:.3f}", last_idx, omega,
+                        exit_window);
+                }
+                last_idx = -1;
             }
             return { -1, false };
         }
@@ -336,121 +382,112 @@ struct FireController::Impl {
         auto aim_selected = std::int8_t { -1 };
         auto raw_selected = std::int8_t { -1 };
         auto pre_aim      = false;
-        { // FIXME: 这里也需要迭代飞行时间，和下面的一起共用一段逻辑，不应该分开处理
+
+        {
             auto future = trackable.clone();
             future->jump_into(fly_time + increment);
             std::tie(aim_selected, pre_aim)     = evaluate_aimed(*future);
             std::tie(raw_selected, std::ignore) = evaluate_aimed(*future, false);
+        }
+        if (aim_selected < 0) return std::nullopt;
 
-            if (aim_selected < 0) {
-                const auto center = future->get_direction();
-                TrajectorySolution solution { };
-                solution.input.v0    = config.bullet_speed;
-                solution.input.point = center;
-                const auto result    = solution.solve();
-                if (!result) return std::nullopt;
-                const auto aim_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
-                const auto pitch   = result->pitch + config.offset_pitch;
-                return Aimed {
-                    .aim_yaw = aim_yaw,
-                    .raw_yaw = aim_yaw,
-                    .pitch   = pitch,
-                    .shoot   = true,
-                    .pre_aim = false,
-                    .target  = make_target(aim_yaw, pitch),
-                    .center  = center,
-                    .attack  = center,
-                };
-            }
+        const auto degraded = (aim_selected == std::numeric_limits<std::int8_t>::max());
+
+        constexpr auto kMaxIterate = std::size_t { 5 };
+        constexpr auto kEpsilon    = 0.001;
+
+        auto attack = Point3d { };
+        auto center = Point3d { };
+        auto yaw    = double { };
+        auto pitch  = double { };
+
+        auto new_time = double { fly_time };
+
+        auto solution = TrajectorySolution { };
+        for (auto i = std::size_t { 0 }; i < kMaxIterate; ++i) {
+            auto clone = trackable.clone();
+            clone->jump_into(new_time + increment);
+
+            center = clone->get_direction();
+            attack = degraded ? center : clone->get_aimpoints()[aim_selected];
+
+            solution.input.v0    = config.bullet_speed;
+            solution.input.point = attack;
+
+            const auto result = solution.solve();
+            if (!result) return std::nullopt;
+
+            const auto prev = new_time;
+
+            new_time = result->fly_time;
+            yaw      = result->yaw;
+            pitch    = result->pitch;
+
+            if (std::abs(new_time - prev) < kEpsilon) break;
         }
 
-        if (aim_selected >= 0) { // 迭代收敛飞行时间
-            constexpr auto kMaxIterate = std::size_t { 5 };
-            constexpr auto kEpsilon    = 0.001;
+        // 偏置校正
+        yaw   = yaw + config.offset_yaw;
+        pitch = pitch + config.offset_pitch;
 
-            auto attack = Point3d { };
-            auto center = Point3d { };
-            auto yaw    = double { };
-            auto pitch  = double { };
-
-            auto new_time = double { fly_time };
-
-            auto solution = TrajectorySolution { };
-            for (auto i = std::size_t { 0 }; i < kMaxIterate; ++i) {
-                auto clone = trackable.clone();
-                clone->jump_into(new_time + increment);
-
-                const auto aimpoints = clone->get_aimpoints();
-
-                attack = aimpoints[aim_selected];
-                center = clone->get_direction();
-
-                solution.input.v0    = config.bullet_speed;
-                solution.input.point = attack;
-
-                const auto result = solution.solve();
-                if (!result) return std::nullopt;
-
-                const auto prev = new_time;
-
-                new_time = result->fly_time;
-                yaw      = result->yaw;
-                pitch    = result->pitch;
-
-                if (std::abs(new_time - prev) < kEpsilon) break;
-            }
-
-            // 偏置校正
-            yaw   = util::normalize_angle(yaw + config.offset_yaw);
-            pitch = pitch + config.offset_pitch;
-
-            // 原始 yaw 计算
-            auto raw_yaw = double { yaw };
-            if (raw_selected >= 0 && raw_selected != aim_selected) {
-                auto raw_clone = trackable.clone();
-                raw_clone->jump_into(new_time + increment);
-
-                const auto raw_aimpoints = raw_clone->get_aimpoints();
-                const auto raw_attack    = raw_aimpoints[raw_selected];
-
-                TrajectorySolution solution { };
-                solution.input.v0    = config.bullet_speed;
-                solution.input.point = raw_attack;
-
-                const auto result = solution.solve();
-                if (!result) return std::nullopt;
-
-                raw_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
-            }
-
-            // 射击评估
-            auto should_shoot = true;
-            if (pre_aim) {
-                // TODO: 设置为标志，英雄在预瞄时不打，或者实际再判断一次装甲板的 Yaw
-                // 是否可以真的打到，英雄弹速较慢，预瞄的板比较提前
-                should_shoot = false;
-            } else {
-                const auto cmd = ShootEvaluator::Command {
-                    .yaw    = yaw,
-                    .pitch  = pitch,
-                    .center = center,
-                    .armor  = attack,
-                };
-                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
-            }
-
+        if (degraded) {
             return Aimed {
                 .aim_yaw = yaw,
-                .raw_yaw = raw_yaw,
+                .raw_yaw = yaw,
                 .pitch   = pitch,
-                .shoot   = should_shoot,
-                .pre_aim = pre_aim,
+                .shoot   = true,
+                .pre_aim = false,
                 .target  = make_target(yaw, pitch),
                 .center  = center,
-                .attack  = attack,
+                .attack  = center,
             };
         }
-        return std::nullopt;
+
+        // 原始 yaw 计算
+        auto raw_yaw = double { yaw };
+        if (raw_selected >= 0 && raw_selected != aim_selected) {
+            auto raw_clone = trackable.clone();
+            raw_clone->jump_into(new_time + increment);
+
+            const auto raw_aimpoints = raw_clone->get_aimpoints();
+            const auto raw_attack    = raw_aimpoints[raw_selected];
+
+            TrajectorySolution solution { };
+            solution.input.v0    = config.bullet_speed;
+            solution.input.point = raw_attack;
+
+            const auto result = solution.solve();
+            if (!result) return std::nullopt;
+
+            raw_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
+        }
+
+        // 射击评估
+        auto should_shoot = true;
+        if (pre_aim) {
+            // TODO: 设置为标志，英雄在预瞄时不打，或者实际再判断一次装甲板的 Yaw
+            // 是否可以真的打到，英雄弹速较慢，预瞄的板比较提前
+            should_shoot = false;
+        } else {
+            const auto cmd = ShootEvaluator::Command {
+                .yaw    = yaw,
+                .pitch  = pitch,
+                .center = center,
+                .armor  = attack,
+            };
+            should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+        }
+
+        return Aimed {
+            .aim_yaw = yaw,
+            .raw_yaw = raw_yaw,
+            .pitch   = pitch,
+            .shoot   = should_shoot,
+            .pre_aim = pre_aim,
+            .target  = make_target(yaw, pitch),
+            .center  = center,
+            .attack  = attack,
+        };
     }
 };
 
