@@ -82,6 +82,8 @@ auto_aim_component:
 
       attack_window: 120.0 # degree (total window)
 
+      attack_preaim: true
+
       # 选板窗口滞回比例（施密特）：进入 (1-h)、退出 (1+h)
       window_hysteresis: 0.2
 

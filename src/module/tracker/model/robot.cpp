@@ -120,7 +120,8 @@ struct RobotModel::Impl {
         double yaw_full_max = 60.0 * std::numbers::pi / 180.0;
         double yaw_part_max = 90.0 * std::numbers::pi / 180.0;
 
-        auto update(const Eigen::Vector3d& center, double theta, double rf, double rl, double hl) {
+        auto update(const Eigen::Vector3d& center, double theta, double rf, double rl, double hl,
+            ArmorGenre genre) {
             const auto q_odom_from_cam = feature.orientation.make<Eigen::Quaterniond>();
             const auto q_cam_from_odom = q_odom_from_cam.conjugate();
             const auto cam_position    = feature.translation.make<Eigen::Vector3d>();
@@ -140,6 +141,7 @@ struct RobotModel::Impl {
             solution.input.radius_forward = rf;
             solution.input.radius_lateral = rl;
             solution.input.height_lateral = hl;
+            solution.input.genre          = genre;
 
             const auto lightbars = solution.solve_lightbars();
             const auto armors    = solution.solve_armors();
@@ -273,6 +275,7 @@ private:
                 solution.input.radius_forward = state[kStateRF];
                 solution.input.radius_lateral = state[kStateRL];
                 solution.input.height_lateral = state[kStateHL];
+                solution.input.genre          = genre;
                 const auto lightbars          = solution.solve_lightbars();
                 const auto& point = is_upper ? lightbars[id].upper : lightbars[id].lower;
                 return Eigen::Vector3d { point.x, point.y, point.z };
@@ -396,17 +399,17 @@ public:
         context.posteriors_state[kStateHL] = 0.0;
 
         // 验证 PnP yaw：选可见装甲板数更多的朝向
-        observable.update(center, yaw, 0.2, 0.2, 0.0);
+        observable.update(center, yaw, 0.2, 0.2, 0.0, genre);
         const auto orig_count = observable.visible_armors().size();
 
         const auto alt_yaw = util::normalize_angle(yaw + std::numbers::pi);
-        observable.update(center, alt_yaw, 0.2, 0.2, 0.0);
+        observable.update(center, alt_yaw, 0.2, 0.2, 0.0, genre);
         const auto alt_count = observable.visible_armors().size();
 
         if (alt_count > orig_count) yaw = alt_yaw;
 
         context.posteriors_state[kStateA] = yaw;
-        observable.update(center, yaw, 0.2, 0.2, 0.0);
+        observable.update(center, yaw, 0.2, 0.2, 0.0, genre);
 
         init_timestamp = Clock::now();
         return true;
@@ -435,7 +438,7 @@ public:
                 next[kStateY],
                 next[kStateZ],
             },
-            next[kStateA], next[kStateRF], next[kStateRL], next[kStateHL]);
+            next[kStateA], next[kStateRF], next[kStateRL], next[kStateHL], genre);
     }
 
     auto update(const Eigen::Vector2d& upper, const Eigen::Vector2d& lower, int id) noexcept {
@@ -499,7 +502,7 @@ public:
                 posterior_state[kStateZ],
             },
             posterior_state[kStateA], posterior_state[kStateRF], posterior_state[kStateRL],
-            posterior_state[kStateHL]);
+            posterior_state[kStateHL], genre);
     }
 
     auto full() const {
@@ -527,7 +530,7 @@ public:
                 state[kStateY],
                 state[kStateZ],
             },
-            state[kStateA], state[kStateRF], state[kStateRL], state[kStateHL]);
+            state[kStateA], state[kStateRF], state[kStateRL], state[kStateHL], genre);
 
         struct SortedEntry {
             int assigned_id;

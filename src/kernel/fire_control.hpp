@@ -28,6 +28,7 @@ public:
 
         bool require_stable_command = true;
         bool is_lazy_gimbal         = false;
+        bool attack_preaim          = false;
 
         static constexpr std::tuple metas {
             // clang-format off
@@ -41,6 +42,7 @@ public:
             &Config::pitch_tolerance, "pitch_tolerance",
             &Config::require_stable_command, "require_stable_command",
             &Config::is_lazy_gimbal, "is_lazy_gimbal",
+            &Config::attack_preaim, "attack_preaim",
             // clang-format on
         };
     };

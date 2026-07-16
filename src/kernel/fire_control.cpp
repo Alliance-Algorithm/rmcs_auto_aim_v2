@@ -292,9 +292,6 @@ struct FireController::Impl {
 
         // 退化：直接返回哨兵值，由 aim() 瞄准中心
         if (degraded) {
-            if (last_idx >= 0) {
-                logging.info("degraded: {} -> max, omega: {:+.2f}", last_idx, omega);
-            }
             last_idx = -1;
             return { std::numeric_limits<std::int8_t>::max(), false };
         }
@@ -340,31 +337,14 @@ struct FireController::Impl {
             }
 
             if (best_index) {
-                if (use_pre_aim) {
-                    if (*best_index != last_idx) {
-                        logging.info("switch: {} -> {}, omega: {:+.2f}, delta: {:+.3f}, enter: "
-                                     "{:.3f}",
-                            last_idx, *best_index, omega, best_delta, enter_window);
-                    }
-                    last_idx = *best_index;
-                }
+                if (use_pre_aim) last_idx = *best_index;
                 return { *best_index, false };
             }
             if (next_index && use_pre_aim) {
-                if (*next_index != last_idx) {
-                    logging.info("switch(pre): {} -> {}, omega: {:+.2f}, delta: {:+.3f}", last_idx,
-                        *next_index, omega, next_delta);
-                }
                 last_idx = *next_index;
                 return { *next_index, true };
             }
-            if (use_pre_aim) {
-                if (last_idx >= 0) {
-                    logging.info("lost: {} -> -1, omega: {:+.2f}, exit: {:.3f}", last_idx, omega,
-                        exit_window);
-                }
-                last_idx = -1;
-            }
+            if (use_pre_aim) last_idx = -1;
             return { -1, false };
         }
     }
@@ -464,9 +444,7 @@ struct FireController::Impl {
 
         // 射击评估
         auto should_shoot = true;
-        if (pre_aim) {
-            // TODO: 设置为标志，英雄在预瞄时不打，或者实际再判断一次装甲板的 Yaw
-            // 是否可以真的打到，英雄弹速较慢，预瞄的板比较提前
+        if (pre_aim && !config.attack_preaim) {
             should_shoot = false;
         } else {
             const auto cmd = ShootEvaluator::Command {
