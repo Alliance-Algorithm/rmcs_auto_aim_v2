@@ -1,7 +1,6 @@
 #include "auto_aim.hpp"
 
 #include "kernel/detector.hpp"
-#include "kernel/fire_control.hpp"
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
@@ -33,7 +32,6 @@ struct AutoAim::Impl {
     Visualization visual { };
 
     std::unique_ptr<Tracker> tracker;
-    std::unique_ptr<FireController> fire;
 
     FramerateCounter counter;
 
@@ -81,8 +79,6 @@ struct AutoAim::Impl {
         tracker = std::make_unique<Tracker>(configs["tracker"]);
         tracker->update_camera(camera_matrix);
         tracker->update_camera(distort_coeff);
-
-        fire = std::make_unique<FireController>(configs["fire_control"]);
     }
 
     auto process(const Image& image) -> void {
@@ -104,6 +100,7 @@ struct AutoAim::Impl {
         auto id    = RobotId { RobotId::UNKNOWN };
 
         auto track_ids = DeviceIds::Full();
+        auto addition  = Context::Addition { };
         {
             using namespace std::chrono_literals;
 
@@ -129,6 +126,7 @@ struct AutoAim::Impl {
             max_yaw_acc = context.max_yaw_acc;
             id          = context.id;
             track_ids   = context.track_ids;
+            addition    = context.addition;
         }
         // id = RobotId::RED_SENTRY; // FIXME:
 
@@ -160,6 +158,8 @@ struct AutoAim::Impl {
             detector.update_detect_color(
                 (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
         }
+        detector.update_detect_rune(true);
+
         auto result = detector.detect(image_mat);
         for (const auto& icon : result.icons) {
             visual.draw_later(Canvas::Point {
@@ -307,50 +307,34 @@ struct AutoAim::Impl {
             visual.publish(addition.tracked3d, "trackable");
         }
 
-        /// [] 根据跟踪目标求解弹道及控制指令，下发控制层
-        auto cmd      = Command::kInvalid();
-        cmd.timestamp = image.timestamp();
-        if (trackable) {
-            fire->update({
-                .timestamp   = image.timestamp(),
-                .yaw         = yaw,
-                .pitch       = pitch,
-                .max_yaw_vel = max_yaw_vel,
-                .max_yaw_acc = max_yaw_acc,
-            });
-            if (auto aimed = fire->aim(*trackable)) {
-                cmd.should_track = true;
-                cmd.should_shoot = aimed->shoot;
-                cmd.yaw          = aimed->aim_yaw;
-                cmd.pitch        = aimed->pitch;
-                cmd.robot_center = aimed->center;
+        /// [] 火控指令由 component 求解，这里仅同步可视化
+        if (addition.should_track) {
+            visual.update_aiming_direction(addition.aim_yaw, addition.pitch);
+            visual.publish(addition.aim_yaw, "aim_yaw");
+            visual.publish(addition.raw_yaw, "raw_yaw");
+            visual.publish(addition.pitch, "aim_pitch");
 
-                visual.update_aiming_direction(cmd.yaw, cmd.pitch);
-                visual.publish(aimed->aim_yaw, "aim_yaw");
-                visual.publish(aimed->raw_yaw, "raw_yaw");
-                visual.publish(aimed->pitch, "aim_pitch");
-
-                if (auto aim_2d = estimator.make_point2d(aimed->attack)) {
-                    const auto color = aimed->shoot ? kRed : aimed->pre_aim ? kYellow : kGreen;
-                    visual.draw_later(Canvas::Point {
-                        .origin = aim_2d->make<cv::Point2i>(),
-                        .radius = 3,
-                        .color  = color,
-                    });
-                }
-                visual.draw_later(Canvas::Text {
-                    "PREAIM",
-                    { 10, 620 },
-                    aimed->pre_aim ? kRed : kWhite,
+            if (auto aim_2d = estimator.make_point2d(addition.attack)) {
+                const auto color = addition.should_shoot //
+                    ? (addition.pre_aim ? kOrange : kRed)
+                    : (addition.pre_aim ? kYellow : kGreen);
+                visual.draw_later(Canvas::Point {
+                    .origin = aim_2d->make<cv::Point2i>(),
+                    .radius = 3,
+                    .color  = color,
                 });
             }
+            visual.draw_later(
+                Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite });
         }
-        visual.draw_later(Canvas::Text { "SHOOT", { 10, 660 }, cmd.should_shoot ? kRed : kWhite });
-        visual.draw_later(Canvas::Text { "TRACK", { 10, 640 }, cmd.should_track ? kRed : kWhite });
+        visual.draw_later(
+            Canvas::Text { "SHOOT", { 10, 660 }, addition.should_shoot ? kRed : kWhite });
+        visual.draw_later(
+            Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite });
 
         {
             std::lock_guard lock { self.command_mutex };
-            self.current_command = cmd;
+            self.current_command.trackable = std::move(trackable);
             self.unread_command.store(true, std::memory_order::release);
         }
     }

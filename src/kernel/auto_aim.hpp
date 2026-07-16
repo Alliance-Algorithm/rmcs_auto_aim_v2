@@ -1,5 +1,6 @@
 #pragma once
 
+#include "module/tracker/trackable.hpp"
 #include "utility/clock.hpp"
 #include "utility/image/image.hpp"
 #include "utility/math/linear.hpp"
@@ -19,23 +20,7 @@ class AutoAim {
 
 public:
     struct Command {
-        TimePoint timestamp { };
-
-        bool should_track = false;
-        bool should_shoot = false;
-        bool single_shoot = false;
-
-        double yaw { kNaN };
-        double pitch { kNaN };
-        Translation robot_center { kNaN, kNaN, kNaN };
-
-        DeviceId target { DeviceId::UNKNOWN };
-
-        static auto kInvalid() {
-            return Command {
-                .timestamp = Clock::now(),
-            };
-        }
+        Trackable::Unique trackable { };
     };
 
     struct Context {
@@ -58,6 +43,18 @@ public:
         DeviceIds track_ids = DeviceIds::Full();
 
         RobotId id = RobotId::UNKNOWN;
+
+        struct Addition {
+            Point3d attack = Point3d::kNaN();
+
+            double aim_yaw = kNaN;
+            double raw_yaw = kNaN;
+            double pitch   = kNaN;
+
+            bool should_track = false;
+            bool should_shoot = false;
+            bool pre_aim      = false;
+        } addition;
     };
 
     auto process(const Image& image) -> void;

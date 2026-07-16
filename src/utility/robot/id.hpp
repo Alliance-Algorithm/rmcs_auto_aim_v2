@@ -21,6 +21,7 @@ namespace id::details {
         std::uint16_t { 1 << 9 },
         std::uint16_t { 1 << 10 },
         std::uint16_t { 1 << 11 },
+        std::uint16_t { 1 << 12 },
     };
 }
 enum class DeviceId : std::uint16_t {

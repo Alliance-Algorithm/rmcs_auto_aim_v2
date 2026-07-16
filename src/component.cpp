@@ -1,8 +1,10 @@
 #include "kernel/auto_aim.hpp"
+#include "kernel/fire_control.hpp"
 #include "utility/rclcpp/node.hpp"
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <thread>
@@ -17,6 +19,7 @@
 namespace rmcs {
 
 using namespace rmcs::util;
+using namespace rmcs::kernel;
 
 class AutoAimComponent final : public rmcs_executor::Component {
     static inline const auto kTNaN = Eigen::Vector3d { kNaN, kNaN, kNaN };
@@ -24,6 +27,8 @@ class AutoAimComponent final : public rmcs_executor::Component {
 private:
     AutoAim auto_aim { };
     RclcppNode rclcpp { get_component_name() };
+
+    std::unique_ptr<FireController> fire;
 
     bool manual_shoot = false;
 
@@ -67,16 +72,19 @@ private:
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
     OutputInterface<bool> single_shoot;
-    OutputInterface<Eigen::Vector3d> target_direction;
+    OutputInterface<Eigen::Vector3d> track_target;
     OutputInterface<Eigen::Vector3d> robot_center;
+
+    double max_yaw_acc = 100.;
+    double max_yaw_vel = 3.;
 
     Timestamp last_yaw_vel_timestamp;
     double last_yaw_velocity = kNaN;
 
-    Timestamp last_command_timestamp;
+    Trackable::Unique current_trackable { };
 
 public:
-    AutoAimComponent() noexcept {
+    AutoAimComponent() {
         register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
         register_input("/auto_aim/camera_transform", camera_transform, false);
         register_input("/auto_aim/barrel_direction", barrel_direction, false);
@@ -89,12 +97,18 @@ public:
         register_output("/auto_aim/should_control", should_track, false);
         register_output("/auto_aim/should_shoot", should_shoot, false);
         register_output("/auto_aim/single_shoot", single_shoot, false);
-        register_output("/auto_aim/control_direction", target_direction, kTNaN);
+        register_output("/auto_aim/control_direction", track_target, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
 
         const auto& params = rclcpp.params();
 
         manual_shoot = params.get_bool("manual_shoot");
+
+        if (auto config = util::serialize<FireController::Config>("fire_control", params)) {
+            fire = std::make_unique<FireController>(*config);
+        } else {
+            throw std::runtime_error { config.error() };
+        }
     }
 
     ~AutoAimComponent() override {
@@ -114,12 +128,9 @@ public:
         if (!robot_id.ready()) {
             robot_id.make_and_bind_directly(rmcs_msgs::RobotId::UNKNOWN);
         }
-        last_command_timestamp = std::chrono::steady_clock::now();
     }
 
     auto update() -> void override {
-        auto max_yaw_vel = double { 0.0 };
-        auto max_yaw_acc = double { 0.0 };
         if (yaw_velocity.ready() && std::isfinite(*yaw_velocity)) {
             const auto now      = Clock::now();
             const auto velocity = *yaw_velocity;
@@ -135,6 +146,12 @@ public:
             last_yaw_vel_timestamp = now;
             last_yaw_velocity      = velocity;
         }
+
+        using namespace rmcs_msgs;
+        const auto track_intent =
+            (mouse.ready() && mouse->right) || (rswitch.ready() && *rswitch == Switch::UP);
+        const auto shoot_intent =
+            (mouse.ready() && mouse->left) || (lswitch.ready() && *lswitch == Switch::DOWN);
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             auto frame      = AutoAim::Context::TransformFrame { };
@@ -153,14 +170,13 @@ public:
                 ctx.transforms.pop_front();
             }
 
-            using namespace rmcs_msgs;
-            ctx.track_intent =
-                (mouse.ready() && mouse->right) || (rswitch.ready() && *rswitch == Switch::UP);
+            ctx.track_intent = track_intent;
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
 
-            ctx.id = *robot_id;
+            ctx.id = *robot_id; // FIXME: 临时调试
+            ctx.id = RobotId::RED_SENTRY;
 
             /// TODO:
             /// 跟踪目标，用于适配后期可能存在的需求，
@@ -168,40 +184,60 @@ public:
             ctx.track_ids = DeviceIds::Full();
         });
 
-        const auto now = std::chrono::steady_clock::now();
         if (auto_aim.command_updated()) {
-            auto_aim.with_command([=, this](const AutoAim::Command& cmd) {
-                using namespace std::chrono_literals;
-                if (Clock::now() - cmd.timestamp > 100ms) return;
-
-                using namespace rmcs_msgs;
-                const auto shoot_intent =
-                    (mouse.ready() && mouse->left) || (lswitch.ready() && *lswitch == Switch::DOWN);
-                *should_shoot =
-                    manual_shoot ? (cmd.should_shoot && shoot_intent) : cmd.should_shoot;
-
-                *should_track = cmd.should_track;
-                *single_shoot = cmd.single_shoot;
-                *robot_center = cmd.robot_center.make<Eigen::Vector3d>();
-
-                if (!cmd.should_track) return;
-
-                const auto pitch  = cmd.pitch;
-                const auto yaw    = cmd.yaw;
-                *target_direction = Eigen::Vector3d {
-                    +std::cos(pitch) * std::cos(yaw),
-                    +std::cos(pitch) * std::sin(yaw),
-                    -std::sin(pitch),
-                };
+            auto_aim.with_command([this](const AutoAim::Command& cmd) {
+                if (cmd.trackable) {
+                    current_trackable = cmd.trackable->clone();
+                }
             });
-            last_command_timestamp = now;
         }
 
+        const auto now = Clock::now();
         using namespace std::chrono_literals;
-        if (now - last_command_timestamp > 100ms) {
-            *should_track     = false;
-            *should_shoot     = false;
-            *target_direction = kTNaN;
+
+        if (current_trackable && now - current_trackable->get_timestamp() > 100ms) {
+            current_trackable.reset();
+
+            *should_track = false;
+            *should_shoot = false;
+            *single_shoot = false;
+            *track_target = kTNaN;
+            *robot_center = kTNaN;
+
+            auto_aim.with_context([](AutoAim::Context& ctx) { ctx.addition = { }; });
+        }
+
+        if (current_trackable) {
+            *single_shoot = current_trackable->id() == DeviceId::RUNE;
+
+            const auto& dir = *barrel_direction;
+            fire->update({
+                .timestamp   = now,
+                .yaw         = std::atan2(+dir.y(), dir.x()),
+                .pitch       = std::atan2(-dir.z(), std::hypot(dir.x(), dir.y())),
+                .max_yaw_vel = max_yaw_vel,
+                .max_yaw_acc = max_yaw_acc,
+            });
+
+            if (auto aimed = fire->aim(*current_trackable)) {
+                *should_track = true;
+                *should_shoot = manual_shoot ? (aimed->shoot && shoot_intent) : aimed->shoot;
+
+                *robot_center = aimed->center.make<Eigen::Vector3d>();
+                *track_target = aimed->target.make<Eigen::Vector3d>();
+
+                auto_aim.with_context([&](AutoAim::Context& ctx) {
+                    auto& addition = ctx.addition;
+
+                    addition.attack       = aimed->attack;
+                    addition.aim_yaw      = aimed->aim_yaw;
+                    addition.raw_yaw      = aimed->raw_yaw;
+                    addition.pitch        = aimed->pitch;
+                    addition.pre_aim      = aimed->pre_aim;
+                    addition.should_track = true;
+                    addition.should_shoot = aimed->shoot;
+                });
+            }
         }
     }
 };

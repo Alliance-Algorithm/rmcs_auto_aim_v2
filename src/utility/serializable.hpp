@@ -115,13 +115,13 @@ namespace details {
 
 struct Serializable {
     template <typename Metas, std::size_t... Idx>
-    constexpr auto make_serializable_impl(Metas metas, std::index_sequence<Idx...>) {
+    static constexpr auto make_serializable_impl(Metas metas, std::index_sequence<Idx...>) {
         return details::Serializable {
             details::MemberMeta { std::get<Idx * 2>(metas), std::get<Idx * 2 + 1>(metas) }...,
         };
     }
     template <typename Metas>
-    constexpr auto make_serializable(Metas metas) {
+    static constexpr auto make_serializable(Metas metas) {
         constexpr auto N = std::tuple_size_v<Metas>;
         return make_serializable_impl(metas, std::make_index_sequence<N / 2> { });
     }
@@ -145,6 +145,26 @@ struct Serializable {
         return s.make_printable_from(self);
     }
 };
+
+template <typename T, typename Source>
+    requires details::serializable_source_trait<T, Source>
+auto serialize(const Source& source) noexcept -> std::expected<T, std::string> {
+    T result { };
+    if (auto ret = result.serialize(source); !ret.has_value())
+        return std::unexpected { ret.error() };
+    return result;
+}
+
+template <typename T, typename Source>
+    requires details::serializable_source_trait<T, Source>
+auto serialize(std::string_view prefix, const Source& source) noexcept
+    -> std::expected<T, std::string> {
+    T result { };
+    if (auto ret = result.serialize(prefix, source); !ret.has_value())
+        return std::unexpected { ret.error() };
+    return result;
+}
+
 }
 
 // Source-specific specializations

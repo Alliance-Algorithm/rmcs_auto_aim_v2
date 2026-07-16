@@ -18,38 +18,9 @@ using namespace rmcs::kernel;
 using namespace rmcs::util;
 
 struct FireController::Impl {
-
-    struct Config : Serializable {
-        double bullet_speed;
-        double shoot_delay;
-        double offset_yaw { 0.0 };
-        double offset_pitch { 0.0 };
-
-        double attack_window { 40.0 };
-
-        double yaw_tolerance   = 0.07;
-        double pitch_tolerance = 0.04;
-
-        bool require_stable_command = true;
-        bool is_lazy_gimbal         = false;
-
-        static constexpr std::tuple metas {
-            // clang-format off
-            &Config::bullet_speed, "bullet_speed",
-            &Config::shoot_delay, "shoot_delay",
-            &Config::offset_yaw, "offset_yaw",
-            &Config::offset_pitch, "offset_pitch",
-            &Config::attack_window, "attack_window",
-            &Config::yaw_tolerance, "yaw_tolerance",
-            &Config::pitch_tolerance, "pitch_tolerance",
-            &Config::require_stable_command, "require_stable_command",
-            &Config::is_lazy_gimbal, "is_lazy_gimbal",
-            // clang-format on
-        };
-    } config;
+    Config config;
 
     State state;
-    bool single_shoot = false;
 
     std::int8_t last_armor_idx = -1;
 
@@ -67,6 +38,14 @@ struct FireController::Impl {
 
     Printer logging { "fire" };
     std::unique_ptr<ShootEvaluator> shoot_evaluator;
+
+    static constexpr auto make_target(double yaw, double pitch) -> Direction3d {
+        return Direction3d {
+            +std::cos(pitch) * std::cos(yaw),
+            +std::cos(pitch) * std::sin(yaw),
+            -std::sin(pitch),
+        };
+    }
 
     static constexpr auto yaw_angle(const Point3d& center, const Point3d& armor) {
         const auto v1_x = -center.x;
@@ -100,6 +79,20 @@ struct FireController::Impl {
             throw std::runtime_error { "FireControllerV2: pitch_tolerance must be > 0" };
         }
 
+        config.offset_yaw    = util::deg2rad(config.offset_yaw);
+        config.offset_pitch  = util::deg2rad(config.offset_pitch);
+        config.attack_window = util::deg2rad(config.attack_window);
+
+        shoot_evaluator = std::make_unique<ShootEvaluator>(ShootEvaluator::Config {
+            .yaw_tolerance          = config.yaw_tolerance,
+            .pitch_tolerance        = config.pitch_tolerance,
+            .require_stable_command = config.require_stable_command,
+            .is_lazy_gimbal         = config.is_lazy_gimbal,
+        });
+    }
+
+    explicit Impl(const Config& cfg)
+        : config { cfg } {
         config.offset_yaw    = util::deg2rad(config.offset_yaw);
         config.offset_pitch  = util::deg2rad(config.offset_pitch);
         config.attack_window = util::deg2rad(config.attack_window);
@@ -229,8 +222,6 @@ struct FireController::Impl {
 
         // 能量机关
         if (aimpoints.size() == 5) {
-            single_shoot = true;
-
             if (!aimpoints.same_valid(last_aimpoints)) {
                 single_rune_actions.stop();
                 multiple_rune_actions.stop();
@@ -268,7 +259,6 @@ struct FireController::Impl {
 
             return { -1, true };
         }
-        single_shoot = false;
 
         // 窗口计算
         auto degraded    = false;
@@ -360,15 +350,16 @@ struct FireController::Impl {
                 const auto result    = solution.solve();
                 if (!result) return std::nullopt;
                 const auto aim_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
+                const auto pitch   = result->pitch + config.offset_pitch;
                 return Aimed {
-                    .aim_yaw      = aim_yaw,
-                    .raw_yaw      = aim_yaw,
-                    .pitch        = result->pitch + config.offset_pitch,
-                    .shoot        = true,
-                    .pre_aim      = false,
-                    .single_shoot = false,
-                    .center       = center,
-                    .attack       = center,
+                    .aim_yaw = aim_yaw,
+                    .raw_yaw = aim_yaw,
+                    .pitch   = pitch,
+                    .shoot   = true,
+                    .pre_aim = false,
+                    .target  = make_target(aim_yaw, pitch),
+                    .center  = center,
+                    .attack  = center,
                 };
             }
         }
@@ -449,14 +440,14 @@ struct FireController::Impl {
             }
 
             return Aimed {
-                .aim_yaw      = yaw,
-                .raw_yaw      = raw_yaw,
-                .pitch        = pitch,
-                .shoot        = should_shoot,
-                .pre_aim      = pre_aim,
-                .single_shoot = single_shoot,
-                .center       = center,
-                .attack       = attack,
+                .aim_yaw = yaw,
+                .raw_yaw = raw_yaw,
+                .pitch   = pitch,
+                .shoot   = should_shoot,
+                .pre_aim = pre_aim,
+                .target  = make_target(yaw, pitch),
+                .center  = center,
+                .attack  = attack,
             };
         }
         return std::nullopt;
@@ -465,6 +456,9 @@ struct FireController::Impl {
 
 FireController::FireController(const YAML::Node& yaml)
     : pimpl { std::make_unique<Impl>(yaml) } { }
+
+FireController::FireController(const Config& config)
+    : pimpl { std::make_unique<Impl>(config) } { }
 
 FireController::~FireController() noexcept = default;
 

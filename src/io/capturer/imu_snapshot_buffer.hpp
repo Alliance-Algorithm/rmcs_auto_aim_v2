@@ -31,8 +31,7 @@ public:
         auto view = buffer_.const_readable_view();
         if (view.empty()) return std::nullopt;
 
-        const auto right = std::lower_bound(
-            view.begin(), view.end(), time,
+        const auto right = std::lower_bound(view.begin(), view.end(), time,
             [](const OrientationSnapshot& snapshot, TimePoint target_time) {
                 return snapshot.timestamp < target_time;
             });
@@ -54,7 +53,8 @@ public:
         const auto left     = right - 1;
         const auto duration = std::chrono::duration<double>(right->timestamp - left->timestamp);
         const auto elapsed  = std::chrono::duration<double>(time - left->timestamp);
-        auto orientation = left->orientation.slerp(elapsed.count() / duration.count(), right->orientation);
+        auto orientation =
+            left->orientation.slerp(elapsed.count() / duration.count(), right->orientation);
         buffer_.pop_front_until(left);
         return orientation;
     }
@@ -66,7 +66,7 @@ public:
         if (view.empty()) return std::nullopt;
 
         const auto latest = view.end() - 1;
-        auto orientation    = latest->orientation;
+        auto orientation  = latest->orientation;
         buffer_.pop_front_until(latest);
         return orientation;
     }
@@ -89,7 +89,8 @@ private:
     }
 
     rmcs_executor::Component::EventInputInterface<rmcs_msgs::ImuSnapshot> imu_snapshot_input_ {
-        [this](const rmcs_msgs::ImuSnapshot& snapshot) { push(snapshot); } };
+        [this](const rmcs_msgs::ImuSnapshot& snapshot) { push(snapshot); }
+    };
     TimePoint last_push_time = TimePoint::min();
 
     struct OrientationSnapshot {

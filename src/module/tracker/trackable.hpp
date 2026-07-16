@@ -3,6 +3,7 @@
 #include "utility/clock.hpp"
 #include "utility/math/linear.hpp"
 #include "utility/robot/aimpoint.hpp"
+#include "utility/robot/id.hpp"
 
 namespace rmcs {
 
@@ -15,6 +16,8 @@ struct Trackable {
     // 对于前哨站，机器人和能量机关，都已第一块观测到的
     // 目标为序号 0，按照一定顺序排列
     virtual auto get_aimpoints() const -> AimPoints = 0;
+
+    virtual auto id() const -> DeviceId = 0;
 
     // 可以指示方向的点，对于机器人，是旋转中心，对于前
     // 哨站，是第一块参考板的旋转中心，对于能量机关，是
@@ -31,11 +34,14 @@ struct Trackable {
 
 template <class State>
 struct Ins : public Trackable {
-    explicit Ins(TimePoint timestamp, const State& state)
+    explicit Ins(TimePoint timestamp, const State& state, DeviceId id)
         : stamp { timestamp }
-        , state { state } { }
+        , state { state }
+        , device_id { id } { }
 
     ~Ins() override = default;
+
+    auto id() const -> DeviceId override { return device_id; }
 
     auto get_aimpoints() const -> AimPoints override {
         constexpr auto kHasAimpoints = requires {
@@ -71,15 +77,19 @@ struct Ins : public Trackable {
             std::chrono::duration<double> { seconds });
     }
 
-    auto clone() const -> Unique override { return std::make_unique<Ins>(stamp, state); }
+    auto clone() const -> Unique override {
+        return std::make_unique<Ins>(stamp, state, device_id);
+    }
 
 private:
     TimePoint stamp;
     State state;
+    DeviceId device_id;
 };
 
-constexpr auto make_trackable = []<class State>(Timestamp stamp, const State& state) {
-    return std::make_unique<Ins<State>>(stamp, state);
-};
+constexpr auto make_trackable =
+    []<class State>(Timestamp stamp, const State& state, DeviceId id) {
+        return std::make_unique<Ins<State>>(stamp, state, id);
+    };
 
 }

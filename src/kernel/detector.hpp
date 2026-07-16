@@ -31,7 +31,8 @@ public:
 
     auto initialize(const YAML::Node&) noexcept -> std::expected<void, std::string>;
 
-    auto update_detect_color(CampColor) -> void;
+    auto update_detect_color(CampColor) noexcept -> void;
+    auto update_detect_rune(bool) noexcept -> void;
     auto update_camera(const std::array<double, 9>&) noexcept -> void;
     auto update_camera(const std::array<double, 5>&) noexcept -> void;
 

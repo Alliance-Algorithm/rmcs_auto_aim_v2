@@ -386,7 +386,7 @@ struct Tracker::Impl {
                     const auto score = calculate(DeviceId::OUTPOST, state.get_direction());
                     if (better > score) {
                         better = score;
-                        result = make_trackable(timestamp, state);
+                        result = make_trackable(timestamp, state, DeviceId::OUTPOST);
 
                         device = DeviceId::OUTPOST;
                     }
@@ -406,7 +406,7 @@ struct Tracker::Impl {
                     const auto score = calculate(DeviceId::RUNE, state.get_direction());
                     if (better > score) {
                         better = score;
-                        result = make_trackable(timestamp, state);
+                        result = make_trackable(timestamp, state, DeviceId::RUNE);
 
                         device = DeviceId::RUNE;
                     }
@@ -433,18 +433,24 @@ struct Tracker::Impl {
                         if (ok) addition.rune_polygon = polygon;
                     }
 
-                    const auto a          = state.rotation_angle;
-                    const auto v          = state.rotation_speed;
-                    const auto model_text = state.sine_valid
-                        ? std::format("spd(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), e={:.3f}",
-                              state.sine_v, state.sine_a, state.sine_phase, state.sine_omega,
-                              state.prediction_cost)
-                        : state.use_prediction_speed ? std::format("th(t)={:+.2f}{:+.2f}t, "
-                                                                   "e={:.3f}",
-                                                           a, v, state.prediction_cost)
-                                                     : std::format("theta_ekf={:+.2f}", a);
+                    const auto a = state.rotation_angle;
+                    const auto v = state.rotation_speed;
+
+                    const auto text_large_rune = [&] {
+                        return std::format("spd(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), e={:.3f}",
+                            state.sine_v, state.sine_a, state.sine_phase, state.sine_omega,
+                            state.prediction_cost);
+                    };
+                    const auto text_small_rune = [&] {
+                        return std::format(
+                            "th(t)={:+.2f}{:+.2f}t, e={:.3f}", a, v, state.prediction_cost);
+                    };
+                    const auto text_fallback = [&] { return std::format("theta_ekf={:+.2f}", a); };
+
                     addition.infos.push_back({
-                        .text  = model_text,
+                        .text  = state.sine_valid
+                            ? text_large_rune()
+                            : (state.use_prediction_speed ? text_small_rune() : text_fallback()),
                         .point = Point3d { state.x, state.y, state.z },
                     });
                 }
@@ -459,7 +465,7 @@ struct Tracker::Impl {
                     const auto score = calculate(id, state.get_direction());
                     if (better > score) {
                         better = score;
-                        result = make_trackable(timestamp, state);
+                        result = make_trackable(timestamp, state, id);
 
                         device = id;
                     }

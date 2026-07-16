@@ -1,6 +1,7 @@
 #pragma once
 #include "module/tracker/trackable.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/serializable.hpp"
 
 #include <optional>
 
@@ -12,6 +13,35 @@ class FireController {
     RMCS_PIMPL_DEFINITION(FireController)
 
 public:
+    struct Config : util::Serializable {
+        double bullet_speed;
+        double shoot_delay;
+        double offset_yaw { 0.0 };
+        double offset_pitch { 0.0 };
+
+        double attack_window { 40.0 };
+
+        double yaw_tolerance   = 0.07;
+        double pitch_tolerance = 0.04;
+
+        bool require_stable_command = true;
+        bool is_lazy_gimbal         = false;
+
+        static constexpr std::tuple metas {
+            // clang-format off
+            &Config::bullet_speed, "bullet_speed",
+            &Config::shoot_delay, "shoot_delay",
+            &Config::offset_yaw, "offset_yaw",
+            &Config::offset_pitch, "offset_pitch",
+            &Config::attack_window, "attack_window",
+            &Config::yaw_tolerance, "yaw_tolerance",
+            &Config::pitch_tolerance, "pitch_tolerance",
+            &Config::require_stable_command, "require_stable_command",
+            &Config::is_lazy_gimbal, "is_lazy_gimbal",
+            // clang-format on
+        };
+    };
+
     struct State {
         Timestamp timestamp = { };
 
@@ -30,13 +60,13 @@ public:
         bool shoot   = false;
         bool pre_aim = false;
 
-        bool single_shoot = false;
-
-        Point3d center = { };
-        Point3d attack = { };
+        Direction3d target;
+        Point3d center;
+        Point3d attack;
     };
 
     explicit FireController(const YAML::Node&);
+    explicit FireController(const Config&);
 
     auto update(State state) -> void;
 

@@ -23,6 +23,7 @@ struct Detector::Impl {
     ArmorDetection armor_detection;
     GreenLightFinder green_light_finder;
 
+    bool detect_rune = true;
     RuneDetector rune_detector;
 
     static auto find_lightbar(const cv::Mat& mat, const Armor2d& armor, Result& result) {
@@ -119,12 +120,11 @@ struct Detector::Impl {
     auto detect(const cv::Mat& mat) noexcept -> Result {
         auto result = Result { };
 
-        // FIXME: 临时注释，记得改回来
-        // const auto elements = rune_detector.detect(mat);
-        // {
-        //     result.icons     = elements.icons;
-        //     result.bullseyes = elements.bullseyes;
-        // }
+        if (detect_rune) {
+            const auto elements = rune_detector.detect(mat);
+            result.icons        = elements.icons;
+            result.bullseyes    = elements.bullseyes;
+        }
 
         auto detected = armor_detection.sync_detect(mat);
         if (detected.empty()) return result;
@@ -197,10 +197,12 @@ auto Detector::initialize(const YAML::Node& yaml) noexcept -> std::expected<void
     return pimpl->initialize(yaml);
 }
 
-auto Detector::update_detect_color(CampColor color) -> void {
+auto Detector::update_detect_color(CampColor color) noexcept -> void {
     pimpl->color                      = color;
     pimpl->rune_detector.config.color = color;
 }
+
+auto Detector::update_detect_rune(bool on) noexcept -> void { pimpl->detect_rune = on; }
 
 auto Detector::update_camera(const std::array<double, 9>& var) noexcept -> void {
     pimpl->rune_detector.config.cam.from(var);
