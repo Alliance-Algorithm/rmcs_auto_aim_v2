@@ -121,8 +121,7 @@ public:
         /// 直接影响敌我识别与检测颜色，严禁比赛时启用。
         if (params.contains("dangerous_fallback")) {
             auto value = params.get_string("dangerous_fallback");
-            std::ranges::transform(value, value.begin(),
-                [](unsigned char c) { return std::tolower(c); });
+            std::ranges::transform(value, value.begin(), ::tolower);
             if (value == "red") dangerous_fallback = rmcs_msgs::RobotId::RED_SENTRY;
             if (value == "blue") dangerous_fallback = rmcs_msgs::RobotId::BLUE_SENTRY;
             if (!value.empty() && !dangerous_fallback)
