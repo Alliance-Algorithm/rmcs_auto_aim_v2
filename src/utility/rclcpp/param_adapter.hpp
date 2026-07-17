@@ -10,6 +10,10 @@ struct ParamsAdapter : public IParams {
     explicit ParamsAdapter(rclcpp::Node& n)
         : node(n) { }
 
+    auto contains(const std::string& name) const -> bool override {
+        return node.has_parameter(name);
+    }
+
     auto get_string(const std::string& name) const -> std::string override {
         return node.get_parameter(name).as_string();
     }

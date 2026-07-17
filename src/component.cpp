@@ -4,9 +4,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <thread>
 
 #include <eigen3/Eigen/Geometry>
@@ -31,6 +33,8 @@ private:
     std::unique_ptr<FireController> fire;
 
     bool manual_shoot = false;
+
+    std::optional<rmcs_msgs::RobotId> dangerous_fallback { };
 
     struct GimbalState {
         Timestamp timestamp;
@@ -112,6 +116,19 @@ public:
 
         manual_shoot = params.get_bool("manual_shoot");
 
+        /// WARN: 危险回退！仅供裁判系统缺席时调试使用。
+        /// 生效后机器人身份将被强行绑定为对应阵营哨兵，
+        /// 直接影响敌我识别与检测颜色，严禁比赛时启用。
+        if (params.contains("dangerous_fallback")) {
+            auto value = params.get_string("dangerous_fallback");
+            std::ranges::transform(value, value.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            if (value == "red") dangerous_fallback = rmcs_msgs::RobotId::RED_SENTRY;
+            if (value == "blue") dangerous_fallback = rmcs_msgs::RobotId::BLUE_SENTRY;
+            if (!value.empty() && !dangerous_fallback)
+                rclcpp.warn("dangerous_fallback '{}' 无法识别，已忽略", value);
+        }
+
         if (auto config = util::serialize<FireController::Config>("fire_control", params)) {
             fire = std::make_unique<FireController>(*config);
         } else {
@@ -138,7 +155,8 @@ public:
     auto before_updating() -> void override {
         using namespace rmcs_msgs;
         if (!robot_id.ready()) {
-            robot_id.make_and_bind_directly(RobotId::UNKNOWN);
+            robot_id.make_and_bind_directly(
+                dangerous_fallback.value_or(RobotId { RobotId::UNKNOWN }));
         }
     }
 

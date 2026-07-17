@@ -66,6 +66,11 @@ auto_aim_video_player:
 
 auto_aim_component:
   ros__parameters:
+    # WARN: 危险！可选 red | blue，生效后裁判系统 ID 缺席时
+    # 将强行绑定为对应阵营哨兵，仅供调试，严禁比赛启用。
+    # 留空或填 unknow 表示禁用。
+    dangerous_fallback: ""
+
     # 手动开火开关，若开启，右键自瞄并锁定后，还需要按下鼠标左键
     # 或者左拨杆向下确认才能发射
     manual_shoot: false

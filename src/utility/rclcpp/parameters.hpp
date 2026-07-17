@@ -17,6 +17,8 @@ struct Parameters {
 struct IParams {
     virtual ~IParams() = default;
 
+    virtual auto contains(const std::string&) const -> bool = 0;
+
     virtual auto get_string(const std::string&) const -> std::string                    = 0;
     virtual auto get_string_array(const std::string&) const -> std::vector<std::string> = 0;
 
