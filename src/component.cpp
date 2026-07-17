@@ -136,8 +136,9 @@ public:
     }
 
     auto before_updating() -> void override {
+        using namespace rmcs_msgs;
         if (!robot_id.ready()) {
-            robot_id.make_and_bind_directly(rmcs_msgs::RobotId::UNKNOWN);
+            robot_id.make_and_bind_directly(RobotId::UNKNOWN);
         }
     }
 

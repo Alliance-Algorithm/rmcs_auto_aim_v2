@@ -114,7 +114,6 @@ struct AutoAim::Impl {
 
             camera_translation = context.camera_translation;
         }
-        // id = RobotId::RED_SENTRY; // FIXME:
 
         {
             /// 约定：imu_orientation 为 PitchLink 在 OdomImu 下的姿态，
@@ -155,7 +154,7 @@ struct AutoAim::Impl {
             detector.update_detect_color(
                 (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
         }
-        detector.update_detect_rune(true);
+        detector.update_detect_rune(false); // TODO: 等待外部切换
 
         auto result = detector.detect(image_mat);
         for (const auto& icon : result.icons) {

@@ -9,7 +9,6 @@
 #include "utility/math/mahalanobis.hpp"
 #include "utility/math/reprojection.hpp"
 #include "utility/math/solve_pnp/pnp_solution.hpp"
-#include "utility/robot/constant.hpp"
 
 #include <eigen3/Eigen/Geometry>
 
@@ -57,7 +56,6 @@ auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
             Eigen::Vector3d(x, y, z) + r_face * Eigen::Vector3d(0, local_y, local_z);
 
         result.emplace_back(world.x(), world.y(), world.z());
-        break;
     }
     return result;
 }
@@ -78,6 +76,8 @@ struct RuneModel::Impl {
     static constexpr auto kW   = 3;
     static constexpr auto kA   = 4;
     static constexpr auto kPsi = 5;
+
+    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 100 };
 
     struct Context {
         StateVector posteriors_state     = StateVector::Zero();
@@ -188,6 +188,7 @@ struct RuneModel::Impl {
 
     Context context;
     std::array<bool, 5> blade_inactive { };
+    std::array<Timestamp, 5> blade_inactive_timeout { };
     Addition addition { };
     Timestamp init_timestamp = Clock::now();
     Timestamp current_stamp;
@@ -684,6 +685,9 @@ struct RuneModel::Impl {
         update_count   = 0;
         fitter.reset();
 
+        blade_inactive.fill(false);
+        blade_inactive_timeout.fill(Timestamp { });
+
         observable.update(context.posteriors_state);
 
         update(Eigen::Vector2d { best_candidate->icon_pixel.x, best_candidate->icon_pixel.y }, 0);
@@ -721,8 +725,12 @@ struct RuneModel::Impl {
 
     auto correct(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept
         -> bool {
+
         observable.update(context.posteriors_state);
-        std::ranges::fill(blade_inactive, false);
+        for (auto&& [inactive, timeout] : std::views::zip(blade_inactive, blade_inactive_timeout)) {
+            if (current_stamp >= timeout) inactive = false;
+        }
+
         addition.predicted.clear();
         for (int feature_id = 0; feature_id < Observable::kFeatureCount; ++feature_id) {
             if (!observable.visible[feature_id]) continue;
@@ -801,9 +809,12 @@ struct RuneModel::Impl {
 
             if (!update(observations[i].pixel, j)) continue;
             if (!observations[i].is_icon && j != Observable::kFeatureIcon) {
-                blade_inactive[static_cast<std::size_t>(j - 1)] = observations[i].is_inactive;
+                const auto blade = static_cast<std::size_t>(j - 1);
                 if (observations[i].is_inactive) {
-                    inactive_corrected = true;
+                    blade_inactive[blade] = true;
+                    inactive_corrected    = true;
+
+                    blade_inactive_timeout[blade] = current_stamp + kInactiveTimeout;
                 } else {
                     active_corrected = true;
                 }
@@ -855,6 +866,8 @@ struct RuneModel::Impl {
     // ===== Convergence / Divergence =====
 
     auto converge() const -> bool {
+        std::ignore = this;
+
         // constexpr auto kMinUpdate = std::size_t { 10 };
         // constexpr auto kMaxCovXY  = 1.0;
         // constexpr auto kMaxCovYaw = 0.002;

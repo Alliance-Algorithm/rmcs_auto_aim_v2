@@ -124,6 +124,8 @@ struct Detector::Impl {
             const auto elements = rune_detector.detect(mat);
             result.icons        = elements.icons;
             result.bullseyes    = elements.bullseyes;
+
+            return result;
         }
 
         auto detected = armor_detection.sync_detect(mat);
