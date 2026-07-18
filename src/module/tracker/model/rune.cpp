@@ -56,6 +56,7 @@ auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
             Eigen::Vector3d(x, y, z) + r_face * Eigen::Vector3d(0, local_y, local_z);
 
         result.emplace_back(world.x(), world.y(), world.z());
+        break;
     }
     return result;
 }
@@ -77,7 +78,7 @@ struct RuneModel::Impl {
     static constexpr auto kA   = 4;
     static constexpr auto kPsi = 5;
 
-    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 100 };
+    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 20 };
 
     struct Context {
         StateVector posteriors_state     = StateVector::Zero();
