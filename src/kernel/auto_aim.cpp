@@ -88,32 +88,15 @@ struct AutoAim::Impl {
         const auto& image_mat = image.mat();
         if (image_mat.empty()) return;
 
-        auto intent = bool { false };
-
-        auto max_yaw_vel = 0.0;
-        auto max_yaw_acc = 0.0;
+        const auto context = [&] {
+            std::lock_guard lock { self.context_mutex };
+            return self.current_context;
+        }();
+        const auto& addition = context.addition;
 
         auto yaw   = 0.0;
         auto pitch = 0.0;
-        auto id    = RobotId { RobotId::UNKNOWN };
-
-        auto iso                = Transform { };
-        auto camera_translation = Translation { };
-        auto track_ids          = DeviceIds::Full();
-        auto addition           = Context::Addition { };
-        {
-            std::lock_guard lock { self.context_mutex };
-            auto& context = self.current_context;
-
-            intent      = context.track_intent;
-            max_yaw_vel = context.max_yaw_vel;
-            max_yaw_acc = context.max_yaw_acc;
-            id          = context.id;
-            track_ids   = context.track_ids;
-            addition    = context.addition;
-
-            camera_translation = context.camera_translation;
-        }
+        auto iso   = Transform { };
 
         {
             /// 约定：imu_orientation 为 PitchLink 在 OdomImu 下的姿态，
@@ -121,7 +104,8 @@ struct AutoAim::Impl {
             const auto q = image.imu_orientation().make<Eigen::Quaterniond>();
 
             iso.orientation = image.imu_orientation();
-            iso.translation = Translation { q * camera_translation.make<Eigen::Vector3d>() };
+            iso.translation =
+                Translation { q * context.camera_translation.make<Eigen::Vector3d>() };
 
             const auto d = q * Eigen::Vector3d::UnitX();
             yaw          = std::atan2(d.y(), d.x());
@@ -133,8 +117,8 @@ struct AutoAim::Impl {
         visual.publish(pitch, "pitch");
 
         if (counter.tick()) {
-            node.info(
-                "fps: {:03} mya: {:03.1f} myv: {:02.2f}", counter.fps(), max_yaw_acc, max_yaw_vel);
+            node.info("fps: {:03} mya: {:03.1f} myv: {:02.2f}", counter.fps(), context.max_yaw_acc,
+                context.max_yaw_vel);
         }
 
         [[maybe_unused]] auto streamer = std::experimental::scope_exit { [&] {
@@ -150,11 +134,11 @@ struct AutoAim::Impl {
         auto lightbar2ds    = Lightbar2ds { };
         auto rune_icons     = std::vector<RuneIcon> { };
         auto rune_bullseyes = std::vector<RuneBullseye> { };
-        if (id != RobotId::UNKNOWN) {
+        if (context.id != RobotId::UNKNOWN) {
             detector.update_detect_color(
-                (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
         }
-        detector.update_detect_rune(false); // TODO: 等待外部切换
+        detector.update_detect_rune(context.track_rune);
 
         auto result = detector.detect(image_mat);
         for (const auto& icon : result.icons) {
@@ -226,15 +210,15 @@ struct AutoAim::Impl {
         /// [] 跟踪目标，跟踪器里面维护了可见机器人的 EKF 状态
         auto trackable = Trackable::Unique { };
         {
-            if (id != RobotId::UNKNOWN) {
+            if (context.id != RobotId::UNKNOWN) {
                 tracker->update_track_color(
-                    (id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
+                    (context.id.color() == RobotColor::RED) ? CampColor::BLUE : CampColor::RED);
                 // 哨兵自瞄常开，需要超时检测
                 tracker->update_aim_cleanup(
-                    id == RobotId::RED_SENTRY || id == RobotId::BLUE_SENTRY);
+                    context.id == RobotId::RED_SENTRY || context.id == RobotId::BLUE_SENTRY);
             }
-            tracker->update_aim_intent(intent);
-            tracker->update_track_genre(track_ids);
+            tracker->update_aim_intent(context.track_intent);
+            tracker->update_track_genre(context.track_ids);
             tracker->update_camera(iso);
 
             tracker->clean();

@@ -28,6 +28,7 @@ public:
         Translation camera_translation = Translation::kZero();
 
         bool track_intent = false;
+        bool track_rune   = false;
 
         double max_yaw_vel = 3.0;
         double max_yaw_acc = 100.0;

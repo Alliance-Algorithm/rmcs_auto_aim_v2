@@ -8,6 +8,8 @@
 #include "utility/robot/armor.hpp"
 
 #include <optional>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
 #include <span>
 #include <vector>
 
@@ -200,8 +202,9 @@ auto Detector::initialize(const YAML::Node& yaml) noexcept -> std::expected<void
 }
 
 auto Detector::update_detect_color(CampColor color) noexcept -> void {
-    pimpl->color                      = color;
-    pimpl->rune_detector.config.color = color;
+    pimpl->color = color;
+    pimpl->rune_detector.config.color =
+        (color == CampColor::BLUE) ? CampColor::RED : CampColor::BLUE;
 }
 
 auto Detector::update_detect_rune(bool on) noexcept -> void { pimpl->detect_rune = on; }

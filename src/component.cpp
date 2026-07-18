@@ -84,6 +84,8 @@ private:
     InputInterface<rmcs_msgs::Switch> lswitch;
     InputInterface<rmcs_msgs::Mouse> mouse;
 
+    rmcs_msgs::Switch last_rswitch = rmcs_msgs::Switch::UNKNOWN;
+
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
     OutputInterface<bool> single_shoot;
@@ -188,6 +190,12 @@ public:
         }
 
         using namespace rmcs_msgs;
+        const auto rune_switch_rising =
+            rswitch.ready() && last_rswitch == Switch::UP && *rswitch == Switch::MIDDLE;
+        if (rswitch.ready()) {
+            last_rswitch = *rswitch;
+        }
+
         const auto track_intent =
             (mouse.ready() && mouse->right) || (rswitch.ready() && *rswitch == Switch::UP);
         const auto shoot_intent =
@@ -195,6 +203,7 @@ public:
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
+            if (rune_switch_rising) ctx.track_rune = !ctx.track_rune;
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
