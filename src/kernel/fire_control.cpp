@@ -263,7 +263,8 @@ struct FireController::Impl {
                 }
             }
 
-            return { -1, true };
+            // 视野局限，使其瞄准中心
+            return { std::numeric_limits<std::int8_t>::max(), true };
         }
         if (aimpoints.size() == 1) return { 0, false };
 

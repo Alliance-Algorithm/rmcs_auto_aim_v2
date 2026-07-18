@@ -51,7 +51,7 @@ auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
 
         double alpha   = rotation_angle + util::deg2rad(deg);
         double local_y = -kRuneGlobalRadius * std::sin(alpha);
-        double local_z = kRuneGlobalRadius * std::cos(alpha);
+        double local_z = +kRuneGlobalRadius * std::cos(alpha);
         Eigen::Vector3d world =
             Eigen::Vector3d(x, y, z) + r_face * Eigen::Vector3d(0, local_y, local_z);
 
