@@ -276,6 +276,11 @@ struct Tracker::Impl {
                         };
                         outpost->predict(dt.count());
                         outpost->correct(armors.front());
+
+                        if (outpost->diverged()) {
+                            outpost = nullptr;
+                            logging.warn("{} is diverged", get_enum_name(kId));
+                        }
                     }
                     outpost_stamp = timestamp;
                 }

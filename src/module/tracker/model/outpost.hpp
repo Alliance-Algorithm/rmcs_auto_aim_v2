@@ -85,6 +85,7 @@ public:
     auto current() const -> Armor3d;
 
     auto converge() const -> bool;
+    auto diverged() const -> bool;
 };
 
 }

@@ -1,5 +1,6 @@
 #include "outpost.hpp"
 
+#include "utility/clock.hpp"
 #include "utility/math/angle.hpp"
 #include "utility/math/outpost.hpp"
 #include "utility/robot/constant.hpp"
@@ -183,6 +184,7 @@ struct OutpostModel::Impl {
     // 切板检测：存储上一帧观测向量（xyz + yaw）
     // 构造时初始化，合法帧每帧更新；噪声帧跳过不更新
     ObservationVector last_observation { };
+    Timestamp last_correct_timestamp = Clock::now();
 
     static constexpr int kSignConfirmCount = 2;
 
@@ -332,11 +334,12 @@ public:
         }
 
         // 观测板：用 center.xy 偏移做位置验证
-        const auto xy_error =
+        const auto xy_error = // 中心点误差水平距离
             std::hypot(observation[0] - last_observation[0], observation[1] - last_observation[1]);
+        const auto xy_limit = // 姑且以 5m 为界限
+            std::hypot(observation[0], observation[1]) > 5.0 ? 0.20 : 0.10;
 
-        constexpr auto kXyLimit = 0.10;
-        if (xy_error > kXyLimit) {
+        if (xy_error > xy_limit) {
             // 位置验证不通过：噪声，丢弃
             return;
         }
@@ -422,6 +425,7 @@ public:
             util::normalize_angle(context.posteriors_state[4] + delta_yaw);
 
         update_count += 1;
+        last_correct_timestamp = Clock::now();
     }
 
     auto at(std::uint8_t index) const noexcept -> Armor3d {
@@ -472,6 +476,29 @@ public:
 
         return true;
     }
+
+    auto diverged() const -> bool {
+        const auto& state = context.posteriors_state;
+        const auto& cov   = context.posteriors_covariance;
+
+        using namespace std::chrono_literals;
+        return std::ranges::any_of(
+            std::array {
+                Clock::now() - last_correct_timestamp > 500ms,
+
+                cov(0, 0) > 150.0,
+                cov(1, 1) > 150.0,
+
+                std::abs(state[0]) > 15.0,
+                std::abs(state[1]) > 15.0,
+                std::abs(state[3]) > 10.0 * std::numbers::pi,
+
+                state.hasNaN(),
+                !state.allFinite(),
+                !cov.allFinite(),
+            },
+            std::identity { });
+    }
 };
 
 OutpostModel::OutpostModel(const Armor3d& armor) noexcept
@@ -503,3 +530,4 @@ auto OutpostModel::current() const -> Armor3d {
 }
 
 auto OutpostModel::converge() const -> bool { return pimpl->converge(); }
+auto OutpostModel::diverged() const -> bool { return pimpl->diverged(); }
