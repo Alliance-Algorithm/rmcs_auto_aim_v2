@@ -23,16 +23,15 @@ public:
         double cost  = std::numeric_limits<double>::max();
     };
 
-    void push(double timestamp, double theta);
+    void push(double t, double theta);
     void reset();
 
     auto fit_linear() const -> std::optional<LinearResult>;
     auto fit_sine() const -> std::optional<FitResult>;
 
-    auto base_t() const { return base_t_; }
-
-    static constexpr double kWindowSeconds = 6.0;
-    static constexpr double kMinFitSeconds = 1.5;
+    static constexpr double kWindowSeconds         = 6.0;
+    static constexpr double kMinFitSeconds         = 1.5;
+    static constexpr double kWeightHalfLifeSeconds = 3.0;
 
     ~RuneEnergyFitter();
 
@@ -43,10 +42,8 @@ private:
     };
     std::deque<Point> buffer_;
 
-    double base_t_ = 0.0;
-
     template <typename Pred>
-    static auto compute_raw_cost(const std::deque<Point>& buffer, Pred&& pred_fn) -> double;
+    static auto compute_weighted_cost(const std::deque<Point>& buffer, Pred&& pred_fn) -> double;
 };
 
 } // namespace rmcs

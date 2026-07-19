@@ -37,7 +37,9 @@ public:
         double sine_omega = 0.0;
         double sine_phase = 0.0;
         double sine_t     = 0.0;
-        bool sine_valid   = false;
+        bool   sine_valid = false;
+
+        std::size_t update_count = 0;
 
         auto transition(double seconds) -> void;
 
@@ -79,7 +81,7 @@ public:
     auto update_camera(std::array<double, 9>, std::array<double, 5>) noexcept -> void;
     auto update_transform(const Transform&) noexcept -> void;
 
-    auto init(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept -> bool;
+    auto init(std::span<const RuneIcon>, std::span<const RuneBullseye>, Timestamp) noexcept -> bool;
     auto predict(double dt, Timestamp now) noexcept -> void;
     [[nodiscard]] auto correct(std::span<const RuneIcon>, std::span<const RuneBullseye>) noexcept
         -> bool;

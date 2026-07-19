@@ -213,7 +213,7 @@ public:
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
-            if (rune_switch_rising) ctx.track_rune = !ctx.track_rune;
+            ctx.track_rune = true;
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
