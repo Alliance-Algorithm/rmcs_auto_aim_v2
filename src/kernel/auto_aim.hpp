@@ -40,9 +40,8 @@ public:
         struct Addition {
             Point3d attack = Point3d::kNaN();
 
-            double aim_yaw = kNaN;
-            double raw_yaw = kNaN;
-            double pitch   = kNaN;
+            double aim_yaw   = kNaN;
+            double aim_pitch = kNaN;
 
             bool should_track = false;
             bool should_shoot = false;

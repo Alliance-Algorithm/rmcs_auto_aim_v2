@@ -15,6 +15,7 @@
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/camera_frame.hpp>
 #include <rmcs_msgs/mouse.hpp>
+#include <rmcs_msgs/rmcs_msgs.hpp>
 #include <rmcs_msgs/robot_id.hpp>
 #include <rmcs_msgs/switch.hpp>
 
@@ -124,10 +125,19 @@ public:
         if (params.contains("dangerous_fallback")) {
             auto value = params.get_string("dangerous_fallback");
             std::ranges::transform(value, value.begin(), ::tolower);
-            if (value == "red") dangerous_fallback = rmcs_msgs::RobotId::RED_SENTRY;
-            if (value == "blue") dangerous_fallback = rmcs_msgs::RobotId::BLUE_SENTRY;
-            if (!value.empty() && !dangerous_fallback)
+            using namespace rmcs_msgs;
+            if (value == "red") {
+                dangerous_fallback = RobotId::RED_SENTRY;
+            }
+            if (value == "blue") {
+                dangerous_fallback = RobotId::BLUE_SENTRY;
+            }
+
+            if (!value.empty() && !dangerous_fallback) {
                 rclcpp.warn("dangerous_fallback '{}' 无法识别，已忽略", value);
+            } else {
+                rclcpp.warn("注意，RobotId 已 Fallback 为 {}", *dangerous_fallback);
+            }
         }
 
         if (auto config = util::serialize<FireController::Config>("fire_control", params)) {
@@ -263,8 +273,7 @@ public:
 
                     addition.attack       = aimed->attack;
                     addition.aim_yaw      = aimed->aim_yaw;
-                    addition.raw_yaw      = aimed->raw_yaw;
-                    addition.pitch        = aimed->pitch;
+                    addition.aim_pitch    = aimed->pitch;
                     addition.pre_aim      = aimed->pre_aim;
                     addition.should_track = true;
                     addition.should_shoot = aimed->shoot;

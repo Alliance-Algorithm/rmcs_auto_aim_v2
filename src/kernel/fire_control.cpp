@@ -31,9 +31,9 @@ struct FireController::Impl {
     };
     Repeat multiple_rune_actions {
         Repeat::Action { "1-idle", 0.4 },
-        Repeat::Action { "1-shoot", 0.2 },
+        Repeat::Action { "1-shoot", 0.3 },
         Repeat::Action { "2-idle", 0.4 },
-        Repeat::Action { "2-shoot", 0.2 },
+        Repeat::Action { "2-shoot", 0.3 },
     };
     AimPoints last_aimpoints;
 
@@ -358,14 +358,11 @@ struct FireController::Impl {
             + std::chrono::duration<double>(state.timestamp - trackable.get_timestamp()).count();
 
         auto aim_selected = std::int8_t { -1 };
-        auto raw_selected = std::int8_t { -1 };
         auto pre_aim      = false;
-
         {
             auto future = trackable.clone();
             future->jump_into(fly_time + increment);
-            std::tie(aim_selected, pre_aim)     = evaluate_aimed(*future);
-            std::tie(raw_selected, std::ignore) = evaluate_aimed(*future, false);
+            std::tie(aim_selected, pre_aim) = evaluate_aimed(*future);
         }
         if (aim_selected < 0) return std::nullopt;
 
@@ -408,42 +405,10 @@ struct FireController::Impl {
         yaw   = yaw + config.offset_yaw;
         pitch = pitch + config.offset_pitch;
 
-        if (degraded) {
-            return Aimed {
-                .aim_yaw = yaw,
-                .raw_yaw = yaw,
-                .pitch   = pitch,
-                .shoot   = true,
-                .pre_aim = false,
-                .target  = make_target(yaw, pitch),
-                .center  = center,
-                .attack  = center,
-            };
-        }
-
-        // 原始 yaw 计算
-        auto raw_yaw = double { yaw };
-        if (raw_selected >= 0 && raw_selected != aim_selected) {
-            auto raw_clone = trackable.clone();
-            raw_clone->jump_into(new_time + increment);
-
-            const auto raw_aimpoints = raw_clone->get_aimpoints();
-            const auto raw_attack    = raw_aimpoints[raw_selected];
-
-            TrajectorySolution solution { };
-            solution.input.v0    = config.bullet_speed;
-            solution.input.point = raw_attack;
-
-            const auto result = solution.solve();
-            if (!result) return std::nullopt;
-
-            raw_yaw = util::normalize_angle(result->yaw + config.offset_yaw);
-        }
-
         // 射击评估
         auto should_shoot = true;
-        if (pre_aim && (!config.attack_preaim || trackable.id() == DeviceId::RUNE)) {
-            should_shoot = false;
+        if (trackable.id() == DeviceId::RUNE) {
+            should_shoot = !degraded && !pre_aim;
         } else {
             const auto cmd = ShootEvaluator::Command {
                 .yaw    = yaw,
@@ -451,12 +416,15 @@ struct FireController::Impl {
                 .center = center,
                 .armor  = attack,
             };
-            should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+            if (pre_aim && !config.attack_preaim) {
+                should_shoot = false;
+            } else {
+                should_shoot = shoot_evaluator->evaluate(cmd, state.yaw, state.pitch);
+            }
         }
 
         return Aimed {
             .aim_yaw = yaw,
-            .raw_yaw = raw_yaw,
             .pitch   = pitch,
             .shoot   = should_shoot,
             .pre_aim = pre_aim,

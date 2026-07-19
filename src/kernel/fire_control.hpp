@@ -59,7 +59,6 @@ public:
 
     struct Aimed {
         double aim_yaw = 0;
-        double raw_yaw = 0;
         double pitch   = 0;
 
         bool shoot   = false;

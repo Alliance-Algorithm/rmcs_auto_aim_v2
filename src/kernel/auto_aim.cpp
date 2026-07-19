@@ -289,10 +289,9 @@ struct AutoAim::Impl {
 
         /// [] 火控指令由 component 求解，这里仅同步可视化
         if (addition.should_track) {
-            visual.update_aiming_direction(addition.aim_yaw, addition.pitch);
+            visual.update_aiming_direction(addition.aim_yaw, addition.aim_pitch);
             visual.publish(addition.aim_yaw, "aim_yaw");
-            visual.publish(addition.raw_yaw, "raw_yaw");
-            visual.publish(addition.pitch, "aim_pitch");
+            visual.publish(addition.aim_pitch, "aim_pitch");
 
             if (auto aim_2d = estimator.make_point2d(addition.attack)) {
                 const auto color = addition.should_shoot //

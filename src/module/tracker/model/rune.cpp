@@ -41,6 +41,8 @@ auto RuneModel::State::get_direction() const -> Point3d { return Point3d { x, y,
 auto RuneModel::State::get_rotation_speed() const -> double { return rotation_speed; }
 
 auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
+    if (Clock::now() - start_timestamp < std::chrono::seconds { 2 }) return { };
+
     const auto r_face = Eigen::AngleAxisd { face_yaw, Eigen::Vector3d::UnitZ() };
 
     static constexpr std::array kBladeAnglesDeg = { 0.0, 72.0, 144.0, 216.0, 288.0 };
@@ -78,7 +80,7 @@ struct RuneModel::Impl {
     static constexpr auto kA   = 4;
     static constexpr auto kPsi = 5;
 
-    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 20 };
+    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 100 };
 
     struct Context {
         StateVector posteriors_state     = StateVector::Zero();
@@ -109,15 +111,17 @@ struct RuneModel::Impl {
             posteriors_covariance = diag.asDiagonal();
         }
 
-        auto get_state(const std::array<bool, 5>& inactive) const noexcept {
+        auto get_state(
+            const std::array<bool, 5>& inactive, Timestamp start_timestamp) const noexcept {
             return State {
-                .x              = posteriors_state[kX],
-                .y              = posteriors_state[kY],
-                .z              = posteriors_state[kZ],
-                .rotation_speed = use_prediction_speed ? prediction_speed : posteriors_state[kW],
-                .rotation_angle = posteriors_state[kA],
-                .face_yaw       = posteriors_state[kPsi],
-                .inactive       = inactive,
+                .x               = posteriors_state[kX],
+                .y               = posteriors_state[kY],
+                .z               = posteriors_state[kZ],
+                .start_timestamp = start_timestamp,
+                .rotation_speed  = use_prediction_speed ? prediction_speed : posteriors_state[kW],
+                .rotation_angle  = posteriors_state[kA],
+                .face_yaw        = posteriors_state[kPsi],
+                .inactive        = inactive,
                 .use_prediction_speed = use_prediction_speed,
                 .prediction_cost      = sine_valid ? sine_cost : prediction_cost,
                 .sine_C               = sine_C,
@@ -835,7 +839,7 @@ struct RuneModel::Impl {
         if (inactive_corrected || active_corrected) {
             update_count += 1;
 
-            auto state   = context.get_state(blade_inactive);
+            auto state   = context.get_state(blade_inactive, init_timestamp);
             double t_sec = std::chrono::duration<double>(current_stamp.time_since_epoch()).count();
             fitter.push(t_sec, state.rotation_angle);
 
@@ -936,7 +940,7 @@ auto RuneModel::converge() const -> bool { return pimpl->converge(); }
 auto RuneModel::diverged() const -> bool { return pimpl->diverged(); }
 
 auto RuneModel::state() const noexcept -> State {
-    return pimpl->context.get_state(pimpl->blade_inactive);
+    return pimpl->context.get_state(pimpl->blade_inactive, pimpl->init_timestamp);
 }
 
 auto RuneModel::addition() const -> const Addition& { return pimpl->addition; }

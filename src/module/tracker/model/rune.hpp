@@ -5,7 +5,6 @@
 #include "utility/robot/rune.hpp"
 
 #include <array>
-#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -19,6 +18,8 @@ public:
         double x;
         double y;
         double z;
+
+        Timestamp start_timestamp;
 
         double rotation_speed;
         double rotation_angle;
