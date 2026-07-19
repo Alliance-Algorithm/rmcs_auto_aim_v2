@@ -199,6 +199,7 @@ struct RuneModel::Impl {
     Timestamp current_stamp;
     std::size_t update_count = 0;
     RuneEnergyFitter fitter;
+    Timestamp force_sine_until { };
 
     explicit Impl(const Config& cfg) noexcept {
         config = cfg;
@@ -692,6 +693,7 @@ struct RuneModel::Impl {
 
         blade_inactive.fill(false);
         blade_inactive_timeout.fill(Timestamp { });
+        force_sine_until = Timestamp { };
 
         observable.update(context.posteriors_state);
 
@@ -799,8 +801,7 @@ struct RuneModel::Impl {
         auto assignments = util::hungarian_assign(cost, config.gate_threshold);
 
         addition.tracked.clear();
-        auto inactive_corrected = false;
-        auto active_corrected   = false;
+        auto inactive_corrected = 0, active_corrected = 0;
         for (int i = 0; i < N; ++i) {
             if (!assignments[i]) continue;
             auto j = *assignments[i];
@@ -817,11 +818,10 @@ struct RuneModel::Impl {
                 const auto blade = static_cast<std::size_t>(j - 1);
                 if (observations[i].is_inactive) {
                     blade_inactive[blade] = true;
-                    inactive_corrected    = true;
-
+                    inactive_corrected++;
                     blade_inactive_timeout[blade] = current_stamp + kInactiveTimeout;
                 } else {
-                    active_corrected = true;
+                    active_corrected++;
                 }
             }
             addition.tracked.push_back(
@@ -836,36 +836,40 @@ struct RuneModel::Impl {
             }
         }
 
-        if (inactive_corrected || active_corrected) {
+        if (inactive_corrected > 1) force_sine_until = current_stamp + std::chrono::seconds { 3 };
+
+        if (inactive_corrected > 0 || active_corrected > 0) {
             update_count += 1;
 
             auto state   = context.get_state(blade_inactive, init_timestamp);
             double t_sec = std::chrono::duration<double>(current_stamp.time_since_epoch()).count();
             fitter.push(t_sec, state.rotation_angle);
 
-            auto& res_linear = fitter.fit_linear();
-            auto& res_sine   = fitter.fit_sine();
+            auto res_linear = fitter.fit_linear();
+            auto res_sine   = fitter.fit_sine();
 
-            if (res_sine.valid && (!res_linear.valid || res_sine.cost < res_linear.cost)) {
+            if (res_sine
+                && (!res_linear || current_stamp < force_sine_until
+                    || (res_sine->cost < res_linear->cost && res_sine->a >= 0.6))) {
                 double dt_now                = t_sec - fitter.base_t();
                 context.use_prediction_speed = false;
-                context.sine_cost            = res_sine.cost;
-                context.sine_C               = res_sine.C;
-                context.sine_v               = res_sine.v;
-                context.sine_a               = res_sine.a;
-                context.sine_omega           = res_sine.omega;
-                context.sine_phase           = res_sine.omega * dt_now + res_sine.phi;
+                context.sine_cost            = res_sine->cost;
+                context.sine_C               = res_sine->C;
+                context.sine_v               = res_sine->v;
+                context.sine_a               = res_sine->a;
+                context.sine_omega           = res_sine->omega;
+                context.sine_phase           = res_sine->omega * dt_now + res_sine->phi;
                 context.sine_t               = dt_now;
                 context.sine_valid           = true;
-            } else if (res_linear.valid) {
-                context.prediction_speed     = res_linear.speed;
+            } else if (res_linear) {
+                context.prediction_speed     = res_linear->speed;
                 context.use_prediction_speed = true;
-                context.prediction_cost      = res_linear.cost;
+                context.prediction_cost      = res_linear->cost;
                 context.sine_valid           = false;
             }
         }
 
-        return inactive_corrected;
+        return inactive_corrected > 0;
     }
 
     // ===== Convergence / Divergence =====

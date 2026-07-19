@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <limits>
+#include <optional>
 
 namespace rmcs {
 
@@ -14,21 +15,19 @@ public:
         double omega = 0.0;
         double phi   = 0.0;
         double cost  = std::numeric_limits<double>::max();
-        bool valid   = false;
     };
 
     struct LinearResult {
         double C     = 0.0;
         double speed = 0.0;
         double cost  = std::numeric_limits<double>::max();
-        bool valid   = false;
     };
 
     void push(double timestamp, double theta);
     void reset();
 
-    auto fit_linear() -> const LinearResult&;
-    auto fit_sine() -> const FitResult&;
+    auto fit_linear() const -> std::optional<LinearResult>;
+    auto fit_sine() const -> std::optional<FitResult>;
 
     auto base_t() const { return base_t_; }
 
@@ -44,14 +43,10 @@ private:
     };
     std::deque<Point> buffer_;
 
-    FitResult    sine_result_;
-    LinearResult linear_result_;
-
     double base_t_ = 0.0;
 
     template <typename Pred>
-    static auto compute_raw_cost(
-        const std::deque<Point>& buffer, Pred&& pred_fn) -> double;
+    static auto compute_raw_cost(const std::deque<Point>& buffer, Pred&& pred_fn) -> double;
 };
 
 } // namespace rmcs

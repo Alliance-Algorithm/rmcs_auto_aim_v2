@@ -12,25 +12,19 @@ void RuneEnergyFitter::push(double timestamp, double theta) {
     if (buffer_.empty()) {
         base_t_ = timestamp;
     }
-    buffer_.push_back({timestamp - base_t_, theta});
+    buffer_.push_back({ timestamp - base_t_, theta });
 
     while (!buffer_.empty() && buffer_.back().t - buffer_.front().t > kWindowSeconds)
         buffer_.pop_front();
-
-    sine_result_.valid   = false;
-    linear_result_.valid = false;
 }
 
 void RuneEnergyFitter::reset() {
     buffer_.clear();
-    sine_result_   = FitResult{};
-    linear_result_ = LinearResult{};
-    base_t_        = 0.0;
+    base_t_ = 0.0;
 }
 
 template <typename Pred>
-auto RuneEnergyFitter::compute_raw_cost(
-    const std::deque<Point>& buffer, Pred&& pred_fn) -> double {
+auto RuneEnergyFitter::compute_raw_cost(const std::deque<Point>& buffer, Pred&& pred_fn) -> double {
 
     double sum = 0.0;
     for (const auto& pt : buffer) {
@@ -40,11 +34,9 @@ auto RuneEnergyFitter::compute_raw_cost(
     return sum / static_cast<double>(buffer.size());
 }
 
-auto RuneEnergyFitter::fit_linear() -> const LinearResult& {
-    if (linear_result_.valid || buffer_.size() < 2)
-        return linear_result_;
-    if (buffer_.back().t - buffer_.front().t < kMinFitSeconds)
-        return linear_result_;
+auto RuneEnergyFitter::fit_linear() const -> std::optional<LinearResult> {
+    if (buffer_.size() < 2) return std::nullopt;
+    if (buffer_.back().t - buffer_.front().t < kMinFitSeconds) return std::nullopt;
 
     const auto N = static_cast<double>(buffer_.size());
 
@@ -59,23 +51,20 @@ auto RuneEnergyFitter::fit_linear() -> const LinearResult& {
     }
 
     double denom = N * sum_tt - sum_t * sum_t;
-    if (std::abs(denom) < 1e-12) return linear_result_;
+    if (std::abs(denom) < 1e-12) return std::nullopt;
 
     double speed = (N * sum_t_theta - sum_t * sum_theta) / denom;
     double C     = (sum_theta - speed * sum_t) / N;
 
-    auto pred = [&](double dt) { return C + speed * dt; };
+    auto pred   = [&](double dt) { return C + speed * dt; };
     double cost = compute_raw_cost(buffer_, pred);
 
-    linear_result_ = {C, speed, cost, true};
-    return linear_result_;
+    return LinearResult { C, speed, cost };
 }
 
-auto RuneEnergyFitter::fit_sine() -> const FitResult& {
-    if (sine_result_.valid || buffer_.size() < 2)
-        return sine_result_;
-    if (buffer_.back().t - buffer_.front().t < kMinFitSeconds)
-        return sine_result_;
+auto RuneEnergyFitter::fit_sine() const -> std::optional<FitResult> {
+    if (buffer_.size() < 2) return std::nullopt;
+    if (buffer_.back().t - buffer_.front().t < kMinFitSeconds) return std::nullopt;
 
     const auto N = static_cast<Eigen::Index>(buffer_.size());
     Eigen::MatrixXd X(N, 4);
@@ -87,11 +76,11 @@ auto RuneEnergyFitter::fit_sine() -> const FitResult& {
         X(i, 1)  = t;
     }
 
-    static constexpr int    kSweepSteps = 41;
-    static constexpr double kOmegaMin   = 1.80;
-    static constexpr double kOmegaMax   = 2.20;
+    static constexpr int kSweepSteps  = 41;
+    static constexpr double kOmegaMin = 1.80;
+    static constexpr double kOmegaMax = 2.20;
 
-    double best_mse   = std::numeric_limits<double>::max();
+    double best_mse = std::numeric_limits<double>::max();
     double best_C = 0, best_v = 0, best_A = 0, best_B = 0, best_omega = 0;
 
     for (int s = 0; s <= kSweepSteps; ++s) {
@@ -99,12 +88,12 @@ auto RuneEnergyFitter::fit_sine() -> const FitResult& {
 
         for (Eigen::Index i = 0; i < N; ++i) {
             double t = buffer_[i].t;
-            X(i, 2) = std::cos(omega * t);
-            X(i, 3) = std::sin(omega * t);
+            X(i, 2)  = std::cos(omega * t);
+            X(i, 3)  = std::sin(omega * t);
         }
 
         Eigen::Vector4d coeff = X.colPivHouseholderQr().solve(y);
-        double mse = (y - X * coeff).squaredNorm() / N;
+        double mse            = (y - X * coeff).squaredNorm() / static_cast<double>(N);
         if (mse < best_mse) {
             best_mse   = mse;
             best_C     = coeff(0);
@@ -123,9 +112,7 @@ auto RuneEnergyFitter::fit_sine() -> const FitResult& {
     };
     double cost = compute_raw_cost(buffer_, pred);
 
-    sine_result_ = {best_C, best_v, a, best_omega, phi, cost, true};
-    if (a < 0.6) sine_result_.valid = false;
-    return sine_result_;
+    return FitResult { best_C, best_v, a, best_omega, phi, cost };
 }
 
 } // namespace rmcs
