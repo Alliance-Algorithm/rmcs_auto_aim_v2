@@ -312,10 +312,6 @@ public:
     auto correct(const Armor3d& armor) noexcept -> void {
         constexpr auto kPitch = kPredictedOutpostArmorPitch;
 
-        // 装甲板元信息
-        armor_genre = armor.genre;
-        armor_color = armor.color;
-
         // 观测向量构造
         auto observation = ObservationVector { };
         {
@@ -335,23 +331,27 @@ public:
             observation << center.x(), center.y(), center.z(), armor_yaw;
         }
 
+        // 观测板：用 center.xy 偏移做位置验证
+        const auto xy_error =
+            std::hypot(observation[0] - last_observation[0], observation[1] - last_observation[1]);
+
+        constexpr auto kXyLimit = 0.10;
+        if (xy_error > kXyLimit) {
+            // 位置验证不通过：噪声，丢弃
+            return;
+        }
+
+        // 装甲板元信息
+        armor_genre = armor.genre;
+        armor_color = armor.color;
+
         // 切板检测：判定是否发生真实切板
-        // 判定依据：yaw 跳变大于配置阈值，且 center.xy 偏移落在 10cm 内
         {
-            constexpr auto kPlateSwitchXYTol = 0.10; // 10cm
 
             const auto delta_yaw_obs = util::normalize_angle(observation[3] - last_observation[3]);
             const auto abs_delta     = std::abs(delta_yaw_obs);
 
             if (abs_delta > util::deg2rad(config.plate_switch_yaw_min)) {
-                // 候选切板：用 center.xy 偏移做位置验证
-                const double xy_error = std::hypot(
-                    observation[0] - last_observation[0], observation[1] - last_observation[1]);
-
-                if (xy_error > kPlateSwitchXYTol) {
-                    // 位置验证不通过：噪声，丢弃
-                    return;
-                }
 
                 // 真实切板：从观测符号判断方向，直接取装配标准值
                 const auto in_right = delta_yaw_obs > 0.0;

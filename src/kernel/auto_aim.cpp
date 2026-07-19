@@ -303,15 +303,17 @@ struct AutoAim::Impl {
                     .color  = color,
                 });
             }
-            visual.draw_later(
-                Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite });
         }
+
+        visual.draw_later(Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite });
+        visual.draw_later(
+            Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite });
         visual.draw_later(
             Canvas::Text { "SHOOT", { 10, 660 }, addition.should_shoot ? kRed : kWhite });
         visual.draw_later(
-            Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite });
+            Canvas::Text { context.track_rune ? "RUNE" : "ARMOR", { 10, 700 }, kWhite });
 
-        {
+        if (trackable) {
             std::lock_guard lock { self.command_mutex };
             self.current_command.trackable = std::move(trackable);
             self.unread_command.store(true, std::memory_order::release);
