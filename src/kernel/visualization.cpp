@@ -1,6 +1,5 @@
 #include "visualization.hpp"
 
-#include "module/debug/visualization/mpc_plan_visualizer.hpp"
 #include "module/debug/visualization/stream_session.hpp"
 #include "utility/math/conversion.hpp"
 #include "utility/rclcpp/visual/armor.hpp"
@@ -56,7 +55,6 @@ struct Visualization::Impl {
     debug::StreamSession session;
     SessionConfig session_config;
 
-    debug::MpcPlanVisualizer mpc_plan;
     visual::DynamicTransform odom_transform { rclcpp };
     std::unique_ptr<visual::Arrow> aiming_direction;
     std::unordered_map<std::string, visual::Armors> armor_publishers;
@@ -90,7 +88,6 @@ struct Visualization::Impl {
             return std::unexpected { "Unknown video type: " + config.stream_type };
         }
 
-        mpc_plan.initialize(rclcpp);
         aiming_direction = std::make_unique<visual::Arrow>(visual::Arrow::Config {
             .rclcpp = rclcpp,
             .name   = "aiming_direction",
@@ -187,13 +184,6 @@ struct Visualization::Impl {
         aiming_direction->update();
     }
 
-    auto update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
-        double yaw_acc, double pitch_acc) const -> void {
-        if (!is_initialized) return;
-        if (!config.publishable) return;
-        mpc_plan.publish_planned_yaw(yaw, yaw_rate, yaw_acc);
-        mpc_plan.publish_planned_pitch(pitch, pitch_rate, pitch_acc);
-    }
 };
 
 auto Visualization::initialize(const YAML::Node& yaml) noexcept
@@ -220,11 +210,6 @@ auto Visualization::publish(std::span<const Lightbar3d> lightbars, const std::st
 
 auto Visualization::update_aiming_direction(double yaw, double pitch) const -> void {
     pimpl->update_aiming_direction(yaw, pitch);
-}
-
-auto Visualization::update_mpc_plan(double yaw, double pitch, double yaw_rate, double pitch_rate,
-    double yaw_acc, double pitch_acc) const -> void {
-    pimpl->update_mpc_plan(yaw, pitch, yaw_rate, pitch_rate, yaw_acc, pitch_acc);
 }
 
 auto Visualization::publish(const Transform& t, const std::string& name) -> void {
