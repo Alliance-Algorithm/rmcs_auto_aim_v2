@@ -21,6 +21,8 @@ public:
 
         double attack_window { 40.0 };
 
+        double degraded_angle_speed { 12.0 };
+
         double window_hysteresis { 0.2 };
 
         double yaw_tolerance   = 0.07;
@@ -37,6 +39,7 @@ public:
             &Config::offset_yaw, "offset_yaw",
             &Config::offset_pitch, "offset_pitch",
             &Config::attack_window, "attack_window",
+            &Config::degraded_angle_speed, "degraded_angle_speed",
             &Config::window_hysteresis, "window_hysteresis",
             &Config::yaw_tolerance, "yaw_tolerance",
             &Config::pitch_tolerance, "pitch_tolerance",
@@ -69,7 +72,6 @@ public:
         Point3d attack;
     };
 
-    explicit FireController(const YAML::Node&);
     explicit FireController(const Config&);
 
     auto update(State state) -> void;

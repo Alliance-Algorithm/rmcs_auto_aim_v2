@@ -15,6 +15,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -27,9 +28,18 @@ using namespace rmcs::util;
 
 auto RuneModel::State::transition(double seconds) -> void {
     if (sine_valid) {
+        const auto old_phase = sine_phase;
+
         sine_t += seconds;
         sine_phase += sine_omega * seconds;
-        rotation_angle = sine_C + sine_v * sine_t - sine_a / sine_omega * std::cos(sine_phase);
+
+        if (std::abs(sine_omega) > 1e-12) {
+            rotation_angle += sine_v * seconds
+                + sine_a / sine_omega * (std::cos(old_phase) - std::cos(sine_phase));
+        } else {
+            rotation_angle += rotation_speed * seconds;
+        }
+
         rotation_speed = sine_v + sine_a * std::sin(sine_phase);
     } else {
         rotation_angle = rotation_angle + rotation_speed * seconds;
@@ -41,7 +51,7 @@ auto RuneModel::State::get_direction() const -> Point3d { return Point3d { x, y,
 auto RuneModel::State::get_rotation_speed() const -> double { return rotation_speed; }
 
 auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
-    if (Clock::now() - start_timestamp < std::chrono::seconds { 2 }) return { };
+    if (Clock::now() - start_timestamp < std::chrono::seconds { 3 }) return { };
 
     const auto r_face = Eigen::AngleAxisd { face_yaw, Eigen::Vector3d::UnitZ() };
 
@@ -80,7 +90,8 @@ struct RuneModel::Impl {
     static constexpr auto kA   = 4;
     static constexpr auto kPsi = 5;
 
-    static constexpr auto kInactiveTimeout = std::chrono::milliseconds { 100 };
+    static constexpr auto kInactiveTimeout  = std::chrono::milliseconds { 100 };
+    static constexpr auto kFitWarmupSeconds = 1.0;
 
     struct Context {
         StateVector posteriors_state     = StateVector::Zero();
@@ -100,6 +111,8 @@ struct RuneModel::Impl {
         bool sine_valid   = false;
         double sine_cost  = 0.0;
 
+        std::size_t update_count = 0;
+
         auto set_noise(const Config& config) noexcept {
             noise_process.diagonal() << config.noise_x, config.noise_y, config.noise_z,
                 config.noise_rotation_speed, config.noise_rotation_angle, config.noise_face_yaw;
@@ -114,14 +127,16 @@ struct RuneModel::Impl {
         auto get_state(
             const std::array<bool, 5>& inactive, Timestamp start_timestamp) const noexcept {
             return State {
-                .x               = posteriors_state[kX],
-                .y               = posteriors_state[kY],
-                .z               = posteriors_state[kZ],
-                .start_timestamp = start_timestamp,
-                .rotation_speed  = use_prediction_speed ? prediction_speed : posteriors_state[kW],
-                .rotation_angle  = posteriors_state[kA],
-                .face_yaw        = posteriors_state[kPsi],
-                .inactive        = inactive,
+                .x                    = posteriors_state[kX],
+                .y                    = posteriors_state[kY],
+                .z                    = posteriors_state[kZ],
+                .start_timestamp      = start_timestamp,
+                .rotation_speed       = sine_valid
+                    ? sine_v + sine_a * std::sin(sine_phase)
+                    : (use_prediction_speed ? prediction_speed : posteriors_state[kW]),
+                .rotation_angle       = posteriors_state[kA],
+                .face_yaw             = posteriors_state[kPsi],
+                .inactive             = inactive,
                 .use_prediction_speed = use_prediction_speed,
                 .prediction_cost      = sine_valid ? sine_cost : prediction_cost,
                 .sine_C               = sine_C,
@@ -131,6 +146,7 @@ struct RuneModel::Impl {
                 .sine_phase           = sine_phase,
                 .sine_t               = sine_t,
                 .sine_valid           = sine_valid,
+                .update_count         = update_count,
             };
         }
     };
@@ -195,10 +211,11 @@ struct RuneModel::Impl {
     std::array<bool, 5> blade_inactive { };
     std::array<Timestamp, 5> blade_inactive_timeout { };
     Addition addition { };
-    Timestamp init_timestamp = Clock::now();
+    Timestamp init_timestamp { };
     Timestamp current_stamp;
     std::size_t update_count = 0;
     RuneEnergyFitter fitter;
+    Timestamp force_sine_until { };
 
     explicit Impl(const Config& cfg) noexcept {
         config = cfg;
@@ -634,8 +651,8 @@ struct RuneModel::Impl {
 
     // ===== Init =====
 
-    auto init(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept
-        -> bool {
+    auto init(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes,
+        Timestamp timestamp) noexcept -> bool {
         if (icons.empty()) return false;
 
         auto inactive_bullseyes = std::vector<const RuneBullseye*> { };
@@ -686,12 +703,13 @@ struct RuneModel::Impl {
         context.posteriors_state[kPsi] = best_candidate->face_yaw_odom;
 
         context.reset_covariance();
-        init_timestamp = Clock::now();
+        init_timestamp = timestamp;
         update_count   = 0;
         fitter.reset();
 
         blade_inactive.fill(false);
         blade_inactive_timeout.fill(Timestamp { });
+        force_sine_until = Timestamp { };
 
         observable.update(context.posteriors_state);
 
@@ -722,6 +740,11 @@ struct RuneModel::Impl {
 
         context.posteriors_state      = prior_state;
         context.posteriors_covariance = prior_covariance;
+
+        if (context.sine_valid) {
+            context.sine_t += dt;
+            context.sine_phase += context.sine_omega * dt;
+        }
 
         observable.update(prior_state);
     }
@@ -799,8 +822,7 @@ struct RuneModel::Impl {
         auto assignments = util::hungarian_assign(cost, config.gate_threshold);
 
         addition.tracked.clear();
-        auto inactive_corrected = false;
-        auto active_corrected   = false;
+        auto inactive_corrected = 0, active_corrected = 0;
         for (int i = 0; i < N; ++i) {
             if (!assignments[i]) continue;
             auto j = *assignments[i];
@@ -817,11 +839,10 @@ struct RuneModel::Impl {
                 const auto blade = static_cast<std::size_t>(j - 1);
                 if (observations[i].is_inactive) {
                     blade_inactive[blade] = true;
-                    inactive_corrected    = true;
-
+                    inactive_corrected++;
                     blade_inactive_timeout[blade] = current_stamp + kInactiveTimeout;
                 } else {
-                    active_corrected = true;
+                    active_corrected++;
                 }
             }
             addition.tracked.push_back(
@@ -836,36 +857,62 @@ struct RuneModel::Impl {
             }
         }
 
-        if (inactive_corrected || active_corrected) {
+        if (inactive_corrected > 1) force_sine_until = current_stamp + std::chrono::seconds { 3 };
+
+        if (inactive_corrected > 0 || active_corrected > 0) {
             update_count += 1;
+            context.update_count = update_count;
 
-            auto state   = context.get_state(blade_inactive, init_timestamp);
-            double t_sec = std::chrono::duration<double>(current_stamp.time_since_epoch()).count();
-            fitter.push(t_sec, state.rotation_angle);
+            auto state = context.get_state(blade_inactive, init_timestamp);
+            const auto t_now =
+                std::chrono::duration<double>(current_stamp - init_timestamp).count();
 
-            auto& res_linear = fitter.fit_linear();
-            auto& res_sine   = fitter.fit_sine();
+            if (t_now >= kFitWarmupSeconds) {
+                fitter.push(t_now, state.rotation_angle);
 
-            if (res_sine.valid && (!res_linear.valid || res_sine.cost < res_linear.cost)) {
-                double dt_now                = t_sec - fitter.base_t();
-                context.use_prediction_speed = false;
-                context.sine_cost            = res_sine.cost;
-                context.sine_C               = res_sine.C;
-                context.sine_v               = res_sine.v;
-                context.sine_a               = res_sine.a;
-                context.sine_omega           = res_sine.omega;
-                context.sine_phase           = res_sine.omega * dt_now + res_sine.phi;
-                context.sine_t               = dt_now;
-                context.sine_valid           = true;
-            } else if (res_linear.valid) {
-                context.prediction_speed     = res_linear.speed;
-                context.use_prediction_speed = true;
-                context.prediction_cost      = res_linear.cost;
-                context.sine_valid           = false;
+                auto res_linear = fitter.fit_linear();
+                auto res_sine   = fitter.fit_sine();
+
+                if (res_sine
+                    && (!res_linear || current_stamp < force_sine_until
+                        || (res_sine->cost < res_linear->cost && res_sine->a >= 0.6))) {
+                    context.use_prediction_speed = false;
+                    context.sine_cost            = res_sine->cost;
+                    context.sine_C               = res_sine->C;
+                    context.sine_v               = res_sine->v;
+                    context.sine_a               = res_sine->a;
+                    context.sine_omega           = res_sine->omega;
+                    context.sine_phase           = res_sine->omega * t_now + res_sine->phi;
+                    context.sine_t               = t_now;
+                    context.sine_valid           = true;
+                } else if (res_linear) {
+                    context.prediction_speed     = res_linear->speed;
+                    context.use_prediction_speed = true;
+                    context.prediction_cost      = res_linear->cost;
+                    context.sine_valid           = false;
+                }
+            }
+
+            static auto* dump          = fopen("/tmp/rune_sine_dump.csv", "w");
+            static bool header_written = false;
+            if (dump) {
+                if (!header_written) {
+                    fprintf(dump, "update_count,t_rel,ekf_theta,model,C,v,a,omega,phase,cost\n");
+                    header_written = true;
+                }
+                int model = context.sine_valid ? 2 : (context.use_prediction_speed ? 1 : 0);
+                if (model == 2) {
+                    fprintf(dump, "%zu,%.6f,%.6f,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", update_count,
+                        t_now, state.rotation_angle, model, context.sine_C, context.sine_v,
+                        context.sine_a, context.sine_omega, context.sine_phase, context.sine_cost);
+                } else {
+                    fprintf(dump, "%zu,%.6f,%.6f,%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", update_count,
+                        t_now, state.rotation_angle, model, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+                }
             }
         }
 
-        return inactive_corrected;
+        return inactive_corrected > 0;
     }
 
     // ===== Convergence / Divergence =====
@@ -924,9 +971,9 @@ auto RuneModel::update_transform(const Transform& t) noexcept -> void {
     pimpl->update_transform(t);
 }
 
-auto RuneModel::init(
-    std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes) noexcept -> bool {
-    return pimpl->init(icons, bullseyes);
+auto RuneModel::init(std::span<const RuneIcon> icons, std::span<const RuneBullseye> bullseyes,
+    Timestamp timestamp) noexcept -> bool {
+    return pimpl->init(icons, bullseyes, timestamp);
 }
 
 auto RuneModel::predict(double dt, Timestamp now) noexcept -> void { pimpl->predict(dt, now); }

@@ -299,19 +299,19 @@ struct AutoAim::Impl {
                     : (addition.pre_aim ? kYellow : kGreen);
                 visual.draw_later(Canvas::Point {
                     .origin = aim_2d->make<cv::Point2i>(),
-                    .radius = 3,
+                    .radius = 5,
                     .color  = color,
                 });
             }
         }
 
-        visual.draw_later(Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite });
-        visual.draw_later(
-            Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite });
-        visual.draw_later(
-            Canvas::Text { "SHOOT", { 10, 660 }, addition.should_shoot ? kRed : kWhite });
-        visual.draw_later(
-            Canvas::Text { context.track_rune ? "RUNE" : "ARMOR", { 10, 700 }, kWhite });
+        std::apply([&](auto&&... drawable) { (visual.draw_later(drawable), ...); },
+            std::tuple {
+                Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite },
+                Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite },
+                Canvas::Text { "SHOOT", { 10, 660 }, addition.should_shoot ? kRed : kWhite },
+                Canvas::Text { context.track_rune ? "RUNE" : "ARMOR", { 10, 700 }, kWhite },
+            });
 
         if (trackable) {
             std::lock_guard lock { self.command_mutex };

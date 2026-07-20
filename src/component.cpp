@@ -84,8 +84,10 @@ private:
     InputInterface<rmcs_msgs::Switch> rswitch;
     InputInterface<rmcs_msgs::Switch> lswitch;
     InputInterface<rmcs_msgs::Mouse> mouse;
+    InputInterface<rmcs_msgs::Keyboard> keyboard;
 
-    rmcs_msgs::Switch last_rswitch = rmcs_msgs::Switch::UNKNOWN;
+    rmcs_msgs::Switch last_rswitch    = rmcs_msgs::Switch::UNKNOWN;
+    rmcs_msgs::Keyboard last_keyboard = rmcs_msgs::Keyboard::zero();
 
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
@@ -108,6 +110,7 @@ public:
         register_input("/remote/switch/right", rswitch, false);
         register_input("/remote/switch/left", lswitch, false);
         register_input("/remote/mouse", mouse, false);
+        register_input("/remote/keyboard", keyboard, false);
 
         register_output("/auto_aim/should_control", should_track, false);
         register_output("/auto_aim/should_shoot", should_shoot, false);
@@ -135,7 +138,7 @@ public:
 
             if (!value.empty() && !dangerous_fallback) {
                 rclcpp.warn("dangerous_fallback '{}' 无法识别，已忽略", value);
-            } else {
+            } else if (dangerous_fallback) {
                 rclcpp.warn("注意，RobotId 已 Fallback 为 {}", *dangerous_fallback);
             }
         }
@@ -205,6 +208,10 @@ public:
         if (rswitch.ready()) {
             last_rswitch = *rswitch;
         }
+        const auto rune_key_rising = keyboard.ready() && !last_keyboard.f && keyboard->f;
+        if (keyboard.ready()) {
+            last_keyboard = *keyboard;
+        }
 
         const auto track_intent =
             (mouse.ready() && mouse->right) || (rswitch.ready() && *rswitch == Switch::UP);
@@ -213,7 +220,10 @@ public:
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
-            if (rune_switch_rising) ctx.track_rune = !ctx.track_rune;
+            if (rune_switch_rising || rune_key_rising) {
+                ctx.track_rune = !ctx.track_rune;
+            }
+            *single_shoot = ctx.track_rune;
 
             ctx.max_yaw_vel = std::max(max_yaw_vel, ctx.max_yaw_vel);
             ctx.max_yaw_acc = std::max(max_yaw_acc, ctx.max_yaw_acc);
@@ -242,7 +252,6 @@ public:
 
             *should_track = false;
             *should_shoot = false;
-            *single_shoot = false;
             *track_target = kTNaN;
             *robot_center = kTNaN;
 
@@ -250,8 +259,6 @@ public:
         }
 
         if (current_trackable) {
-            *single_shoot = current_trackable->id() == DeviceId::RUNE;
-
             const auto dir = gimbal_q * Eigen::Vector3d::UnitX();
             fire->update({
                 .timestamp   = now,

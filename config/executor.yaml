@@ -87,6 +87,9 @@ auto_aim_component:
 
       attack_window: 120.0 # degree (total window)
 
+      # rad/s，目标角速度超过则退化瞄中心，按板扫过射线发弹
+      degraded_angle_speed: 12.0
+
       attack_preaim: true
 
       # 选板窗口滞回比例（施密特）：进入 (1-h)、退出 (1+h)
