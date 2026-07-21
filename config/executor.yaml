@@ -71,31 +71,47 @@ auto_aim_component:
     # 留空或填 unknow 表示禁用。
     dangerous_fallback: ""
 
-    # 手动开火开关，若开启，右键自瞄并锁定后，还需要按下鼠标左键
-    # 或者左拨杆向下确认才能发射
+    # 手动开火开关标志
+    # 开启时的开火条件：自瞄允许开火且有开火意图（左键/左拨杆DOWN）
+    # 关闭时的开火条件：自瞄允许开火（无需开火意图）
     manual_shoot: false
 
     # 相机在 PitchLink 下的平移外参（米），仅平移，装配不引入旋转
+    # 注意，PitchLink 是整个 Pitch 的旋转点
     camera_translation: [0.0, 0.0, 0.0]
 
     fire_control:
-      bullet_speed: 23.5 # m/s
+      bullet_speed: 22.5 # m/s
+
+      # 发弹延迟，这将会影响预测量，具体调参时，可以击打小陀螺中的
+      # 靶车，用慢动作拍摄弹道（人眼是看不清的），看弹丸击打点在目
+      # 标装甲板的前面还是后面，如果子弹跟不上装甲板，就将该值调大
+      # 一点，预测器会往前多预测一点，如果子弹超过了旋转的装甲板，
+      # 那就调小一点
       shoot_delay: 0.04 # s
 
-      offset_yaw: -0.0 # degree
-      offset_pitch: +0.0 # degree
+      # 如想要向左调整弹道，增加 offset_yaw
+      offset_yaw: 0.0 # degree
+      # 如想要向下调整弹道，增加 offset_pitch
+      offset_pitch: 0.0 # degree
 
+      # 射击窗口，以目标车中心方向为基准，击打装甲板的 Yaw 为判断
+      # 依据，正对着时的 Yaw 为 0 度，左右倾斜 attack_window / 2，
+      # 超过此阈值则不被认为可以射击
       attack_window: 120.0 # degree (total window)
 
-      # rad/s，目标角速度超过则退化瞄中心，按板扫过射线发弹
+      # rad/s，目标角速度超过则退化为云台静止，瞄准旋转中心，按装
+      # 甲板是否与射线相交来判断是否发弹
       degraded_angle_speed: 12.0
 
+      # 预瞄优化，会动态根据云台的最大角加速度和最大角速度计算出能
+      # 跟上的极限窗口，当装甲板处于射击窗口，但是超出了该极限窗口，
+      # 便会停止跟踪该装甲板，提前到另一个窗口边界等待下一个装甲板
       attack_preaim: true
 
       # 选板窗口滞回比例（施密特）：进入 (1-h)、退出 (1+h)
       window_hysteresis: 0.2
 
-      is_lazy_gimbal: false
       require_stable_command: true
       yaw_tolerance: 0.07 # m，横向单边容差
       pitch_tolerance: 0.04 # m，纵向单边容差

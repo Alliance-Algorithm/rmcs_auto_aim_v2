@@ -13,7 +13,6 @@ public:
         double yaw_tolerance { 0.07 };
         double pitch_tolerance { 0.04 };
         bool require_stable_command { true };
-        bool is_lazy_gimbal { false };
     };
 
     struct Command {

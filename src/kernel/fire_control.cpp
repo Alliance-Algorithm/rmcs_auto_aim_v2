@@ -104,7 +104,6 @@ struct FireController::Impl {
             .yaw_tolerance          = config.yaw_tolerance,
             .pitch_tolerance        = config.pitch_tolerance,
             .require_stable_command = config.require_stable_command,
-            .is_lazy_gimbal         = config.is_lazy_gimbal,
         });
     }
 

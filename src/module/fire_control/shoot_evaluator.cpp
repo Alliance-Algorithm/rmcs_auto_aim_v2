@@ -117,13 +117,6 @@ struct ShootEvaluator::Impl {
         const auto yaw_win   = this->yaw_window(command.armor, scaled_yaw_tol);
         const auto pitch_win = this->pitch_window(command.armor, scaled_pitch_tol);
 
-        if (config.is_lazy_gimbal) {
-            const auto aim_point_yaw = std::atan2(command.armor.y, command.armor.x);
-            if (!in_yaw_window(yaw, aim_point_yaw, yaw_win)) {
-                last_command = command;
-                return false;
-            }
-        }
         const auto aim_aligned = in_yaw_window(yaw, command.yaw, yaw_win)
             && in_pitch_window(pitch, command.pitch, pitch_win);
 
