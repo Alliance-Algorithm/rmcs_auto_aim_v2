@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -82,6 +83,8 @@ public:
             && std::is_trivially_destructible_v<CallbackT>
             && sizeof(CallbackT) <= sizeof(std::uintptr_t))
     {
+        auto open_lock = std::lock_guard { device_open_mutex() };
+
         auto* device = select_device(config.device_name);
         check_hik("create camera handle", MV_CC_CreateHandleWithoutLog(&handle_, device));
 
@@ -260,6 +263,11 @@ public:
     }
 
 private:
+    [[nodiscard]] static auto device_open_mutex() noexcept -> std::mutex& {
+        static std::mutex mutex;
+        return mutex;
+    }
+
     static void __stdcall transport_exception_callback(
         const unsigned int message_type, void* user_data) noexcept {
         if (user_data == nullptr) return;

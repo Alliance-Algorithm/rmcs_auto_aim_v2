@@ -6,14 +6,13 @@
 #include <exception>
 #include <experimental/scope>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <eigen3/Eigen/Geometry>
 #include <opencv2/imgproc.hpp>
-#include <pluginlib/class_list_macros.hpp>
-#include <rclcpp/logger.hpp>
-#include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <rmcs_executor/component.hpp>
 #include <rmcs_msgs/board_clock.hpp>
@@ -33,15 +32,16 @@ public:
     AutoAimCapturerComponent()
         : Node(get_component_name(),
               rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true))
-        , camera_config_ { Hikcamera::CameraConfig::cs016_default()
-                .set_device_name(get_parameter_or<std::string>("camera_name", ""))
-                .set_exposure_us(
-                    static_cast<float>(get_parameter_or<double>("exposure_us", 2000.0)))
-                .set_gain(
-                    static_cast<float>(get_parameter_or<double>("gain", Hikcamera::Cs016MaxGain)))
-                .set_framerate(static_cast<float>(
-                    get_parameter_or<double>("framerate", Hikcamera::Cs016MaxFramerate)))
-                .set_invert_image(get_parameter_or<bool>("invert_image", false)) }
+        , camera_config_ {
+            .device_name = get_parameter_or<std::string>("camera_name", ""),
+            .exposure_us =
+                static_cast<float>(get_parameter_or<double>("exposure_us", 2000.0)),
+            .gain = static_cast<float>(
+                get_parameter_or<double>("gain", Hikcamera::Cs016MaxGain)),
+            .framerate = static_cast<float>(
+                get_parameter_or<double>("framerate", Hikcamera::Cs016MaxFramerate)),
+            .invert_image = get_parameter_or<bool>("invert_image", false),
+        }
         , half_exposure_time_(std::chrono::duration_cast<rmcs_msgs::BoardClock::duration>(
               std::chrono::duration<float, std::micro>(camera_config_.exposure_us)))
         , imu_delay_(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -54,10 +54,31 @@ public:
         , sync_model_(
               get_parameter_or<double>("rls_tau_sec", 10.0), (1.0 / camera_config_.framerate) / 2.0)
         , use_hardware_sync_(get_parameter_or<bool>("use_hardware_sync", true)) {
-        if (use_hardware_sync_) {
-            register_input("/gimbal/auto_aim/exposure_signal", signal_input_);
+        const auto frame_topic =
+            get_parameter_or<std::string>("frame_topic", "/gimbal/auto_aim/camera_frame");
+        const auto exposure_signal_topic = get_parameter_or<std::string>(
+            "exposure_signal_topic", "/gimbal/auto_aim/exposure_signal");
+        const auto imu_snapshot_topic =
+            get_parameter_or<std::string>("imu_snapshot_topic", "/gimbal/auto_aim/imu_snapshot");
+
+        if (frame_topic.empty()) {
+            throw std::runtime_error { "frame_topic must not be empty" };
         }
-        register_output("/gimbal/auto_aim/camera_frame", frame_output_);
+
+        if (use_hardware_sync_ && (exposure_signal_topic.empty() || imu_snapshot_topic.empty())) {
+            throw std::runtime_error {
+                "'exposure_signal_topic' and 'imu_snapshot_topic' must not be empty when "
+                "'use_hardware_sync' is true",
+            };
+        }
+
+        if (!imu_snapshot_topic.empty()) {
+            imu_buffer_ = std::make_unique<ImuSnapshotBuffer>(*this, 1024, imu_snapshot_topic);
+        }
+        if (use_hardware_sync_) {
+            register_input(exposure_signal_topic, signal_input_);
+        }
+        register_output(frame_topic, frame_output_);
     }
 
     ~AutoAimCapturerComponent() override {
@@ -430,23 +451,17 @@ private:
             std::terminate();
         }
 
-        if (auto imu_snapshot = imu_buffer_.pop(exposure_midpoint)) {
-            output_frame->imu_snapshot           = imu_snapshot->orientation;
-            output_frame->gyro_body              = imu_snapshot->gyro_body;
-            output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
-
-            const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
-                reinterpret_cast<char*>(output_frame->data_raw.data()) };
-            auto mat       = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC3,
-                reinterpret_cast<char*>(output_frame->data.data()) };
-            cv::demosaicing(src, mat, output_frame->opencv_cvt_color_code);
-
-            frame_output_.emit(output_frame);
+        if (imu_buffer_) {
+            if (auto imu_snapshot = imu_buffer_->pop(exposure_midpoint)) {
+                fill_and_emit(output_frame, imu_snapshot->orientation, imu_snapshot->gyro_body);
+            } else {
+                RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
+                    "Dropping frame #%u: no IMU snapshot available for exposure board timestamp "
+                    "%lld ticks",
+                    frame_id, static_cast<long long>(exposure_midpoint.time_since_epoch().count()));
+            }
         } else {
-            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
-                "Dropping frame #%u: no IMU snapshot available for exposure board timestamp %lld "
-                "ticks",
-                frame_id, static_cast<long long>(exposure_midpoint.time_since_epoch().count()));
+            fill_and_emit(output_frame, Eigen::Quaterniond::Identity(), Eigen::Vector3d::Zero());
         }
 
         return timestamp_pair;
@@ -467,22 +482,31 @@ private:
         const auto compensated_timestamp = output_frame->image_reception_timestamp - imu_delay_;
         output_frame->exposure_timestamp = compensated_timestamp;
 
-        if (auto imu_snapshot = imu_buffer_.pop_host(compensated_timestamp)) {
-            output_frame->imu_snapshot           = imu_snapshot->orientation;
-            output_frame->gyro_body              = imu_snapshot->gyro_body;
-            output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
-
-            const auto src = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC1,
-                reinterpret_cast<char*>(output_frame->data_raw.data()) };
-            auto mat       = cv::Mat { OutputFrame::kHeight, OutputFrame::kWidth, CV_8UC3,
-                reinterpret_cast<char*>(output_frame->data.data()) };
-            cv::demosaicing(src, mat, output_frame->opencv_cvt_color_code);
-
-            frame_output_.emit(output_frame);
+        if (imu_buffer_) {
+            if (auto imu_snapshot = imu_buffer_->pop_host(compensated_timestamp)) {
+                fill_and_emit(output_frame, imu_snapshot->orientation, imu_snapshot->gyro_body);
+            } else {
+                RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
+                    "Dropping frame #%u: no IMU snapshot available in fallback mode", frame_id);
+            }
         } else {
-            RCLCPP_WARN_THROTTLE(logger_, *get_clock(), 1000,
-                "Dropping frame #%u: no IMU snapshot available in fallback mode", frame_id);
+            fill_and_emit(output_frame, Eigen::Quaterniond::Identity(), Eigen::Vector3d::Zero());
         }
+    }
+
+    void fill_and_emit(const std::shared_ptr<rmcs_msgs::CameraFrame>& output_frame,
+        const Eigen::Quaterniond& orientation, const Eigen::Vector3d& gyro_body) {
+        output_frame->imu_snapshot           = orientation;
+        output_frame->gyro_body              = gyro_body;
+        output_frame->sync_publish_timestamp = std::chrono::steady_clock::now();
+
+        const auto src = cv::Mat { rmcs_msgs::CameraFrame::kHeight, rmcs_msgs::CameraFrame::kWidth,
+            CV_8UC1, reinterpret_cast<char*>(output_frame->data_raw.data()) };
+        auto mat       = cv::Mat { rmcs_msgs::CameraFrame::kHeight, rmcs_msgs::CameraFrame::kWidth,
+            CV_8UC3, reinterpret_cast<char*>(output_frame->data.data()) };
+        cv::demosaicing(src, mat, output_frame->opencv_cvt_color_code);
+
+        frame_output_.emit(output_frame);
     }
 
     [[nodiscard]] auto test_and_reconnect_camera() -> bool {
@@ -593,7 +617,7 @@ private:
 
     const rmcs_msgs::BoardClock::duration half_exposure_time_;
     const std::chrono::steady_clock::duration imu_delay_;
-    ImuSnapshotBuffer imu_buffer_ { *this, 1024 };
+    std::unique_ptr<ImuSnapshotBuffer> imu_buffer_;
     EventOutputInterface<std::shared_ptr<const OutputFrame>> frame_output_;
 
     std::atomic<std::uint32_t> event_count_ = 0;
@@ -614,4 +638,5 @@ private:
 
 } // namespace rmcs
 
+#include <pluginlib/class_list_macros.hpp>
 PLUGINLIB_EXPORT_CLASS(rmcs::AutoAimCapturerComponent, rmcs_executor::Component)

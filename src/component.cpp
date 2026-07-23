@@ -34,6 +34,7 @@ private:
     std::unique_ptr<FireController> fire;
 
     bool manual_shoot = false;
+    bool enable_rune  = true;
 
     std::optional<rmcs_msgs::RobotId> dangerous_fallback { };
 
@@ -121,6 +122,9 @@ public:
         const auto& params = rclcpp.params();
 
         manual_shoot = params.get_bool("manual_shoot");
+        if (params.contains("enable_rune")) {
+            enable_rune = params.get_bool("enable_rune");
+        }
 
         /// WARN: 危险回退！仅供裁判系统缺席时调试使用。
         /// 生效后机器人身份将被强行绑定为对应阵营哨兵，
@@ -185,6 +189,7 @@ public:
             gimbal_time = gimbal.timestamp;
         }
 
+        // 求最大角加速度和角速度
         if (gimbal_time != Timestamp { } && gimbal_time != last_yaw_vel_timestamp) {
             const auto velocity = (gimbal_q * gimbal_gyro).z();
             if (std::isfinite(velocity)) {
@@ -220,8 +225,11 @@ public:
 
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
-            if (rune_switch_rising || rune_key_rising) {
-                ctx.track_rune = !ctx.track_rune;
+            if (enable_rune) {
+                if (rune_switch_rising || rune_key_rising) //
+                    ctx.track_rune = !ctx.track_rune;
+            } else {
+                ctx.track_rune = false;
             }
             *single_shoot = ctx.track_rune;
 

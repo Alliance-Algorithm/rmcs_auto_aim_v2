@@ -6,6 +6,7 @@
 #include <mutex>
 #include <new>
 #include <optional>
+#include <string>
 
 #include <eigen3/Eigen/Geometry>
 
@@ -25,9 +26,10 @@ public:
         Eigen::Vector3d gyro_body;
     };
 
-    explicit ImuSnapshotBuffer(rmcs_executor::Component& component, std::size_t size)
+    explicit ImuSnapshotBuffer(rmcs_executor::Component& component, std::size_t size,
+        const std::string& imu_topic = "/gimbal/auto_aim/imu_snapshot")
         : buffer_ { size } {
-        component.register_input("/gimbal/auto_aim/imu_snapshot", imu_snapshot_input_);
+        component.register_input(imu_topic, imu_snapshot_input_);
     }
 
     auto pop(TimePoint time) -> std::optional<Snapshot> {
