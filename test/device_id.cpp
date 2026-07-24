@@ -69,16 +69,17 @@ TEST(device_id, bitwise_operators) {
 TEST(device_id, predefined_groups) {
     constexpr auto large = DeviceIds::kLargeArmor();
     static_assert(large.contains(DeviceId::HERO));
-    static_assert(large.contains(DeviceId::ENGINEER));
+    static_assert(!large.contains(DeviceId::ENGINEER));
     static_assert(!large.contains(DeviceId::BASE));
     static_assert(!large.contains(DeviceId::INFANTRY_3));
-    static_assert(large.length() == 2);
+    static_assert(large.length() == 1);
 
     constexpr auto small = DeviceIds::kSmallArmor();
+    static_assert(small.contains(DeviceId::ENGINEER));
     static_assert(small.contains(DeviceId::INFANTRY_3));
     static_assert(small.contains(DeviceId::OUTPOST));
     static_assert(small.contains(DeviceId::BASE));
-    static_assert(small.length() == 6);
+    static_assert(small.length() == 7);
 
     static_assert((DeviceIds::kSmallArmor() & DeviceIds::kLargeArmor()) == DeviceIds::None());
     static_assert(DeviceIds::None().length() == 0);
