@@ -51,7 +51,8 @@ auto RuneModel::State::get_direction() const -> Point3d { return Point3d { x, y,
 auto RuneModel::State::get_rotation_speed() const -> double { return rotation_speed; }
 
 auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
-    if (Clock::now() - start_timestamp < std::chrono::seconds { 3 }) return { };
+    const auto converge_duration = std::chrono::seconds { sine_valid ? 6 : 1 };
+    if (Clock::now() - start_timestamp < converge_duration) return { };
 
     const auto r_face = Eigen::AngleAxisd { face_yaw, Eigen::Vector3d::UnitZ() };
 

@@ -31,29 +31,9 @@ class AutoAimRecorderComponent final : public rmcs_executor::Component, public r
 public:
     AutoAimRecorderComponent()
         : Node(get_component_name(),
-              rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true))
-        , logger_(get_logger())
-        , output_path_([this]() -> std::filesystem::path {
-            auto path = get_parameter_or<std::string>("output_path", "");
-            return path.empty() ? std::filesystem::path { "/tmp/autoaim/records" }
-                                : std::filesystem::path { std::move(path) };
-        }())
-        , flush_every_n_frames_(validated_positive_parameter("flush_every_n_frames", 64))
-        , max_duration_seconds_(get_parameter_or<std::int64_t>("max_duration_seconds", 0))
-        , max_videos_size_bytes_([this]() -> std::uintmax_t {
-            const auto gb = get_parameter_or<double>("max_videos_size_gb", 0.0);
-            if (gb < 0.0) throw std::runtime_error("Parameter \"max_videos_size_gb\" must be >= 0");
-            return static_cast<std::uintmax_t>(gb * 1024.0 * 1024.0 * 1024.0);
-        }())
-        , frame_input_(validated_positive_parameter("queue_depth", 16),
-              [this](std::shared_ptr<const rmcs_msgs::CameraFrame>&& frame) {
-                  if (frame) process_frame(*frame);
-              }) {
+              rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true)) {
         register_input(std::string { kFrameTopic }, frame_input_);
-
-        if (max_duration_seconds_.count() < 0) {
-            throw std::runtime_error("Parameter \"max_duration_seconds\" must be >= 0");
-        }
+        register_input("/auto_aim/should_shoot", should_shoot_input_, false);
     }
 
     ~AutoAimRecorderComponent() override {
@@ -75,7 +55,18 @@ public:
             output_path_.c_str());
     }
 
-    void update() override { }
+    auto update() -> void override {
+        static constexpr auto kAutoRecordHold = std::chrono::seconds { 2 };
+
+        if (!auto_record_) return;
+
+        const auto now = std::chrono::steady_clock::now();
+        if (should_shoot_input_.ready() && *should_shoot_input_) {
+            auto_record_deadline_ = now + kAutoRecordHold;
+        }
+
+        desired_recording_.store(now < auto_record_deadline_, std::memory_order_release);
+    }
 
 private:
     static constexpr std::string_view kFrameTopic = "/gimbal/auto_aim/camera_frame";
@@ -292,11 +283,27 @@ private:
     }
 
 private: // constants
-    const rclcpp::Logger logger_;
-    const std::filesystem::path output_path_;
-    const std::size_t flush_every_n_frames_;
-    const std::chrono::seconds max_duration_seconds_;
-    const std::uintmax_t max_videos_size_bytes_;
+    const rclcpp::Logger logger_             = get_logger();
+    const std::filesystem::path output_path_ = [this]() -> std::filesystem::path {
+        auto path = get_parameter_or<std::string>("output_path", "");
+        return path.empty() ? std::filesystem::path { "/tmp/autoaim/records" }
+                            : std::filesystem::path { std::move(path) };
+    }();
+    const std::size_t flush_every_n_frames_ =
+        validated_positive_parameter("flush_every_n_frames", 64);
+    const std::chrono::seconds max_duration_seconds_ = [this] {
+        const auto value = get_parameter_or<std::int64_t>("max_duration_seconds", 0);
+        if (value < 0) {
+            throw std::runtime_error("Parameter \"max_duration_seconds\" must be >= 0");
+        }
+        return std::chrono::seconds { value };
+    }();
+    const std::uintmax_t max_videos_size_bytes_ = [this]() -> std::uintmax_t {
+        const auto gb = get_parameter_or<double>("max_videos_size_gb", 0.0);
+        if (gb < 0.0) throw std::runtime_error("Parameter \"max_videos_size_gb\" must be >= 0");
+        return static_cast<std::uintmax_t>(gb * 1024.0 * 1024.0 * 1024.0);
+    }();
+    const bool auto_record_ = get_parameter_or<bool>("auto_record", false);
 
 private: // session
     std::filesystem::path session_dir_;
@@ -314,11 +321,18 @@ private: // status
     bool status_dirty_   = false;
 
 private: // input
-    QueuedEventInputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> frame_input_;
+    QueuedEventInputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> frame_input_ {
+        validated_positive_parameter("queue_depth", 16),
+        [this](std::shared_ptr<const rmcs_msgs::CameraFrame>&& frame) {
+            if (frame) process_frame(*frame);
+        },
+    };
+    InputInterface<bool> should_shoot_input_;
 
 private: // control
     std::atomic<bool> desired_recording_ { false };
     std::atomic<bool> stop_service_requested_ { false };
+    std::chrono::steady_clock::time_point auto_record_deadline_ { };
 
 private: // worker
     std::thread service_thread_;

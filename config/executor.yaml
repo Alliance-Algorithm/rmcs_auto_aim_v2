@@ -52,6 +52,10 @@ auto_aim_recorder:
     max_duration_seconds: 0
     # 录制文件总大小上限，单位 GB；0 表示不限制
     max_videos_size_gb: 0.0
+    # 自动录制开关标志
+    # 开启时 /auto_aim/should_shoot 为真即开始录制，每次为真刷新 2 秒心跳窗口，
+    # 超过 2 秒未再为真则停止录制；开启时手动 recorder.start/stop 将被心跳覆盖
+    auto_record: false
 
 auto_aim_player:
   ros__parameters:
@@ -82,6 +86,11 @@ auto_aim_component:
     # 开启时的开火条件：自瞄允许开火且有开火意图（左键/左拨杆DOWN）
     # 关闭时的开火条件：自瞄允许开火（无需开火意图）
     manual_shoot: false
+
+    # 神符模式开关标志
+    # 开启时响应右拨杆 UP->MIDDLE / F 键切换神符跟踪
+    # 关闭时忽略切换事件，始终不跟踪神符
+    enable_rune: true
 
     # 相机在 PitchLink 下的平移外参（米），仅平移，装配不引入旋转
     # 注意，PitchLink 是整个 Pitch 的旋转点
