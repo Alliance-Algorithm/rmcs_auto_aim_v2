@@ -79,6 +79,8 @@ public:
             register_input(exposure_signal_topic, signal_input_);
         }
         register_output(frame_topic, frame_output_);
+
+        register_input(std::format("/{}/enable", get_component_name()), enable_input_, false);
     }
 
     ~AutoAimCapturerComponent() override {
@@ -181,8 +183,32 @@ private:
         }
     }
 
+    [[nodiscard]] auto capture_enabled() const noexcept -> bool {
+        return !enable_input_.ready() || *enable_input_;
+    }
+
     void worker_fsm() {
         while (true) {
+            if (!capture_enabled()) {
+                // 禁用：暂停出帧（相机保持连接），清空缓冲，等待 enable
+                RCLCPP_INFO(logger_, "[DISABLED] Capture disabled, waiting for enable...");
+                (void)test_and_reconnect_camera();
+                (void)worker_set_check_camera_trigger_mode(true);
+                using namespace std::chrono_literals;
+                while (!capture_enabled()) {
+                    unmatched_signal_buffer_.clear();
+                    unmatched_image_buffer_.clear();
+                    last_frame_time_.store(
+                        std::chrono::steady_clock::now(), std::memory_order::release);
+                    if (test_and_reconnect_camera()) {
+                        (void)worker_set_check_camera_trigger_mode(true);
+                    }
+                    worker_sleep_for(100ms);
+                }
+                RCLCPP_INFO(logger_, "[ENABLED] Capture enabled");
+                continue;
+            }
+
             (void)test_and_reconnect_camera();
             matching_array_.clear();
             sync_model_.reset();
@@ -300,6 +326,7 @@ private:
 
         while (true) {
             if (test_and_reconnect_camera()) return;
+            if (!capture_enabled()) return;
 
             using namespace std::chrono_literals;
             if (!worker_wait_until(
@@ -402,6 +429,7 @@ private:
                 if (!worker_set_check_camera_trigger_mode(false)) return;
                 continue;
             }
+            if (!capture_enabled()) return;
 
             using namespace std::chrono_literals;
             if (!worker_wait_until([this] noexcept { return unmatched_image_buffer_.readable(); },
@@ -596,6 +624,8 @@ private:
     EventInputInterface<rmcs_msgs::BoardClock::time_point> signal_input_ {
         [this](const rmcs_msgs::BoardClock::time_point& timestamp) { signal_callback(timestamp); },
     };
+
+    InputInterface<bool> enable_input_;
 
     struct UnmatchedSignal {
         rmcs_msgs::BoardClock::time_point board_timestamp;
