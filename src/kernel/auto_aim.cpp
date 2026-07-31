@@ -305,8 +305,10 @@ struct AutoAim::Impl {
             }
         }
 
+        const auto distance = trackable ? trackable->get_direction().norm() : 0.0;
         std::apply([&](auto&&... drawable) { (visual.draw_later(drawable), ...); },
             std::tuple {
+                Canvas::Text { std::format("{:.2f}m", distance), { 10, 600 }, kWhite },
                 Canvas::Text { "PREAIM", { 10, 620 }, addition.pre_aim ? kRed : kWhite },
                 Canvas::Text { "TRACK", { 10, 640 }, addition.should_track ? kRed : kWhite },
                 Canvas::Text { "SHOOT", { 10, 660 }, addition.should_shoot ? kRed : kWhite },

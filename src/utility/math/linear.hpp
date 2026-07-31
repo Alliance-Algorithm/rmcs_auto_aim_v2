@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <concepts>
 #include <limits>
 
@@ -152,6 +153,8 @@ struct Scalar2d {
         auto result = T { };
         return linear::details::clone_scalar2d(*this, result);
     }
+
+    auto norm() const noexcept { return std::hypot(x, y); }
 };
 using Point2d = Scalar2d;
 
@@ -200,6 +203,8 @@ struct Scalar3d {
 
         return result;
     }
+
+    auto norm() const noexcept { return std::hypot(x, y, z); }
 };
 using Vector3d    = Scalar3d;
 using Point3d     = Scalar3d;

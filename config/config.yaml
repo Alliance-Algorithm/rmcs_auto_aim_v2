@@ -44,10 +44,10 @@ tracker:
   robot:
     noise_x: 1e-4
     noise_y: 1e-4
-    noise_z: 1e-6
+    noise_z: 1e-8
     noise_vx: 2e-1
     noise_vy: 2e-1
-    noise_vz: 1e-6
+    noise_vz: 1e-8
     noise_rotation_angle: 1e-3
     noise_rotation_speed: 1e-0
     noise_observation: 40.0
