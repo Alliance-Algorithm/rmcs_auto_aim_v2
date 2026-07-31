@@ -95,6 +95,9 @@ struct FireController::Impl {
         if (!(config.degraded_angle_speed >= 0.0)) {
             throw std::runtime_error { "FireControllerV2: degraded_angle_speed must be >= 0" };
         }
+        if (!(config.window_redundancy > 0.0 && config.window_redundancy <= 1.0)) {
+            throw std::runtime_error { "FireControllerV2: window_redundancy must be in (0, 1]" };
+        }
 
         config.offset_yaw    = util::deg2rad(config.offset_yaw);
         config.offset_pitch  = util::deg2rad(config.offset_pitch);
@@ -168,8 +171,8 @@ struct FireController::Impl {
         const auto cycle_time = std::numbers::pi / (2.0 * omega);
         const auto v_track    = stroke / cycle_time;
 
-        const auto v_max = state.max_yaw_vel * 0.8;
-        const auto a_max = state.max_yaw_acc * 0.8;
+        const auto v_max = state.max_yaw_vel * config.window_redundancy;
+        const auto a_max = state.max_yaw_acc * config.window_redundancy;
 
         // 预瞄时间计算
         auto stable_window = double { };
@@ -212,8 +215,6 @@ struct FireController::Impl {
 
         const auto aimpoints = trackable.get_aimpoints();
         const auto omega     = trackable.get_rotation_speed();
-
-        if (aimpoints.size() == 1) return { 0, 0.0 };
 
         // 目标身份变化时重置滞回状态
         if (use_pre_aim && trackable.id() != last_device) {
