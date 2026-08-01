@@ -190,19 +190,14 @@ private:
     void worker_fsm() {
         while (true) {
             if (!capture_enabled()) {
-                // 禁用：暂停出帧（相机保持连接），清空缓冲，等待 enable
-                RCLCPP_INFO(logger_, "[DISABLED] Capture disabled, waiting for enable...");
-                (void)test_and_reconnect_camera();
-                (void)worker_set_check_camera_trigger_mode(true);
+                RCLCPP_INFO(logger_, "[DISABLED] Capture disabled, disconnecting camera...");
+                camera_.reset();
                 using namespace std::chrono_literals;
                 while (!capture_enabled()) {
                     unmatched_signal_buffer_.clear();
                     unmatched_image_buffer_.clear();
                     last_frame_time_.store(
                         std::chrono::steady_clock::now(), std::memory_order::release);
-                    if (test_and_reconnect_camera()) {
-                        (void)worker_set_check_camera_trigger_mode(true);
-                    }
                     worker_sleep_for(100ms);
                 }
                 RCLCPP_INFO(logger_, "[ENABLED] Capture enabled");
