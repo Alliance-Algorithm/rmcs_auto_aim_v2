@@ -36,6 +36,8 @@ private:
     bool manual_shoot = false;
     bool enable_rune  = true;
 
+    DeviceIds track_ids = DeviceIds::Full();
+
     std::optional<rmcs_msgs::RobotId> dangerous_fallback { };
 
     struct GimbalState {
@@ -147,6 +149,31 @@ public:
             }
         }
 
+        /// 跟踪目标兵种白名单，缺省默认 FULL（全部兵种）
+        /// 可选兵种名或 FULL
+        if (params.contains("track_ids")) {
+            auto resolved = DeviceIds::None();
+            for (auto value : params.get<std::vector<std::string>>("track_ids")) {
+                std::ranges::transform(value, value.begin(), ::toupper);
+                if (value == "FULL") {
+                    resolved = DeviceIds::Full();
+                    rclcpp.info("Track All Robots");
+                    break;
+                }
+                if (const auto id = from_string(value); id != DeviceId::UNKNOWN) {
+                    resolved.append(id);
+                } else {
+                    rclcpp.warn("track_ids '{}' 无法识别，已忽略", value);
+                }
+            }
+            track_ids = resolved;
+        }
+
+        rclcpp.info("Track Ids:");
+        for (auto item : track_ids.items()) {
+            rclcpp.info("  - {}", to_string(item));
+        }
+
         if (auto config = util::serialize<FireController::Config>("fire_control", params)) {
             fire = std::make_unique<FireController>(*config);
         } else {
@@ -238,10 +265,7 @@ public:
 
             ctx.id = *robot_id;
 
-            /// TODO:
-            /// 跟踪目标，用于适配后期可能存在的需求，
-            /// 比如无人机前哨 Only 模式，哨兵滤除特殊兵种等
-            ctx.track_ids = DeviceIds::Full();
+            ctx.track_ids = track_ids;
         });
 
         if (auto_aim.command_updated()) {

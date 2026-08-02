@@ -92,6 +92,11 @@ auto_aim_component:
     # 关闭时忽略切换事件，始终不跟踪神符
     enable_rune: true
 
+    # 跟踪目标兵种白名单，缺省默认 FULL（全部兵种）
+    # 可选：HERO / ENGINEER / INFANTRY_3 / INFANTRY_4 / SENTRY / OUTPOST / BASE
+    # 特殊值：FULL（全部）
+    track_ids: [FULL]
+
     # 相机在 PitchLink 下的平移外参（米），仅平移，装配不引入旋转
     # 注意，PitchLink 是整个 Pitch 的旋转点
     camera_translation: [0.0, 0.0, 0.0]

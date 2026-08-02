@@ -1,7 +1,9 @@
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <generator>
+#include <string_view>
 #include <utility>
 
 namespace rmcs {
@@ -83,6 +85,11 @@ constexpr auto from_index(std::size_t data) noexcept -> DeviceId {
     return (data < id::details::id_underlyings.size())
         ? DeviceId { id::details::id_underlyings[data] }
         : DeviceId::UNKNOWN;
+}
+constexpr auto from_string(std::string_view name) noexcept -> DeviceId {
+    const auto it = std::ranges::find(id::details::id_underlyings, name,
+        [](std::uint16_t underlying) { return to_string(static_cast<DeviceId>(underlying)); });
+    return it != id::details::id_underlyings.end() ? static_cast<DeviceId>(*it) : DeviceId::UNKNOWN;
 }
 
 struct DeviceIds {
