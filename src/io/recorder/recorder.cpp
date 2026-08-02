@@ -33,7 +33,7 @@ public:
         : Node(get_component_name(),
               rclcpp::NodeOptions { }.automatically_declare_parameters_from_overrides(true)) {
         register_input(std::string { kFrameTopic }, frame_input_);
-        register_input("/auto_aim/should_shoot", should_shoot_input_, false);
+        register_input("/auto_aim/should_control", should_control_input_, false);
     }
 
     ~AutoAimRecorderComponent() override {
@@ -61,7 +61,7 @@ public:
         if (!auto_record_) return;
 
         const auto now = std::chrono::steady_clock::now();
-        if (should_shoot_input_.ready() && *should_shoot_input_) {
+        if (should_control_input_.ready() && *should_control_input_) {
             auto_record_deadline_ = now + kAutoRecordHold;
         }
 
@@ -327,7 +327,7 @@ private: // input
             if (frame) process_frame(*frame);
         },
     };
-    InputInterface<bool> should_shoot_input_;
+    InputInterface<bool> should_control_input_;
 
 private: // control
     std::atomic<bool> desired_recording_ { false };
