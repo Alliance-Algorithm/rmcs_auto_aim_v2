@@ -83,6 +83,8 @@ private:
         }
     } };
 
+    InputInterface<bool> navigation_rune_request;
+
     InputInterface<rmcs_msgs::RobotId> robot_id;
     InputInterface<rmcs_msgs::Switch> rswitch;
     InputInterface<rmcs_msgs::Switch> lswitch;
@@ -108,6 +110,8 @@ private:
 
 public:
     AutoAimComponent() {
+        register_input("/rmcs_navigation/request/track_rune", navigation_rune_request, false);
+
         register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
         register_input("/referee/id", robot_id, false);
         register_input("/remote/switch/right", rswitch, false);
@@ -255,6 +259,9 @@ public:
             if (enable_rune) {
                 if (rune_switch_rising || rune_key_rising) //
                     ctx.track_rune = !ctx.track_rune;
+                if (navigation_rune_request.ready()) {
+                    ctx.track_rune = *navigation_rune_request;
+                }
             } else {
                 ctx.track_rune = false;
             }
