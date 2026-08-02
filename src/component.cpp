@@ -83,6 +83,12 @@ private:
         }
     } };
 
+    struct SimpleComponent : public rmcs_executor::Component {
+        auto update() -> void override { }
+    };
+    std::shared_ptr<SimpleComponent> context_component =
+        create_partner_component<SimpleComponent>(get_component_name() + "_context");
+
     InputInterface<bool> navigation_rune_request;
 
     InputInterface<rmcs_msgs::RobotId> robot_id;
@@ -110,14 +116,15 @@ private:
 
 public:
     AutoAimComponent() {
-        register_input("/rmcs_navigation/request/track_rune", navigation_rune_request, false);
+        context_component->register_input(
+            "/rmcs_navigation/request/track_rune", navigation_rune_request, false);
 
-        register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
-        register_input("/referee/id", robot_id, false);
-        register_input("/remote/switch/right", rswitch, false);
-        register_input("/remote/switch/left", lswitch, false);
-        register_input("/remote/mouse", mouse, false);
-        register_input("/remote/keyboard", keyboard, false);
+        context_component->register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
+        context_component->register_input("/referee/id", robot_id, false);
+        context_component->register_input("/remote/switch/right", rswitch, false);
+        context_component->register_input("/remote/switch/left", lswitch, false);
+        context_component->register_input("/remote/mouse", mouse, false);
+        context_component->register_input("/remote/keyboard", keyboard, false);
 
         register_output("/auto_aim/should_control", should_track, false);
         register_output("/auto_aim/should_shoot", should_shoot, false);
