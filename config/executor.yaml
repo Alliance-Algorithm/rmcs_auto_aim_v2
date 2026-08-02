@@ -140,3 +140,8 @@ auto_aim_component:
       require_stable_command: true
       yaw_tolerance: 0.07 # m，横向单边容差
       pitch_tolerance: 0.04 # m，纵向单边容差
+
+      # 能量机关攻击节奏（秒）：idle 为抑制发射的时序空闲期，
+      # shoot 为允许发射窗口，二者交替循环
+      rune_idle_duration: 0.4 # s
+      rune_shoot_duration: 0.2 # s

@@ -24,8 +24,8 @@ struct FireController::Impl {
     DeviceId last_device = DeviceId::UNKNOWN;
 
     Repeat rune_attack_actions {
-        Repeat::Action { "idle", 0.4 },
-        Repeat::Action { "shoot", 0.2 },
+        Repeat::Action { "idle", config.rune_idle_duration },
+        Repeat::Action { "shoot", config.rune_shoot_duration },
     };
 
     Printer logging { "fire" };

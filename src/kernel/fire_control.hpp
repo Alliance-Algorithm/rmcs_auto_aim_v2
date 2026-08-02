@@ -33,6 +33,9 @@ public:
         bool require_stable_command = true;
         bool attack_preaim          = false;
 
+        double rune_idle_duration;
+        double rune_shoot_duration;
+
         static constexpr std::tuple metas {
             // clang-format off
             &Config::bullet_speed, "bullet_speed",
@@ -47,6 +50,8 @@ public:
             &Config::pitch_tolerance, "pitch_tolerance",
             &Config::require_stable_command, "require_stable_command",
             &Config::attack_preaim, "attack_preaim",
+            &Config::rune_idle_duration, "rune_idle_duration",
+            &Config::rune_shoot_duration, "rune_shoot_duration",
             // clang-format on
         };
     };
