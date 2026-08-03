@@ -12,6 +12,9 @@
 
 #include <eigen3/Eigen/Geometry>
 
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
+
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -947,12 +950,21 @@ struct RuneModel::Impl {
             cov(kY, kY) > 150.0,
             std::abs(state[kX]) > 15.0,
             std::abs(state[kY]) > 15.0,
-            std::abs(state[kZ]) > 2.0,
+            std::abs(state[kZ]) > 5.0,
             std::abs(state[kW]) > 10.0 * std::numbers::pi,
             state.hasNaN() == true,
             state.allFinite() == false,
         };
-        return std::ranges::any_of(checks, std::identity { });
+        if (std::ranges::any_of(checks, std::identity { })) {
+            static const auto logger = rclcpp::get_logger("rune_model");
+            RCLCPP_WARN(logger,
+                "rune diverged: state=[x=%.4f, y=%.4f, z=%.4f, w=%.4f, a=%.4f, psi=%.4f] | "
+                "cov_diag=[%.4f, %.4f, %.4f, %.4f, %.4f, %.4f] | update_count=%zu",
+                state[kX], state[kY], state[kZ], state[kW], state[kA], state[kPsi], cov(kX, kX),
+                cov(kY, kY), cov(kZ, kZ), cov(kW, kW), cov(kA, kA), cov(kPsi, kPsi), update_count);
+            return true;
+        }
+        return false;
     }
 };
 
