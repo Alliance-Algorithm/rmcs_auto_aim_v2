@@ -4,7 +4,9 @@
 using namespace rmcs;
 
 struct ShootEvaluator::Impl {
-    static constexpr auto kMinDistance = 1e-6;
+    // 角容差距离上限：超过该距离时窗口角宽保持此处的等效值，不再随距离收窄
+    static constexpr auto kMinDistance = 0.01;
+    static constexpr auto kMaxDistance = 5.00;
 
     Config config;
 
@@ -18,18 +20,18 @@ struct ShootEvaluator::Impl {
         double upper;
     };
 
-    static auto finite(double value) noexcept -> bool { return std::isfinite(value); }
+    static constexpr auto finite(double value) noexcept -> bool { return std::isfinite(value); }
 
-    static auto finite(const Point3d& p) noexcept -> bool {
+    static constexpr auto finite(const Point3d& p) noexcept -> bool {
         return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
     }
 
-    static auto finite(Command const& command) noexcept -> bool {
+    static constexpr auto finite(Command const& command) noexcept -> bool {
         return finite(command.yaw) && finite(command.pitch) //
             && finite(command.center) && finite(command.armor);
     }
 
-    static auto finite(double yaw, double pitch) noexcept -> bool {
+    static constexpr auto finite(double yaw, double pitch) noexcept -> bool {
         return finite(yaw) && finite(pitch);
     }
 
@@ -58,13 +60,14 @@ struct ShootEvaluator::Impl {
         return error >= window.right && error <= window.left;
     }
 
-    static auto in_pitch_window(double pitch, double center, const PitchWindow& window) noexcept
-        -> bool {
+    static constexpr auto in_pitch_window(
+        double pitch, double center, const PitchWindow& window) noexcept -> bool {
         const auto error = pitch - center;
         return error >= window.lower && error <= window.upper;
     }
 
-    static auto yaw_window(const Point3d& attack, double yaw_tolerance) noexcept -> YawWindow {
+    static constexpr auto yaw_window(const Point3d& attack, double yaw_tolerance) noexcept
+        -> YawWindow {
         const auto yaw_center = std::atan2(attack.y, attack.x);
         const auto lat_x      = -std::sin(yaw_center);
         const auto lat_y      = +std::cos(yaw_center);
@@ -80,7 +83,7 @@ struct ShootEvaluator::Impl {
         };
     }
 
-    static auto pitch_window(const Point3d& attack, double pitch_tolerance) noexcept
+    static constexpr auto pitch_window(const Point3d& attack, double pitch_tolerance) noexcept
         -> PitchWindow {
         const auto distance_xy  = std::hypot(attack.x, attack.y);
         const auto pitch_center = std::atan2(attack.z, distance_xy);
@@ -97,41 +100,34 @@ struct ShootEvaluator::Impl {
     explicit Impl(const Config& config)
         : config { config } { }
 
-    auto evaluate(Command const& command, double yaw, double pitch) noexcept -> bool {
+    auto evaluate(Command const& command, double yaw, double pitch) noexcept {
         if (!finite(command) || !finite(yaw, pitch)) {
-            last_command.reset();
             return false;
         }
 
         const auto distance_xy = std::hypot(command.armor.x, command.armor.y);
-        if (!(distance_xy > kMinDistance)) {
-            last_command.reset();
+        if (distance_xy < kMinDistance) {
             return false;
         }
+
+        const auto ratio  = std::min(distance_xy, kMaxDistance) / distance_xy;
+        const auto attack = Point3d {
+            command.armor.x * ratio,
+            command.armor.y * ratio,
+            command.armor.z * ratio,
+        };
 
         const auto scale = std::cos(yaw_angle(command.center, command.armor));
 
         const auto scaled_yaw_tol   = config.yaw_tolerance * scale;
         const auto scaled_pitch_tol = config.pitch_tolerance * scale;
 
-        const auto yaw_win   = this->yaw_window(command.armor, scaled_yaw_tol);
-        const auto pitch_win = this->pitch_window(command.armor, scaled_pitch_tol);
+        const auto yaw_win   = this->yaw_window(attack, scaled_yaw_tol);
+        const auto pitch_win = this->pitch_window(attack, scaled_pitch_tol);
 
-        const auto aim_aligned = in_yaw_window(yaw, command.yaw, yaw_win)
+        return in_yaw_window(yaw, command.yaw, yaw_win)
             && in_pitch_window(pitch, command.pitch, pitch_win);
-
-        auto command_stable = false;
-        if (last_command.has_value()) {
-            command_stable = in_yaw_window(last_command->yaw, command.yaw, yaw_win)
-                && in_pitch_window(last_command->pitch, command.pitch, pitch_win);
-        }
-
-        last_command = command;
-        return aim_aligned && (!config.require_stable_command || command_stable);
     }
-
-private:
-    std::optional<Command> last_command { };
 };
 
 ShootEvaluator::ShootEvaluator(const Config& config)
