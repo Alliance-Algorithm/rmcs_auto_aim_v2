@@ -137,9 +137,8 @@ auto_aim_component:
       # 选板窗口滞回比例（施密特）：进入 (1-h)、退出 (1+h)
       window_hysteresis: 0.2
 
-      require_stable_command: true
-      yaw_tolerance: 0.07 # m，横向单边容差
-      pitch_tolerance: 0.04 # m，纵向单边容差
+      yaw_tolerance: 0.07 # m，横向单边容差（≤5m 时精确，超过后按 5m 等效角宽）
+      pitch_tolerance: 0.04 # m，纵向单边容差（同上）
 
       # 能量机关攻击节奏（秒）：idle 为抑制发射的时序空闲期，
       # shoot 为允许发射窗口，二者交替循环

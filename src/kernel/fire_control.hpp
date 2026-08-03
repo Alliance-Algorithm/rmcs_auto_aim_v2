@@ -30,9 +30,7 @@ public:
         double yaw_tolerance   = 0.07;
         double pitch_tolerance = 0.04;
 
-        bool require_stable_command = true;
-        bool attack_preaim          = false;
-
+        bool attack_preaim = false;
         double rune_idle_duration;
         double rune_shoot_duration;
 
@@ -48,7 +46,6 @@ public:
             &Config::window_hysteresis, "window_hysteresis",
             &Config::yaw_tolerance, "yaw_tolerance",
             &Config::pitch_tolerance, "pitch_tolerance",
-            &Config::require_stable_command, "require_stable_command",
             &Config::attack_preaim, "attack_preaim",
             &Config::rune_idle_duration, "rune_idle_duration",
             &Config::rune_shoot_duration, "rune_shoot_duration",

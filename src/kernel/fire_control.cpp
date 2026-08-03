@@ -104,9 +104,8 @@ struct FireController::Impl {
         config.attack_window = util::deg2rad(config.attack_window);
 
         shoot_evaluator = std::make_unique<ShootEvaluator>(ShootEvaluator::Config {
-            .yaw_tolerance          = config.yaw_tolerance,
-            .pitch_tolerance        = config.pitch_tolerance,
-            .require_stable_command = config.require_stable_command,
+            .yaw_tolerance   = config.yaw_tolerance,
+            .pitch_tolerance = config.pitch_tolerance,
         });
     }
 
