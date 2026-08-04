@@ -442,15 +442,14 @@ struct Tracker::Impl {
                     const auto v = state.rotation_speed;
 
                     const auto text_large_rune = [&] {
-                        return std::format(
-                            "spd_{}(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), e={:.3f}",
-                            state.update_count, state.sine_v, state.sine_a,
-                            state.sine_phase, state.sine_omega, state.prediction_cost);
+                        return std::format("spd_{}(t)={:+.2f}{:+.2f}*sin({:+.2f}{:+.2f}t), "
+                                           "e={:.3f}",
+                            state.update_count, state.sine_v, state.sine_a, state.sine_phase,
+                            state.sine_omega, state.prediction_cost);
                     };
                     const auto text_small_rune = [&] {
-                        return std::format(
-                            "spd_{}(t)={:+.2f}, e={:.3f}",
-                            state.update_count, v, state.prediction_cost);
+                        return std::format("spd_{}(t)={:+.2f}, e={:.3f}", state.update_count, v,
+                            state.prediction_cost);
                     };
                     const auto text_fallback = [&] { return std::format("theta_ekf={:+.2f}", a); };
 

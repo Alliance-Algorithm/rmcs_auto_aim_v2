@@ -142,6 +142,11 @@ public:
         if (params.contains("enable_rune")) {
             enable_rune = params.get_bool("enable_rune");
         }
+        if (params.contains("default_attack_rune")) {
+            auto_aim.with_context([&](AutoAim::Context& ctx) {
+                ctx.track_rune = params.get_bool("default_attack_rune");
+            });
+        }
 
         /// WARN: 危险回退！仅供裁判系统缺席时调试使用。
         /// 生效后机器人身份将被强行绑定为对应阵营哨兵，
