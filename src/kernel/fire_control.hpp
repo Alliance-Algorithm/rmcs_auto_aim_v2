@@ -70,7 +70,7 @@ public:
         bool shoot   = false;
         bool pre_aim = false;
 
-        Direction3d target;
+        AimPoint target;
         Point3d center;
         Point3d attack;
     };

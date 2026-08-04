@@ -10,6 +10,9 @@ namespace rmcs {
 struct AimPoint : Point3d {
     bool valid = true;
 
+    Vector3d ff_v = Vector3d::kZero();
+    Vector3d ff_a = Vector3d::kZero();
+
     constexpr AimPoint() noexcept = default;
 
     constexpr AimPoint(double x, double y, double z, bool valid = true) noexcept

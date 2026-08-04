@@ -293,7 +293,7 @@ struct AutoAim::Impl {
             visual.publish(addition.aim_yaw, "aim_yaw");
             visual.publish(addition.aim_pitch, "aim_pitch");
 
-            if (auto aim_2d = estimator.make_point2d(addition.attack)) {
+            if (const auto aim_2d = estimator.make_point2d(addition.attack)) {
                 const auto color = addition.should_shoot //
                     ? (addition.pre_aim ? kOrange : kRed)
                     : (addition.pre_aim ? kYellow : kGreen);

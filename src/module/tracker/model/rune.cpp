@@ -53,7 +53,7 @@ auto RuneModel::State::get_direction() const -> Point3d { return Point3d { x, y,
 
 auto RuneModel::State::get_rotation_speed() const -> double { return rotation_speed; }
 
-auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
+auto RuneModel::State::get_aimpoints() const -> AimPoints {
     const auto converge_duration = std::chrono::seconds { sine_valid ? 6 : 3 };
     if (Clock::now() - start_timestamp < converge_duration) return { };
 
@@ -61,17 +61,54 @@ auto RuneModel::State::get_aimpoints() const -> std::vector<Point3d> {
 
     static constexpr std::array kBladeAnglesDeg = { 0.0, 72.0, 144.0, 216.0, 288.0 };
 
-    auto result = std::vector<Point3d> { };
+    auto result = AimPoints { };
     for (const auto& [deg, inactive] : std::views::zip(kBladeAnglesDeg, inactive)) {
         if (!inactive) continue;
 
-        double alpha   = rotation_angle + util::deg2rad(deg);
-        double local_y = -kRuneGlobalRadius * std::sin(alpha);
-        double local_z = +kRuneGlobalRadius * std::cos(alpha);
-        Eigen::Vector3d world =
-            Eigen::Vector3d(x, y, z) + r_face * Eigen::Vector3d(0, local_y, local_z);
+        auto aimpoint = AimPoint { };
+        {
+            const auto alpha = rotation_angle + util::deg2rad(deg);
+            const auto sin_a = std::sin(alpha);
+            const auto cos_a = std::cos(alpha);
 
-        result.emplace_back(world.x(), world.y(), world.z());
+            // 符叶绕符面法线旋转（符中心静止、符面朝向固定）
+            const auto omega     = rotation_speed;
+            const auto alpha_acc = sine_valid ? sine_a * sine_omega * std::cos(sine_phase) : 0.0;
+
+            const auto local = Eigen::Vector3d {
+                0.0,
+                -kRuneGlobalRadius * sin_a,
+                +kRuneGlobalRadius * cos_a,
+            };
+            const auto local_v = Eigen::Vector3d {
+                0.0,
+                -kRuneGlobalRadius * cos_a * omega,
+                -kRuneGlobalRadius * sin_a * omega,
+            };
+            const auto local_a = Eigen::Vector3d {
+                0.0,
+                -kRuneGlobalRadius * cos_a * alpha_acc + kRuneGlobalRadius * sin_a * omega * omega,
+                -kRuneGlobalRadius * sin_a * alpha_acc - kRuneGlobalRadius * cos_a * omega * omega,
+            };
+
+            const auto world   = (Eigen::Vector3d { x, y, z } + r_face * local).eval();
+            const auto world_v = (r_face * local_v).eval();
+            const auto world_a = (r_face * local_a).eval();
+
+            aimpoint = AimPoint { world };
+
+            // 方向向量 d = world/|world| 的角速度 ω 与角加速度 α（射线假设）
+            if (const auto distance = world.norm(); distance > 1e-6) {
+                const auto ff_v = (world.cross(world_v) / (distance * distance)).eval();
+                const auto ff_a = (world.cross(world_a) / (distance * distance)
+                    - ff_v * (2.0 * world.dot(world_v) / (distance * distance)))
+                                      .eval();
+                aimpoint.ff_v   = ff_v;
+                aimpoint.ff_a   = ff_a;
+            }
+        }
+
+        result.emplace_back(aimpoint);
         break;
     }
     return result;

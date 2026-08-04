@@ -342,6 +342,8 @@ struct FireController::Impl {
         auto center = Point3d { };
         auto yaw    = double { };
         auto pitch  = double { };
+        auto ff_v   = Vector3d::kZero();
+        auto ff_a   = Vector3d::kZero();
 
         auto aimpoints = AimPoints { };
         auto new_time  = double { fly_time };
@@ -358,7 +360,10 @@ struct FireController::Impl {
             } else if (aim_boundary) {
                 attack = boundary_point(center, clone->get_aimpoints(), pre_aim_offset);
             } else {
-                attack = clone->get_aimpoints()[aim_selected];
+                const auto aimpoint = clone->get_aimpoints()[aim_selected];
+                attack              = aimpoint;
+                ff_v                = aimpoint.ff_v;
+                ff_a                = aimpoint.ff_a;
             }
 
             solution.input.v0    = config.bullet_speed;
@@ -418,19 +423,20 @@ struct FireController::Impl {
             }
         }
 
-        const auto make_target = [](double yaw, double pitch) {
-            return Direction3d {
-                +std::cos(pitch) * std::cos(yaw),
-                +std::cos(pitch) * std::sin(yaw),
-                -std::sin(pitch),
-            };
+        auto target = AimPoint {
+            +std::cos(pitch) * std::cos(yaw),
+            +std::cos(pitch) * std::sin(yaw),
+            -std::sin(pitch),
         };
+        target.ff_v = ff_v;
+        target.ff_a = ff_a;
+
         return Aimed {
             .aim_yaw = yaw,
             .pitch   = pitch,
             .shoot   = should_shoot,
             .pre_aim = pre_aim,
-            .target  = make_target(yaw, pitch),
+            .target  = target,
             .center  = center,
             .attack  = attack,
         };

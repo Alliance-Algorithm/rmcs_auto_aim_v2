@@ -2,6 +2,7 @@
 
 #include "utility/clock.hpp"
 #include "utility/pimpl.hpp"
+#include "utility/robot/aimpoint.hpp"
 #include "utility/robot/rune.hpp"
 
 #include <array>
@@ -37,14 +38,14 @@ public:
         double sine_omega = 0.0;
         double sine_phase = 0.0;
         double sine_t     = 0.0;
-        bool   sine_valid = false;
+        bool sine_valid   = false;
 
         std::size_t update_count = 0;
 
         auto transition(double seconds) -> void;
 
         auto get_direction() const -> Point3d;
-        auto get_aimpoints() const -> std::vector<Point3d>;
+        auto get_aimpoints() const -> AimPoints;
         auto get_rotation_speed() const -> double;
     };
 
