@@ -330,6 +330,8 @@ public:
                     addition.pre_aim      = aimed->pre_aim;
                     addition.should_track = true;
                     addition.should_shoot = aimed->shoot;
+                    addition.ff_v         = aimed->target.ff_v;
+                    addition.ff_a         = aimed->target.ff_a;
                 });
             }
         }

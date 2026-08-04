@@ -302,6 +302,26 @@ struct AutoAim::Impl {
                     .radius = 5,
                     .color  = color,
                 });
+
+                // 前馈投影：端点 = attack + ff×attack，对应目标的切向运动方向与快慢
+                const auto base    = addition.attack.make<Eigen::Vector3d>();
+                const auto vectors = std::array {
+                    std::pair { addition.ff_v, kCyan },
+                    std::pair { addition.ff_a, kMagenta },
+                };
+
+                for (const auto& [ff, ff_color] : vectors) {
+                    if (ff.norm() < 1e-6) continue;
+
+                    const auto endpoint = Point3d { base + ff.make<Eigen::Vector3d>().cross(base) };
+                    if (const auto end_2d = estimator.make_point2d(endpoint)) {
+                        visual.draw_later(Canvas::Line {
+                            .begin = aim_2d->make<cv::Point2i>(),
+                            .end   = end_2d->make<cv::Point2i>(),
+                            .color = ff_color,
+                        });
+                    }
+                }
             }
         }
 

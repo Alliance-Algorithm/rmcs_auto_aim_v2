@@ -40,6 +40,9 @@ public:
         struct Addition {
             Point3d attack = Point3d::kNaN();
 
+            Vector3d ff_v = Vector3d::kZero();
+            Vector3d ff_a = Vector3d::kZero();
+
             double aim_yaw   = kNaN;
             double aim_pitch = kNaN;
 
