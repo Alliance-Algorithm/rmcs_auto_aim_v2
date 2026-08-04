@@ -105,6 +105,8 @@ private:
     OutputInterface<bool> single_shoot;
     OutputInterface<Eigen::Vector3d> track_target;
     OutputInterface<Eigen::Vector3d> robot_center;
+    OutputInterface<Eigen::Vector3d> ff_v;
+    OutputInterface<Eigen::Vector3d> ff_a;
 
     double max_yaw_acc = 100.;
     double max_yaw_vel = 3.;
@@ -131,6 +133,8 @@ public:
         register_output("/auto_aim/single_shoot", single_shoot, false);
         register_output("/auto_aim/control_direction", track_target, kTNaN);
         register_output("/auto_aim/robot_center", robot_center, kTNaN);
+        register_output("/auto_aim/ff_a", ff_a, Eigen::Vector3d::Zero());
+        register_output("/auto_aim/ff_v", ff_v, Eigen::Vector3d::Zero());
 
         const auto& params = rclcpp.params();
 
@@ -320,6 +324,9 @@ public:
 
                 *robot_center = aimed->center.make<Eigen::Vector3d>();
                 *track_target = aimed->target.make<Eigen::Vector3d>();
+
+                *ff_a = aimed->target.ff_a.make<Eigen::Vector3d>();
+                *ff_v = aimed->target.ff_v.make<Eigen::Vector3d>();
 
                 auto_aim.with_context([&](AutoAim::Context& ctx) {
                     auto& addition = ctx.addition;
