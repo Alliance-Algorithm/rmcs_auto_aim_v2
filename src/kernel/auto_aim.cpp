@@ -4,6 +4,7 @@
 #include "kernel/pose_estimator.hpp"
 #include "kernel/tracker.hpp"
 #include "kernel/visualization.hpp"
+#include "module/tracker/model/virtual_rune.hpp"
 
 #include "utility/framerate.hpp"
 #include "utility/math/linear.hpp"
@@ -12,10 +13,12 @@
 #include "utility/rclcpp/node.hpp"
 #include "utility/rclcpp/parameters.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <experimental/scope>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 
 using namespace rmcs;
@@ -31,6 +34,8 @@ struct AutoAim::Impl {
     Visualization visual { };
 
     std::unique_ptr<Tracker> tracker;
+
+    std::optional<VirtualRuneModel> virtual_rune;
 
     FramerateCounter counter;
 
@@ -78,6 +83,22 @@ struct AutoAim::Impl {
         tracker = std::make_unique<Tracker>(configs["tracker"]);
         tracker->update_camera(camera_matrix);
         tracker->update_camera(distort_coeff);
+
+        if (const auto virtual_node = configs["virtual_rune"];
+            virtual_node && !virtual_node.IsNull()) {
+            auto config = VirtualRuneModel::Config { };
+            if (auto ret = config.serialize(virtual_node); !ret) {
+                node.error("VirtualRune config error: {}", ret.error());
+                util::panic(std::format("Failed to initialize VirtualRune"));
+            }
+            if (config.enable) {
+                virtual_rune.emplace(config);
+                virtual_rune->update_camera(camera_matrix);
+                virtual_rune->update_camera(distort_coeff);
+                node.warn("VirtualRune enabled at ({}, {}, {}), {}", config.x, config.y, config.z,
+                    config.large ? "large" : "small");
+            }
+        }
     }
 
     auto process(const Image& image) -> void {
@@ -141,6 +162,16 @@ struct AutoAim::Impl {
         detector.update_detect_rune(context.track_rune);
 
         auto result = detector.detect(image_mat);
+        if (virtual_rune) {
+            virtual_rune->update_transform(iso);
+            virtual_rune->update(image.timestamp());
+
+            result.icons.clear();
+            result.bullseyes.clear();
+            std::ranges::copy(virtual_rune->icons(), std::back_inserter(result.icons));
+            std::ranges::copy(virtual_rune->bullseyes(), std::back_inserter(result.bullseyes));
+        }
+
         for (const auto& icon : result.icons) {
             visual.draw_later(Canvas::Point {
                 .origin = icon.center.make<cv::Point2i>(),

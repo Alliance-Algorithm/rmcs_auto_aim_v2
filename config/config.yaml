@@ -14,6 +14,14 @@ camera_matrix:
   ]
 distort_coeff: [-0.064232403853946, -0.087667493884102, 0, 0, 0.792381808294582]
 
+virtual_rune:
+  enable: false # 调试时改 true
+  large: false # false=小符（恒速），true=大符（正弦）
+  x: 6.670
+  y: 0.0
+  z: 2.172
+  face_yaw: 0.0
+
 detector:
   # openvino infer
   model_location: "shenzhen-0526.onnx"

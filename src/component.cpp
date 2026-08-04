@@ -34,7 +34,7 @@ private:
     std::unique_ptr<FireController> fire;
 
     bool manual_shoot = false;
-    bool enable_rune  = true;
+    bool enable_rune  = false;
 
     DeviceIds track_ids = DeviceIds::Full();
 
