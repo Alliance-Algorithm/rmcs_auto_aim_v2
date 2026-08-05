@@ -75,6 +75,7 @@ struct Tracker::Impl {
             &RuneConfig::init_seed_max_error, "init_seed_max_error",
             &RuneConfig::init_center_gate, "init_center_gate",
             &RuneConfig::init_pitch_bound, "init_pitch_bound",
+            &RuneConfig::diverge_face_angle, "diverge_face_angle",
             // clang-format on
         };
     } rune_config;

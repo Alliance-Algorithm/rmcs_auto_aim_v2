@@ -161,7 +161,7 @@ struct RuneModel::Impl {
 
         auto reset_covariance() noexcept {
             auto diag = StateVector { };
-            diag << 64.0, 64.0, 64.0, 100.0, 10.0, 64.0;
+            diag << 64.0, 64.0, 64.0, 100.0, 25.0, 10.0;
             posteriors_covariance = diag.asDiagonal();
         }
 
@@ -982,6 +982,13 @@ struct RuneModel::Impl {
         const auto& state = context.posteriors_state;
         const auto& cov   = context.posteriors_covariance;
 
+        // 符面法线（约定：指向远离车的方向）与 odom原点->符心 连线的夹角，应远小于 45 度
+        auto face_angle = std::numeric_limits<double>::quiet_NaN();
+        if (const auto r_xy = std::hypot(state[kX], state[kY]); r_xy > 0.5) {
+            const auto to_center = std::atan2(state[kY], state[kX]);
+            face_angle           = std::abs(util::normalize_angle(state[kPsi] - to_center));
+        }
+
         auto checks = std::array {
             cov(kX, kX) > 150.0,
             cov(kY, kY) > 150.0,
@@ -989,6 +996,7 @@ struct RuneModel::Impl {
             std::abs(state[kY]) > 15.0,
             std::abs(state[kZ]) > 5.0,
             std::abs(state[kW]) > 10.0 * std::numbers::pi,
+            face_angle > util::deg2rad(config.diverge_face_angle),
             state.hasNaN() == true,
             state.allFinite() == false,
         };
@@ -996,9 +1004,11 @@ struct RuneModel::Impl {
             static const auto logger = rclcpp::get_logger("rune_model");
             RCLCPP_WARN(logger,
                 "rune diverged: state=[x=%.4f, y=%.4f, z=%.4f, w=%.4f, a=%.4f, psi=%.4f] | "
-                "cov_diag=[%.4f, %.4f, %.4f, %.4f, %.4f, %.4f] | update_count=%zu",
+                "cov_diag=[%.4f, %.4f, %.4f, %.4f, %.4f, %.4f] | face_angle=%.4f | "
+                "update_count=%zu",
                 state[kX], state[kY], state[kZ], state[kW], state[kA], state[kPsi], cov(kX, kX),
-                cov(kY, kY), cov(kZ, kZ), cov(kW, kW), cov(kA, kA), cov(kPsi, kPsi), update_count);
+                cov(kY, kY), cov(kZ, kZ), cov(kW, kW), cov(kA, kA), cov(kPsi, kPsi), face_angle,
+                update_count);
             return true;
         }
         return false;

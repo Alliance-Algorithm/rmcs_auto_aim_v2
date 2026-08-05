@@ -66,6 +66,8 @@ public:
         double init_seed_max_error  = 20.0;
         double init_center_gate     = 30.0;
         double init_pitch_bound     = 20.0;
+
+        double diverge_face_angle = 45.0;
     };
 
     struct Addition {
