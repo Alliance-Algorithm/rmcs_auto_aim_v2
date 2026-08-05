@@ -90,6 +90,7 @@ private:
         create_partner_component<SimpleComponent>(get_component_name() + "_context");
 
     InputInterface<bool> navigation_rune_request;
+    InputInterface<bool> navigation_track_building_only;
 
     InputInterface<rmcs_msgs::RobotId> robot_id;
     InputInterface<rmcs_msgs::Switch> rswitch;
@@ -120,6 +121,8 @@ public:
     AutoAimComponent() {
         context_component->register_input(
             "/rmcs_navigation/request/track_rune", navigation_rune_request, false);
+        context_component->register_input(
+            "/rmcs_navigation/track_building_only", navigation_track_building_only, false);
 
         context_component->register_input("/gimbal/auto_aim/camera_frame", camera_frame, false);
         context_component->register_input("/referee/id", robot_id, false);
@@ -288,7 +291,10 @@ public:
 
             ctx.id = *robot_id;
 
-            ctx.track_ids = track_ids;
+            const auto track_building =
+                navigation_track_building_only.ready() && *navigation_track_building_only;
+            ctx.track_ids =
+                track_building ? DeviceIds { DeviceId::BASE, DeviceId::OUTPOST } : track_ids;
         });
 
         if (auto_aim.command_updated()) {
