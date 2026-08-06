@@ -98,8 +98,7 @@ private:
     InputInterface<rmcs_msgs::Mouse> mouse;
     InputInterface<rmcs_msgs::Keyboard> keyboard;
 
-    rmcs_msgs::Switch last_rswitch    = rmcs_msgs::Switch::UNKNOWN;
-    rmcs_msgs::Keyboard last_keyboard = rmcs_msgs::Keyboard::zero();
+    rmcs_msgs::Switch last_rswitch = rmcs_msgs::Switch::UNKNOWN;
 
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
@@ -258,14 +257,11 @@ public:
         }
 
         using namespace rmcs_msgs;
+        const auto rune_key_pressed = keyboard.ready() && keyboard->f;
         const auto rune_switch_rising =
             rswitch.ready() && last_rswitch == Switch::UP && *rswitch == Switch::MIDDLE;
         if (rswitch.ready()) {
             last_rswitch = *rswitch;
-        }
-        const auto rune_key_rising = keyboard.ready() && !last_keyboard.f && keyboard->f;
-        if (keyboard.ready()) {
-            last_keyboard = *keyboard;
         }
 
         const auto track_intent =
@@ -276,11 +272,10 @@ public:
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
             if (enable_rune) {
-                if (rune_switch_rising || rune_key_rising) //
-                    ctx.track_rune = !ctx.track_rune;
-                if (navigation_rune_request.ready()) {
-                    ctx.track_rune = *navigation_rune_request;
-                }
+                // 不采用 Trigger 模式控制能量机关模型，减少操作手切换的心智负担
+                if (rune_key_pressed) ctx.track_rune = true;
+                else if (navigation_rune_request.ready()) ctx.track_rune = *navigation_rune_request;
+                else if (rune_switch_rising) ctx.track_rune = !ctx.track_rune;
             } else {
                 ctx.track_rune = false;
             }
