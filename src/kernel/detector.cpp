@@ -186,12 +186,17 @@ struct Detector::Impl {
         }
         result.armors = detected;
 
+        /// FIXME:
+        /// 二维观测可以接受单根灯条的输入，但是需要严格的门禁，防止被遮挡/识别错误的灯条实例
+        /// 被传入 EKF 进行迭代，此处信息不足，无法进行有效筛选，且只观测到单根灯条而非一整个
+        /// 装甲板的情况极少，故去除此处的识别，后续引入更严格的门禁再添加回来
+
         // 邻侧灯条：单装甲板机器人 → 扩展 ROI + 识别
-        for (const auto& [_, armors] : robots) {
-            if (armors.size() == 1) {
-                find_lightbar(mat, *armors[0], result);
-            }
-        }
+        // for (const auto& [_, armors] : robots) {
+        //     if (armors.size() == 1) {
+        //         find_lightbar(mat, *armors[0], result);
+        //     }
+        // }
 
         return result;
     }
