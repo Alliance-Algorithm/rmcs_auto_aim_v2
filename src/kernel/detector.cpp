@@ -28,6 +28,8 @@ struct Detector::Impl {
     bool detect_rune = true;
     RuneDetector rune_detector;
 
+    bool detect_adjacent_lightbar = true;
+
     static auto find_lightbar(const cv::Mat& mat, const Armor2d& armor, Result& result) {
         const auto bounds = cv::Rect2i { 0, 0, mat.cols, mat.rows };
 
@@ -116,6 +118,8 @@ struct Detector::Impl {
         auto locator_result = green_light_finder.initialize(yaml["green_light_filter"]);
         if (!locator_result.has_value()) return std::unexpected { locator_result.error() };
 
+        detect_adjacent_lightbar = yaml["detect_adjacent_lightbar"].as<bool>(true);
+
         return { };
     }
 
@@ -187,9 +191,11 @@ struct Detector::Impl {
         result.armors = detected;
 
         // 邻侧灯条：单装甲板机器人 → 扩展 ROI + 识别
-        for (const auto& [_, armors] : robots) {
-            if (armors.size() == 1) {
-                find_lightbar(mat, *armors[0], result);
+        if (detect_adjacent_lightbar) {
+            for (const auto& [_, armors] : robots) {
+                if (armors.size() == 1) {
+                    find_lightbar(mat, *armors[0], result);
+                }
             }
         }
 

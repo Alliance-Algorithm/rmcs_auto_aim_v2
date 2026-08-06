@@ -38,6 +38,8 @@ detector:
   score_threshold: 0.7
   nms_threshold: 0.3
 
+  detect_adjacent_lightbar: true # 单装甲板机器人邻侧灯条识别开关
+
   green_light_filter:
     green_threshold: 120
     min_area: 20
