@@ -98,7 +98,8 @@ private:
     InputInterface<rmcs_msgs::Mouse> mouse;
     InputInterface<rmcs_msgs::Keyboard> keyboard;
 
-    rmcs_msgs::Switch last_rswitch = rmcs_msgs::Switch::UNKNOWN;
+    rmcs_msgs::Switch last_rswitch    = rmcs_msgs::Switch::UNKNOWN;
+    rmcs_msgs::Keyboard last_keyboard = rmcs_msgs::Keyboard::zero();
 
     OutputInterface<bool> should_track;
     OutputInterface<bool> should_shoot;
@@ -113,8 +114,6 @@ private:
 
     Timestamp last_yaw_vel_timestamp;
     double last_yaw_velocity = kNaN;
-
-    bool has_pressed_rune_key = false;
 
     Trackable::Unique current_trackable { };
 
@@ -259,16 +258,19 @@ public:
         }
 
         using namespace rmcs_msgs;
-        const auto rune_key_pressed = keyboard.ready() && keyboard->f;
-        if (rune_key_pressed && !navigation_rune_request.ready()) {
-            // 与导航请求互斥，防止哨兵误触发打符模式
-            has_pressed_rune_key = true;
-        }
-
         const auto rune_switch_rising =
             rswitch.ready() && last_rswitch == Switch::UP && *rswitch == Switch::MIDDLE;
         if (rswitch.ready()) {
             last_rswitch = *rswitch;
+        }
+
+        auto pressed_rune_mode = false;
+        auto release_rune_mode = false;
+        if (keyboard.ready()) {
+            pressed_rune_mode = keyboard->f && !last_keyboard.f;
+            release_rune_mode = !keyboard->f && last_keyboard.f;
+
+            last_keyboard = *keyboard;
         }
 
         const auto track_intent =
@@ -279,14 +281,14 @@ public:
         auto_aim.with_context([=, this](AutoAim::Context& ctx) {
             ctx.track_intent = track_intent;
             if (enable_rune) {
-                // 不采用 Trigger 模式控制能量机关模型，减少操作手切换的心智负担
-                if (has_pressed_rune_key) {
-                    ctx.track_rune = rune_key_pressed;
-                } else if (navigation_rune_request.ready()) {
+                if (navigation_rune_request.ready()) {
                     ctx.track_rune = *navigation_rune_request;
-                } else if (rune_switch_rising) {
+                }
+                if (rune_switch_rising) {
                     ctx.track_rune = !ctx.track_rune;
                 }
+                if (pressed_rune_mode) ctx.track_rune = true;
+                if (release_rune_mode) ctx.track_rune = false;
             } else {
                 ctx.track_rune = false;
             }
