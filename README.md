@@ -239,7 +239,7 @@ ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
 
 2026 赛季 RMUC 能量机关关键数据榜单第一（能量机关平均环数 6.4，大能量机关平均臂数 9.7）：
 
-![能量机关排名](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.jpg)
+![能量机关排名](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.png)
 
 https://github.com/user-attachments/assets/59e449b4-ba97-4658-9fb8-02bc45d51d6e
 
