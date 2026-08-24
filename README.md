@@ -4,9 +4,15 @@
 
 2026 赛季 RMUC 能量机关关键数据榜单第一（能量机关平均环数 6.4，大能量机关平均臂数 9.7）：
 
-![能量机关排名](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.png)
+<img width="640" height="360" alt="1d832fc7b443f5229dc4b613072b636f_720" src="https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.png" />
+<img width="640" height="360" alt="2d832fc7b443f5229dc4b613072b636f_720" src="https://github.com/user-attachments/assets/6f92d700-5195-439f-aafd-15171bd54481" />
+<img width="640" height="295" alt="Image_1785932566784_637" src="https://github.com/user-attachments/assets/1484e6a4-148f-4ef0-852e-476b651051ab" />
 
 https://github.com/user-attachments/assets/59e449b4-ba97-4658-9fb8-02bc45d51d6e
+
+https://github.com/user-attachments/assets/1d02dd0c-6074-4ce9-b8e3-e16c34fba3cc
+
+https://github.com/user-attachments/assets/a5d2d4ba-5cc3-44b3-9b91-827f4c507ee2
 
 ## 前言
 
