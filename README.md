@@ -1,6 +1,12 @@
 # 较为现代化的机甲大师自瞄 · 南京理工大学 Alliance 战队
 
-一些具体的文档和最佳实践可以在 [`doc`](./doc/) 目录中找到，如果需要对该项目进行二次开发，优先查看该目录下的示范和 [`test`](./test/) 中的写法
+## 效果展示
+
+2026 赛季 RMUC 能量机关关键数据榜单第一（能量机关平均环数 6.4，大能量机关平均臂数 9.7）：
+
+![能量机关排名](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.png)
+
+https://github.com/user-attachments/assets/59e449b4-ba97-4658-9fb8-02bc45d51d6e
 
 ## 前言
 
@@ -11,6 +17,8 @@
 本项目以工程化为最终目的，为机器人提供一个测试与工作流完备，配置友好，重构开销小，错误提示拟人的自瞄系统，方便队员的后续维护和持续开发，为迭代提供舒适的代码基础
 
 ## 快速开始
+
+一些具体的文档和最佳实践可以在 [`doc`](./doc/) 目录中找到，如果需要对该项目进行二次开发，优先查看该目录下的示范和 [`test`](./test/) 中的写法
 
 ### 项目构建
 
@@ -77,12 +85,13 @@ ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
 自瞄组件的参数由两部分组成：
 
 1. **组件配置**：由 RMCS executor YAML 管理，实例名与 YAML 中的参数命名空间绑定。若修改实例名，需同步修改对应的参数节。
+
 2. **算法配置**：由本项目自己的配置文件统一配置，加载优先级如下（位于运行时 share 目录下），默认只提供 `config.yaml`：
 
-   1. 环境变量 `AUTOAIM_CONFIG` 指定的路径
-   2. `custom.yaml` / `custom.yml`
-   3. `config.override.yaml` / `config.override.yml`
-   4. `config.yaml` / `config.yml`
+   - 环境变量 `AUTOAIM_CONFIG` 指定的路径
+   - `custom.yaml` / `custom.yml`
+   - `config.override.yaml` / `config.override.yml`
+   - `config.yaml` / `config.yml`
 
 所以我们可以在 `config/` 下面创建一个 `custom.yaml`，作为自己机器人的配置文件，同步至远端时，自瞄会自动选用优先级更高的配置文件，同时除了 `config.yaml` 以外的上述优先级列表中的名字，都写入了 `.gitignore` 中，避免更新仓库时会和本地配置冲突。
 
@@ -94,26 +103,46 @@ ros2 launch rmcs_bringup rmcs.launch.py robot:=mock-autoaim
 
 #### 输入接口
 
-| 接口名称 | 类型 | 说明 |
-|----------|------|------|
-| `/referee/id` | `rmcs_msgs::RobotId` | 机器人 ID，用于判断敌方颜色 |
-
-相机帧（`/gimbal/auto_aim/camera_frame`）自带曝光中点时刻的 imu 姿态与陀螺仪数据，
-约定 `imu_snapshot` 为 PitchLink 在 OdomImu 坐标系下的姿态（枪口与相机刚性连接、
-无姿态偏移）。相机在 PitchLink 下的平移外参由组件参数 `camera_translation` 给出，
-自瞄内部据此合成相机位姿；枪口方向与 yaw 角速度均由该姿态直接解算。
-
-自由采集（无硬件同步）模式下，采集组件按参数 `delay_ms`（图像与 imu 姿态间的时间差）
-以帧接收时刻为基准向前回退取 imu 快照。
+- `/gimbal/auto_aim/camera_frame(rmcs_msgs::CameraFrame)`:
+  - 必选，相机帧，由采集组件或回放组件输出（topic 可经 frame_topic 配置）。
+  - 自带曝光中点时刻的 imu 姿态与陀螺仪数据；约定 imu_snapshot 为 PitchLink 在 OdomImu 坐标系下的姿态（枪口与相机刚性连接、无姿态偏移）。
+  - 枪口方向与 yaw 角速度均由该姿态直接解算；相机在 PitchLink 下的平移外参由组件参数 camera_translation 给出。
+  - 自由采集（use_hardware_sync: false）模式下按参数 delay_ms 以帧接收时刻为基准向前回退取 imu 快照。
+- `/referee/id(rmcs_msgs::RobotId)`:
+  - 必选，机器人 ID，用于判断敌方颜色。
+  - 裁判系统缺席时可由 dangerous_fallback 强行绑定阵营（危险回退，仅供调试）。
+- `/gimbal/auto_aim/imu_snapshot(rmcs_msgs::ImuSnapshot)`:
+  - 可选，IMU 快照：PitchLink 在 OdomImu 下的姿态四元数、机体系角速度与板载时间戳。
+  - 硬同步（use_hardware_sync: true）模式下建议提供，topic 可经 imu_snapshot_topic 配置。
+  - topic 置空时姿态为 Identity、角速度为 Zero。
+- `/remote/switch/right(rmcs_msgs::Switch)`:
+  - 可选，右拨杆：UP 为跟踪意图。
+  - UP→MIDDLE 上升沿切换能量机关跟踪（enable_rune 开启时响应）。
+- `/remote/switch/left(rmcs_msgs::Switch)`:
+  - 可选，左拨杆：DOWN 为开火意图。
+  - manual_shoot 开启时开火需自瞄允许且具备开火意图。
+- `/remote/mouse(rmcs_msgs::Mouse)`:
+  - 可选，右键为跟踪意图。
+  - 左键为开火意图（同样受 manual_shoot 约束）。
+- `/remote/keyboard(rmcs_msgs::Keyboard)`:
+  - 可选，F 键切换能量机关跟踪。
+  - 仅在 enable_rune 开启时响应。
+- `/rmcs_navigation/request/track_rune(bool)`:
+  - 可选，导航系统请求攻击能量机关。
+  - 仅在 enable_rune 开启时生效。
+- `/rmcs_navigation/track_building_only(bool)`:
+  - 可选，置真时跟踪目标临时收窄为基地与前哨站。
+  - 该行为将覆盖 track_ids 白名单。
 
 #### 输出接口
 
-| 接口名称 | 类型 | 说明 |
-|----------|------|------|
-| `/auto_aim/should_control` | `bool` | 是否需要云台跟踪 |
-| `/auto_aim/should_shoot` | `bool` | 是否可以发弹 |
-| `/auto_aim/control_direction` | `Eigen::Vector3d` | 目标方向向量 |
-| `/auto_aim/robot_center` | `Eigen::Vector3d` | 目标机器人中心位置 |
+- `/auto_aim/should_control(bool)`: 是否需要云台跟踪
+- `/auto_aim/should_shoot(bool)`: 是否可以发弹
+- `/auto_aim/single_shoot(bool)`: 单发开关（能量机关跟踪时置真）
+- `/auto_aim/control_direction(Eigen::Vector3d)`: 目标方向向量
+- `/auto_aim/robot_center(Eigen::Vector3d)`: 目标机器人中心位置
+- `/auto_aim/ff_a(Eigen::Vector3d)`: 目标前馈角加速度
+- `/auto_aim/ff_v(Eigen::Vector3d)`: 目标前馈角速度
 
 
 ## 项目架构
@@ -169,21 +198,7 @@ paru -S foxglove-bin
 
 > 要注意的是，上述 IP 地址取决于运行程序的主机，如果是在机器人上运行的，则需要修改为机器人的 IP，比如：`ws://169.254.233.233:8765`
 
-**确认 Topic 的常见指令**
-
-```sh
-# 列举当前正在发布的话题名称
-ros2 topic list
-
-# 测量话题的发布频率
-ros2 topic hz /topic-name
-
-# 测量话题的发布带宽
-ros2 topic bw /topic-name
-
-# 直接输出话题
-ros2 topic echo /topic-name
-```
+![Foxglove自瞄可视化](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/Foxglove%E5%8F%AF%E8%A7%86%E5%8C%96%E6%95%88%E6%9E%9C.png)
 
 **测试**
 
@@ -222,6 +237,8 @@ start-streamer                        # 启动串流服务，阻塞在当前终�
 
 使用浏览器访问 `http://<ip>:18080/autoaim` 即可查看，注意 Firefox 等浏览器对 WebRTC 协议支持不好，存在无法播放视频推流的可能，此时需要使用 Google Chrome 播放推流
 
+![自瞄可视化窗口](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/autoaim/%E8%87%AA%E7%9E%84%E5%8F%AF%E8%A7%86%E5%8C%96%E7%AA%97%E5%8F%A3.png)
+
 > 端口可通过环境变量 `AUTOAIM_PLAYER_PORT`（默认 18080）和 `AUTOAIM_MEDIAMTX_PORT`（默认 8889）自定义
 
 详细说明见 [串流文档](./doc/streaming.md)
@@ -233,17 +250,6 @@ start-streamer                        # 启动串流服务，阻塞在当前终�
 ```sh
 ffmpeg -i "rtp://<ip>:5000" -c:v copy video.mp4
 ```
-
-
-## 效果展示
-
-2026 赛季 RMUC 能量机关关键数据榜单第一（能量机关平均环数 6.4，大能量机关平均臂数 9.7）：
-
-![能量机关排名](https://pub-997cd3005edc4b9db91df913907990bf.r2.dev/%E8%83%BD%E9%87%8F%E6%9C%BA%E5%85%B3%E6%8E%92%E5%90%8D.png)
-
-https://github.com/user-attachments/assets/59e449b4-ba97-4658-9fb8-02bc45d51d6e
-
-
 
 
 ## 核心概念
