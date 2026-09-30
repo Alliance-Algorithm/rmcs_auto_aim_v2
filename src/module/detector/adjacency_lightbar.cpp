@@ -23,13 +23,13 @@ struct AdjacencyLightbarFinder::Impl {
     };
     std::array<DetectArea, 2> areas { };
 
-    util::CameraFeature camera_feature { };
+    CameraFeature camera_feature { };
     util::NeighborBarSolution neighbor_solution { };
     double armor_thickness { 0 };
 
     std::optional<Lightbar2d> detected { };
 
-    auto set_camera_feature(const util::CameraFeature& feature) { camera_feature = feature; }
+    auto set_camera_feature(const CameraFeature& feature) { camera_feature = feature; }
 
     auto set_armor_thickness(double thickness) { armor_thickness = thickness; }
 
@@ -235,7 +235,7 @@ struct AdjacencyLightbarFinder::Impl {
     }
 };
 
-auto AdjacencyLightbarFinder::set_camera_feature(const util::CameraFeature& feature) -> void {
+auto AdjacencyLightbarFinder::set_camera_feature(const CameraFeature& feature) -> void {
     return pimpl->set_camera_feature(feature);
 }
 

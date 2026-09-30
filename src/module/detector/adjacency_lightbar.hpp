@@ -22,7 +22,7 @@ public:
         std::vector<cv::Rect2i> areas;
     };
 
-    auto set_camera_feature(const util::CameraFeature& feature) -> void;
+    auto set_camera_feature(const CameraFeature& feature) -> void;
 
     auto set_armor_thickness(double thickness) -> void;
 

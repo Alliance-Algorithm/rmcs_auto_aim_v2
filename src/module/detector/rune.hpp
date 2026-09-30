@@ -10,7 +10,7 @@ namespace rmcs {
 class RuneDetector {
 public:
     struct Config {
-        util::CameraFeature cam;
+        CameraFeature cam;
         CampColor color = CampColor::BLUE;
 
         double max_distance = 5.0;

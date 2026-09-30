@@ -5,7 +5,7 @@
 
 #include "utility/math/linear.hpp"
 
-namespace rmcs::util {
+namespace rmcs {
 
 struct CameraFeature {
     // Row Major — camera intrinsic matrix (3×3)

@@ -33,7 +33,7 @@ struct ReprojectionSolution {
     static_assert(N > 0, "ReprojectionSolution requires at least one point");
 
     struct Input {
-        util::CameraFeature camera;
+        CameraFeature camera;
         std::array<cv::Point3f, N> object_points;
         std::array<cv::Point2f, N> image_points;
     } input;
@@ -65,7 +65,7 @@ struct ReprojectionSolution {
 
 namespace util {
     // 注意，point_camera 为相机坐标系，而非 ROS 系
-    auto reproject_point(const Point3d& point_camera, const util::CameraFeature& camera)
+    auto reproject_point(const Point3d& point_camera, const CameraFeature& camera)
         -> std::optional<Point2d>;
 }
 }

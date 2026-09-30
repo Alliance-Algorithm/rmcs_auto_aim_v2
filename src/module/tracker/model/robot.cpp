@@ -13,6 +13,7 @@
 #include <ranges>
 
 using namespace rmcs;
+using namespace rmcs::util;
 
 auto RobotModel::State::transition(double seconds) -> void {
     x += vx * seconds;
@@ -109,7 +110,7 @@ struct RobotModel::Impl {
     };
 
     struct Observable {
-        util::CameraFeature feature;
+        CameraFeature feature;
 
         std::array<Eigen::Vector2d, 8> upper2d;
         std::array<Eigen::Vector2d, 8> lower2d;
@@ -212,7 +213,7 @@ struct RobotModel::Impl {
 
     Config config { };
 
-    util::CameraFeature camera_feature;
+    CameraFeature camera_feature;
 
     Context context;
     Observable observable;

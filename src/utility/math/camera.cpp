@@ -7,7 +7,7 @@
 
 #include "utility/math/conversion.hpp"
 
-namespace rmcs::util {
+namespace rmcs {
 
 auto CameraFeature::from(std::array<double, 9> input) -> void {
     for (std::size_t i = 0; i < input.size(); ++i) {
@@ -28,7 +28,7 @@ auto CameraFeature::distortion() const -> cv::Mat {
 auto CameraFeature::cv_orientation() const -> cv::Mat {
     auto q_ros = orientation.make<Eigen::Quaterniond>();
     auto r_ros = q_ros.toRotationMatrix();
-    auto r_ocv = ros2opencv_rotation(r_ros);
+    auto r_ocv = util::ros2opencv_rotation(r_ros);
 
     cv::Mat result(3, 3, CV_64F);
     cv::eigen2cv(r_ocv, result);
@@ -37,7 +37,7 @@ auto CameraFeature::cv_orientation() const -> cv::Mat {
 
 auto CameraFeature::cv_translation() const -> cv::Vec3d {
     auto t_ros = translation.make<Eigen::Vector3d>();
-    auto t_ocv = ros2opencv_position(t_ros);
+    auto t_ocv = util::ros2opencv_position(t_ros);
     return { t_ocv[0], t_ocv[1], t_ocv[2] };
 }
 
