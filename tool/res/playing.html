@@ -460,6 +460,99 @@
             padding: 10px 12px;
         }
 
+        .camera-state {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .camera-state[data-connected="true"] {
+            color: var(--ok);
+        }
+
+        .camera-state[data-connected="true"] .status-dot {
+            background: var(--ok);
+        }
+
+        .panel-group p.camera-message {
+            font-size: 12px;
+        }
+
+        .camera-message[data-error="true"],
+        .camera-feedback[data-error="true"] {
+            color: var(--danger);
+        }
+
+        .camera-parameter {
+            padding-top: 12px;
+            border-top: 1px solid var(--outline);
+        }
+
+        .camera-parameter-head,
+        .camera-range,
+        .camera-actual-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .camera-parameter-head {
+            align-items: baseline;
+            font-size: 13px;
+        }
+
+        .camera-desired output {
+            color: var(--text);
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .camera-desired,
+        .camera-range,
+        .camera-actual-row {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .camera-parameter input[type="range"] {
+            display: block;
+            width: 100%;
+            height: 32px;
+            margin: 10px 0 2px;
+            accent-color: var(--primary);
+            cursor: pointer;
+            touch-action: pan-y;
+        }
+
+        .camera-parameter input:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 3px;
+        }
+
+        .camera-parameter input:disabled {
+            opacity: 0.35;
+            cursor: default;
+        }
+
+        .camera-actual-row {
+            flex-wrap: wrap;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        .camera-actual-row strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .camera-feedback {
+            overflow-wrap: anywhere;
+        }
+
         @media (prefers-reduced-motion: reduce) {
 
             *,
@@ -577,6 +670,33 @@
                     <span class="record-button-label">开始录制</span>
                 </button>
             </div>
+
+            <section class="panel-group" aria-label="相机配置">
+                <h2>相机配置</h2>
+                <div class="camera-state" id="camera-state" data-connected="false">
+                    <span class="status-dot" aria-hidden="true"></span><span id="camera-status">正在获取相机状态…</span>
+                </div>
+                <p class="camera-message" id="camera-message" role="status">等待可调参采集组件连接。</p>
+                <div class="camera-parameter">
+                    <div class="camera-parameter-head">
+                        <label for="camera-exposure">曝光时间</label>
+                        <span class="camera-desired"><output id="camera-exposure-desired" for="camera-exposure">—</output> µs</span>
+                    </div>
+                    <input id="camera-exposure" type="range" min="0" max="1" step="any" value="0" disabled aria-describedby="camera-exposure-range camera-exposure-feedback">
+                    <div class="camera-range" id="camera-exposure-range"><span id="camera-exposure-min">—</span><span id="camera-exposure-max">—</span></div>
+                    <div class="camera-actual-row"><span>实际值 <strong id="camera-exposure-actual">—</strong></span><span class="camera-feedback" id="camera-exposure-feedback">等待相机</span></div>
+                </div>
+                <div class="camera-parameter">
+                    <div class="camera-parameter-head">
+                        <label for="camera-gain">增益</label>
+                        <span class="camera-desired"><output id="camera-gain-desired" for="camera-gain">—</output> dB</span>
+                    </div>
+                    <input id="camera-gain" type="range" min="0" max="1" step="any" value="0" disabled aria-describedby="camera-gain-range camera-gain-feedback">
+                    <div class="camera-range" id="camera-gain-range"><span id="camera-gain-min">—</span><span id="camera-gain-max">—</span></div>
+                    <div class="camera-actual-row"><span>实际值 <strong id="camera-gain-actual">—</strong></span><span class="camera-feedback" id="camera-gain-feedback">等待相机</span></div>
+                </div>
+                <p>拖动实时应用；方向键微调，长按加速。曝光上限 5000 µs，参数仅本次运行有效。</p>
+            </section>
 
             <section class="panel-group">
                 <h2>远程录制</h2>
@@ -722,6 +842,269 @@
         const sysDiskMeter = $('sys-disk-meter'), sysDiskValue = $('sys-disk-value');
         const sysProcRow = $('sys-proc-row'), sysProcMeter = $('sys-proc-meter'), sysProcValue = $('sys-proc-value');
 
+        // Camera control shares the existing context poll and has one request in flight.
+        const cameraFields = new Map([
+            ['exposure_us', {id: 'camera-exposure', unit: 'µs', name: '曝光时间', keyStep: 1, holdStep: 100}],
+            ['gain', {id: 'camera-gain', unit: 'dB', name: '增益', keyStep: 0.02, holdStep: 1}],
+        ]);
+        for (const field of cameraFields.values()) {
+            Object.assign(field, {input: $(field.id), actual: null, pending: null, dragging: false, error: '', confirmed: false});
+        }
+        let cameraConnected = false;
+        let cameraPid = null;
+        let cameraInFlight = null;
+        let cameraControlTimer = null;
+        let cameraLastSentAt = -Infinity;
+        let cameraNextIntent = 0;
+        let cameraRevision = 0;
+        let cameraController = null;
+        let cameraKeyHold = null;
+        let contextRequestSerial = 0;
+        let lastContextResponseSerial = 0;
+
+        function validCameraParameter(value) {
+            return value && [value.value, value.min, value.max].every(Number.isFinite)
+                && value.min <= value.max && value.value >= value.min && value.value <= value.max;
+        }
+
+        function formatCameraValue(value, parameter) {
+            return value.toLocaleString('zh-CN', {maximumFractionDigits: parameter === 'gain' ? 2 : 3});
+        }
+
+        function cameraControlRange(parameter, actual) {
+            if (!actual) return null;
+            const max = parameter === 'exposure_us' ? Math.min(actual.max, 5000) : actual.max;
+            return actual.min <= max ? {min: actual.min, max} : null;
+        }
+
+        function renderCameraControls() {
+            for (const [parameter, field] of cameraFields) {
+                const actual = field.actual;
+                const range = cameraControlRange(parameter, actual);
+                const busy = field.dragging || field.pending || cameraInFlight?.parameter === parameter
+                    || cameraKeyHold?.parameter === parameter;
+                field.input.disabled = !cameraConnected || !range || range.min === range.max;
+                if (actual) {
+                    $(field.id + '-actual').textContent = formatCameraValue(actual.value, parameter) + ' ' + field.unit;
+                    if (range) {
+                        field.input.min = String(range.min);
+                        field.input.max = String(range.max);
+                        if (!busy) field.input.value = String(Math.min(range.max, Math.max(range.min, actual.value)));
+                        $(field.id + '-desired').textContent = formatCameraValue(Number(field.input.value), parameter);
+                        $(field.id + '-min').textContent = formatCameraValue(range.min, parameter) + ' ' + field.unit;
+                        $(field.id + '-max').textContent = formatCameraValue(range.max, parameter) + ' ' + field.unit;
+                    } else {
+                        for (const suffix of ['-desired', '-min', '-max']) $(field.id + suffix).textContent = '—';
+                    }
+                } else {
+                    for (const suffix of ['-desired', '-actual', '-min', '-max']) $(field.id + suffix).textContent = '—';
+                }
+                const feedback = $(field.id + '-feedback');
+                let text = !cameraConnected ? '等待相机' : !actual ? '参数不可用' : !range ? '无可用调整范围'
+                    : range.min === range.max ? '固定值' : '拖动调整';
+                if (playerAvailable) text = '回放模式不可调参';
+                else if (cameraConnected) {
+                    if (field.confirmed) text = '已应用';
+                    if (cameraInFlight?.parameter === parameter) text = '正在应用…';
+                    if (field.pending) text = '新值待应用…';
+                }
+                if (field.error) text = field.error + (field.pending ? '；新值待应用' : '');
+                feedback.textContent = text;
+                feedback.dataset.error = String(Boolean(field.error));
+            }
+        }
+
+        function clearCameraPending() {
+            stopCameraKeyboardAdjustment();
+            clearTimeout(cameraControlTimer);
+            cameraControlTimer = null;
+            for (const field of cameraFields.values()) {
+                field.pending = null;
+                field.dragging = false;
+                field.confirmed = false;
+                field.error = '';
+            }
+        }
+
+        function applyCamera(camera, fallbackError = '') {
+            const newPid = camera?.pid ?? null;
+            const available = Boolean(camera?.connected) && !playerAvailable;
+            if (!available || (cameraPid !== null && cameraPid !== newPid)) clearCameraPending();
+            cameraPid = newPid;
+            cameraConnected = available;
+            for (const [parameter, field] of cameraFields) {
+                field.actual = validCameraParameter(camera?.[parameter]) ? camera[parameter] : null;
+            }
+            $('camera-state').dataset.connected = String(cameraConnected);
+            $('camera-status').textContent = playerAvailable ? '当前为回放模式' : cameraConnected ? '相机已连接' : '相机未连接';
+            const error = playerAvailable ? '回放模式下无法调整相机参数。' : fallbackError || camera?.error || '';
+            $('camera-message').textContent = error || (cameraConnected ? '自由采集 · 手动曝光与增益' : '等待可调参采集组件连接。');
+            $('camera-message').dataset.error = String(Boolean(error) && !playerAvailable);
+            renderCameraControls();
+        }
+
+        function queueCameraValue(parameter, preservePrecision = false) {
+            const field = cameraFields.get(parameter);
+            if (stopped || !cameraConnected || playerAvailable || field.input.disabled || !field.actual) return;
+            const raw = Number(field.input.value);
+            const range = cameraControlRange(parameter, field.actual);
+            if (!range) return;
+            const {min, max} = range;
+            const rounded = preservePrecision ? raw : parameter === 'exposure_us' ? Math.round(raw) : Math.round(raw * 100) / 100;
+            // Keep exact device endpoints even when the minimum exposure is fractional.
+            const value = raw <= min ? min : raw >= max ? max : Math.min(max, Math.max(min, rounded));
+            field.input.value = String(value);
+            cameraRevision++;
+            field.confirmed = false;
+            field.error = '';
+            if (cameraInFlight?.parameter === parameter && cameraInFlight.value === value) field.pending = null;
+            else if (field.pending?.value !== value) field.pending = {value, order: ++cameraNextIntent};
+            renderCameraControls();
+            scheduleCameraControl();
+        }
+
+        function scheduleCameraControl() {
+            if (stopped || !cameraConnected || playerAvailable || cameraInFlight || cameraControlTimer !== null) return;
+            if (![...cameraFields.values()].some((field) => field.pending)) return;
+            cameraControlTimer = setTimeout(() => {
+                cameraControlTimer = null;
+                sendCameraControl();
+            }, Math.max(0, 100 - (performance.now() - cameraLastSentAt)));
+        }
+
+        async function sendCameraControl() {
+            if (stopped || !cameraConnected || playerAvailable || cameraInFlight) return;
+            const entry = [...cameraFields].filter(([, field]) => field.pending)
+                .sort((a, b) => a[1].pending.order - b[1].pending.order)[0];
+            if (!entry) return;
+            const [parameter, field] = entry;
+            const request = {parameter, value: field.pending.value};
+            field.pending = null;
+            cameraInFlight = request;
+            cameraLastSentAt = performance.now();
+            cameraRevision++;
+            renderCameraControls();
+            const controller = new AbortController();
+            cameraController = controller;
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            try {
+                const response = await fetch('/api/camera', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(request), signal: controller.signal,
+                });
+                const result = await response.json();
+                if (stopped) return;
+                cameraRevision++;
+                const unavailable = response.status === 503 || response.status === 504;
+                applyCamera(unavailable && result.camera ? {...result.camera, connected: false} : result.camera ?? null);
+                if (!response.ok || result.status !== 'ok') {
+                    const message = result.message || `设置失败（HTTP ${response.status}）`;
+                    field.error = message;
+                    $('camera-message').textContent = field.name + '：' + message;
+                    $('camera-message').dataset.error = 'true';
+                } else {
+                    field.error = '';
+                    field.confirmed = cameraConnected;
+                }
+            } catch (error) {
+                if (stopped) return;
+                cameraRevision++;
+                const message = error.name === 'AbortError' ? '请求超时，正在重新获取相机状态。' : '无法连接相机控制服务，正在重试。';
+                applyCamera(null, message);
+                field.error = message;
+            } finally {
+                clearTimeout(timeout);
+                if (cameraController === controller) cameraController = null;
+                if (cameraInFlight === request) cameraInFlight = null;
+                if (!stopped) {renderCameraControls(); scheduleCameraControl();}
+            }
+        }
+
+        function stopCameraKeyboardAdjustment() {
+            if (!cameraKeyHold) return;
+            clearTimeout(cameraKeyHold.delayTimer);
+            clearInterval(cameraKeyHold.repeatTimer);
+            cameraKeyHold = null;
+            if (!stopped) renderCameraControls();
+        }
+
+        function adjustCameraByKey(parameter, direction, step) {
+            const field = cameraFields.get(parameter);
+            if (stopped || !cameraConnected || playerAvailable || field.input.disabled || document.hidden
+                || document.activeElement !== field.input) return false;
+            const range = cameraControlRange(parameter, field.actual);
+            if (!range) return false;
+            const current = Number(field.input.value);
+            const next = Math.min(range.max, Math.max(range.min, current + direction * step));
+            if (next === current) return false;
+            field.input.value = String(next);
+            queueCameraValue(parameter, true);
+            return true;
+        }
+
+        for (const [parameter, field] of cameraFields) {
+            field.input.addEventListener('pointerdown', () => {
+                stopCameraKeyboardAdjustment();
+                field.input.focus({preventScroll: true});
+                field.dragging = true;
+                cameraRevision++;
+            });
+            field.input.addEventListener('input', () => queueCameraValue(parameter));
+            field.input.addEventListener('keydown', (event) => {
+                const direction = event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1
+                    : event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0;
+                if (!direction) return;
+                event.preventDefault();
+                if (event.repeat) return;
+                stopCameraKeyboardAdjustment();
+                const hold = {parameter, key: event.key, delayTimer: null, repeatTimer: null};
+                cameraKeyHold = hold;
+                if (!adjustCameraByKey(parameter, direction, field.keyStep)) {
+                    stopCameraKeyboardAdjustment();
+                    return;
+                }
+                hold.delayTimer = setTimeout(() => {
+                    if (cameraKeyHold !== hold) return;
+                    const repeat = () => {
+                        if (cameraKeyHold === hold && !adjustCameraByKey(parameter, direction, field.holdStep)) {
+                            stopCameraKeyboardAdjustment();
+                        }
+                    };
+                    repeat();
+                    if (cameraKeyHold === hold) hold.repeatTimer = setInterval(repeat, 100);
+                }, 400);
+            });
+            field.input.addEventListener('change', () => {field.dragging = false; queueCameraValue(parameter);});
+            field.input.addEventListener('blur', () => {
+                if (cameraKeyHold?.parameter === parameter) stopCameraKeyboardAdjustment();
+                if (field.dragging) {field.dragging = false; queueCameraValue(parameter);}
+            });
+        }
+        const finishCameraDragging = () => {
+            for (const [parameter, field] of cameraFields) {
+                if (field.dragging) {field.dragging = false; queueCameraValue(parameter);}
+            }
+        };
+        const releaseCameraKeyboard = (event) => {
+            if (cameraKeyHold?.key === event.key) stopCameraKeyboardAdjustment();
+        };
+        const hideCameraKeyboard = () => {if (document.hidden) stopCameraKeyboardAdjustment();};
+        window.addEventListener('pointerup', finishCameraDragging);
+        window.addEventListener('pointercancel', finishCameraDragging);
+        window.addEventListener('keyup', releaseCameraKeyboard);
+        window.addEventListener('blur', stopCameraKeyboardAdjustment);
+        document.addEventListener('visibilitychange', hideCameraKeyboard);
+
+        function shutdownCameraControls() {
+            clearCameraPending();
+            cameraController?.abort();
+            window.removeEventListener('pointerup', finishCameraDragging);
+            window.removeEventListener('pointercancel', finishCameraDragging);
+            window.removeEventListener('keyup', releaseCameraKeyboard);
+            window.removeEventListener('blur', stopCameraKeyboardAdjustment);
+            document.removeEventListener('visibilitychange', hideCameraKeyboard);
+        }
+
         // CDN 图标：加载成功才替换默认准星图标，失败保持静默
         brandIcon.addEventListener('load', () => brandMark.classList.add('has-image'));
         brandIcon.src = 'https://r2.creeper5820.com/creeper-qt/ohtoai.png';
@@ -848,6 +1231,8 @@
         }
 
         async function fetchRecordContext() {
+            const requestSerial = ++contextRequestSerial;
+            const cameraRevisionAtStart = cameraRevision;
             try {
                 const response = await fetch('/api/context', {cache: 'no-store'});
                 if (!response.ok) {
@@ -855,6 +1240,8 @@
                 }
 
                 const recordContext = (await response.json()).context || {};
+                if (stopped || requestSerial < lastContextResponseSerial) return;
+                lastContextResponseSerial = requestSerial;
                 recorderAvailable = Boolean(recordContext.recorderAvailable);
                 backendRecordOn = Boolean(recordContext.recordOn);
                 backendRecordOnValue.textContent = backendRecordOn ? '开启' : '关闭';
@@ -864,7 +1251,15 @@
                 playerAvailable = Boolean(recordContext.playerAvailable);
                 isPlaying = Boolean(recordContext.playing);
                 updateSystemStats(recordContext.system);
+                if (playerAvailable) {
+                    cameraRevision++;
+                    applyCamera(recordContext.camera ?? null);
+                } else if (cameraRevisionAtStart === cameraRevision && !cameraInFlight) {
+                    applyCamera(recordContext.camera ?? null);
+                }
             } catch (error) {
+                if (stopped || requestSerial < lastContextResponseSerial) return;
+                lastContextResponseSerial = requestSerial;
                 recorderAvailable = false;
                 backendRecordOn = null;
                 backendRecordOnValue.textContent = '未知';
@@ -874,6 +1269,9 @@
                 playerAvailable = false;
                 isPlaying = true;
                 updateSystemStats(null);
+                if (cameraRevisionAtStart === cameraRevision && !cameraInFlight) {
+                    applyCamera(null, '无法获取相机状态，正在重试。');
+                }
                 console.error('Failed to fetch record context:', error);
             }
 
@@ -1201,6 +1599,7 @@
 
         window.addEventListener('beforeunload', () => {
             stopped = true;
+            shutdownCameraControls();
             recordingWanted = false;
             if (recorder) {
                 recorder.stop();
