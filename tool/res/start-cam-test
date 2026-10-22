@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""Standalone cam_test web controls and WebRTC gateway (Python standard library only)."""
+
+import argparse
+import ctypes
+import json
+import math
+import os
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+
+RESOURCE_DIR = Path(__file__).resolve().parent
+STATE_PATH = Path("/tmp/autoaim/cam_test/state.json")
+COMMAND_PATH = Path("/tmp/autoaim/cam_test/commands")
+STATE_MAX_AGE = 2.0
+COMMAND_TIMEOUT = 2.0
+COMMAND_LIFETIME = 1.8
+MAX_BODY_BYTES = 4096
+MAX_STATE_BYTES = 65536
+REQUEST_TIMEOUT = 3.0
+PARAMETERS = ("exposure_us", "gain")
+COMMAND_LOCK = threading.Lock()
+PARENT_PID = os.getpid()
+LIBC = ctypes.CDLL(None, use_errno=True)
+
+
+class ApiError(Exception):
+    def __init__(self, code: int, message: str, camera: dict | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.camera = camera
+
+
+def finite_number(value: object) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"Invalid JSON number: {value}")
+
+
+def parse_json_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("JSON number is not finite")
+    return number
+
+
+def read_camera_state(require_connected: bool = True) -> dict:
+    try:
+        with STATE_PATH.open("rb") as source:
+            content = source.read(MAX_STATE_BYTES + 1)
+        if len(content) > MAX_STATE_BYTES:
+            raise ValueError("Camera state is too large")
+        camera = json.loads(content, parse_constant=reject_json_constant, parse_float=parse_json_float)
+    except (OSError, ValueError, RecursionError) as error:
+        raise ApiError(503, "Camera state unavailable; start cam_test first") from error
+
+    if not isinstance(camera, dict):
+        raise ApiError(503, "Invalid camera state")
+    pid = camera.get("pid")
+    updated_at = camera.get("updated_at")
+    if (not isinstance(pid, int) or isinstance(pid, bool) or not 0 < pid <= 2147483647
+            or not finite_number(updated_at)):
+        raise ApiError(503, "Invalid camera state", camera)
+    age = time.time() - updated_at
+    if age > STATE_MAX_AGE or age < -STATE_MAX_AGE:
+        raise ApiError(503, "Camera state expired", camera)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError as error:
+        raise ApiError(503, "cam_test is not running", camera) from error
+    except PermissionError:
+        pass
+    except OSError as error:
+        raise ApiError(503, "Cannot check cam_test process", camera) from error
+    if not isinstance(camera.get("connected"), bool):
+        raise ApiError(503, "Invalid camera connection state", camera)
+    if require_connected:
+        validate_connected_camera(camera)
+    return camera
+
+
+def validate_connected_camera(camera: dict) -> None:
+    if camera.get("connected") is not True:
+        message = camera.get("error")
+        raise ApiError(503, message if isinstance(message, str) and message
+                       else "Camera disconnected; waiting for reconnection", camera)
+
+    for parameter in PARAMETERS:
+        limits = camera.get(parameter)
+        if (not isinstance(limits, dict)
+                or not all(finite_number(limits.get(key)) for key in ("value", "min", "max"))
+                or not limits["min"] <= limits["value"] <= limits["max"]):
+            raise ApiError(503, "Camera parameter readback unavailable", camera)
+
+
+def write_camera_command(command: bytes) -> None:
+    fd = None
+    try:
+        fd = os.open(COMMAND_PATH, os.O_WRONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
+        if not stat.S_ISFIFO(os.fstat(fd).st_mode):
+            raise OSError("Camera command path is not a FIFO")
+        if os.write(fd, command) != len(command):
+            raise OSError("Incomplete camera command")
+    except OSError as error:
+        raise ApiError(503, "Camera command channel unavailable") from error
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def update_camera(parameter: str, value: float) -> dict:
+    if not COMMAND_LOCK.acquire(timeout=COMMAND_TIMEOUT):
+        raise ApiError(503, "Another camera update is in progress")
+    try:
+        deadline = time.monotonic() + COMMAND_TIMEOUT
+        camera = read_camera_state()
+        limits = camera[parameter]
+        if not limits["min"] <= value <= limits["max"]:
+            raise ApiError(400, f"{parameter} must be between {limits['min']} and {limits['max']}", camera)
+        pid = camera["pid"]
+        request_id = uuid.uuid4().hex
+        expires_at = int((time.time() + COMMAND_LIFETIME) * 1000)
+        command = f"{request_id} {parameter} {value:.17g} {expires_at}\n".encode("ascii")
+        write_camera_command(command)
+        while time.monotonic() < deadline:
+            camera = read_camera_state(require_connected=False)
+            if camera["pid"] != pid:
+                raise ApiError(503, "cam_test restarted during the update", camera)
+            result = camera.get("last_request")
+            if isinstance(result, dict) and result.get("id") == request_id:
+                if result.get("parameter") != parameter:
+                    raise ApiError(500, "Unexpected camera command acknowledgement", camera)
+                if result.get("ok") is True:
+                    validate_connected_camera(camera)
+                    return camera
+                message = result.get("error")
+                raise ApiError(500, message if isinstance(message, str) and message
+                               else "Camera rejected the parameter update", camera)
+            if camera["connected"] is not True:
+                validate_connected_camera(camera)
+            time.sleep(0.025)
+        raise ApiError(504, "Timed out waiting for camera readback", camera)
+    finally:
+        COMMAND_LOCK.release()
+
+
+class CameraHandler(BaseHTTPRequestHandler):
+    def setup(self) -> None:
+        super().setup()
+        self.connection.settimeout(REQUEST_TIMEOUT)
+
+    def do_GET(self) -> None:
+        path = urlsplit(self.path).path
+        if path in ("/", "/cam_test", "/cam_test/"):
+            try:
+                body = (RESOURCE_DIR / "cam-test.html").read_bytes()
+            except OSError:
+                self.json_response(503, {"status": "error", "camera": None,
+                                         "message": "cam-test.html is unavailable"})
+                return
+            self.respond(200, body, "text/html; charset=utf-8")
+        elif path == "/api/context":
+            try:
+                self.json_response(200, {"status": "ok", "camera": read_camera_state()})
+            except ApiError as error:
+                self.api_error(error)
+        else:
+            self.json_response(404, {"status": "error", "camera": None, "message": "Not found"})
+
+    def do_POST(self) -> None:
+        if urlsplit(self.path).path != "/api/camera":
+            self.json_response(404, {"status": "error", "camera": None, "message": "Not found"})
+            return
+        try:
+            payload = self.read_payload()
+            if not isinstance(payload, dict) or set(payload) != {"parameter", "value"}:
+                raise ApiError(400, "Expected an object with parameter and value")
+            parameter = payload["parameter"]
+            value = payload["value"]
+            if parameter not in PARAMETERS:
+                raise ApiError(400, "parameter must be exposure_us or gain")
+            if not finite_number(value):
+                raise ApiError(400, "value must be a finite number")
+            camera = update_camera(parameter, value)
+            self.json_response(200, {"status": "ok", "camera": camera})
+        except ApiError as error:
+            self.api_error(error)
+
+    def read_payload(self) -> object:
+        if self.headers.get("Transfer-Encoding") is not None:
+            raise ApiError(400, "Transfer-Encoding is not supported")
+        if self.headers.get_content_type() != "application/json":
+            raise ApiError(400, "Content-Type must be application/json")
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError as error:
+            raise ApiError(400, "Invalid Content-Length") from error
+        if length <= 0 or length > MAX_BODY_BYTES:
+            raise ApiError(400, f"JSON body must be between 1 and {MAX_BODY_BYTES} bytes")
+        try:
+            body = self.rfile.read(length)
+            if len(body) != length:
+                raise ValueError("Incomplete body")
+            return json.loads(body, parse_constant=reject_json_constant, parse_float=parse_json_float)
+        except (OSError, ValueError, RecursionError) as error:
+            raise ApiError(400, "Invalid or incomplete JSON body") from error
+
+    def api_error(self, error: ApiError) -> None:
+        self.json_response(error.code, {"status": "error", "camera": error.camera,
+                                       "message": str(error)})
+
+    def json_response(self, code: int, data: dict) -> None:
+        self.respond(code, json.dumps(data, allow_nan=False).encode("utf-8"), "application/json; charset=utf-8")
+
+    def respond(self, code: int, body: bytes, content_type: str) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, socket.timeout):
+            pass
+
+    def log_message(self, message: str, *args: object) -> None:
+        sys.stderr.write(f"[cam_test HTTP] {message % args}\n")
+
+
+def set_parent_death_signal() -> None:
+    if LIBC.prctl(1, signal.SIGTERM) != 0:
+        os._exit(127)
+    if os.getppid() != PARENT_PID:
+        os.kill(os.getpid(), signal.SIGTERM)
+
+
+class CameraServer:
+    def __init__(self, mediamtx: Path, port: int) -> None:
+        self.mediamtx_path = mediamtx
+        self.port = port
+        self.gateway: subprocess.Popen | None = None
+        self.http_server: ThreadingHTTPServer | None = None
+        self.shutdown_requested = threading.Event()
+        self.exit_code = 0
+
+    def run(self) -> int:
+        for path in (self.mediamtx_path, RESOURCE_DIR / "mediamtx-cam-test.yml",
+                     RESOURCE_DIR / "cam-test.html"):
+            if not path.is_file():
+                raise SystemExit(f"Missing file: {path}")
+        try:
+            self.http_server = ThreadingHTTPServer(("0.0.0.0", self.port), CameraHandler)
+            signal.signal(signal.SIGINT, lambda *_: self.shutdown())
+            signal.signal(signal.SIGTERM, lambda *_: self.shutdown())
+            self.gateway = subprocess.Popen(
+                [str(self.mediamtx_path), str(RESOURCE_DIR / "mediamtx-cam-test.yml")],
+                cwd=RESOURCE_DIR, start_new_session=True, preexec_fn=set_parent_death_signal,
+            )
+            threading.Thread(target=self.watch_gateway, daemon=True).start()
+            print(f"cam_test page: http://<ip>:{self.port}/cam_test", flush=True)
+            print("Run the cam_test binary in another terminal. Press Ctrl+C to stop this gateway.", flush=True)
+            self.http_server.serve_forever(poll_interval=0.2)
+        finally:
+            self.shutdown_requested.set()
+            self.stop_gateway()
+            if self.http_server is not None:
+                self.http_server.server_close()
+        return self.exit_code
+
+    def watch_gateway(self) -> None:
+        assert self.gateway is not None
+        code = self.gateway.wait()
+        if not self.shutdown_requested.is_set():
+            self.exit_code = 1
+            print(f"cam_test MediaMTX exited with code {code}", file=sys.stderr)
+            self.shutdown()
+
+    def shutdown(self) -> None:
+        if self.shutdown_requested.is_set():
+            return
+        self.shutdown_requested.set()
+        if self.http_server is not None:
+            threading.Thread(target=self.http_server.shutdown, daemon=True).start()
+
+    def stop_gateway(self) -> None:
+        gateway = self.gateway
+        if gateway is None or gateway.poll() is not None:
+            return
+        try:
+            os.killpg(gateway.pid, signal.SIGTERM)
+            gateway.wait(timeout=3)
+        except ProcessLookupError:
+            pass
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(gateway.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            gateway.wait()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mediamtx", type=Path, default=Path("/opt/autoaim/bin/mediamtx"),
+                        help="MediaMTX binary (default: /opt/autoaim/bin/mediamtx)")
+    parser.add_argument("--port", type=int, default=18081, help="HTTP port (default: 18081)")
+    args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
+    try:
+        return CameraServer(args.mediamtx.resolve(), args.port).run()
+    except OSError as error:
+        print(f"Cannot start cam_test web gateway: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

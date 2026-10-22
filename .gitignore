@@ -1,6 +1,7 @@
 devel/
 logs/
 build/
+/tool/cxx/build-*/
 bin/
 lib/
 install/

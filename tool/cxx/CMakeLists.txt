@@ -7,6 +7,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(RMCS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(RMCS_SRC_DIR "${RMCS_SOURCE_DIR}/src")
 
+option(CAM_TEST_ONLY "Build the standalone camera tuning tool without ROS" OFF)
+if(CAM_TEST_ONLY)
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    find_package(OpenCV 4 REQUIRED COMPONENTS core videoio)
+    find_package(Threads REQUIRED)
+    if(CMAKE_SYSROOT)
+        set(CAM_TEST_MVS_ROOT "${CMAKE_SYSROOT}/opt/mvs-usb3-core")
+    else()
+        set(CAM_TEST_MVS_ROOT "/opt/mvs-usb3-core")
+    endif()
+    find_package(MVSUSB3Core REQUIRED CONFIG
+        PATHS "${CAM_TEST_MVS_ROOT}" NO_DEFAULT_PATH)
+
+    add_executable(cam_test
+        cam_test.cpp
+        ${RMCS_SRC_DIR}/module/debug/visualization/stream_context.cpp)
+    target_include_directories(cam_test PRIVATE ${RMCS_SRC_DIR} ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(cam_test PRIVATE
+        MVSUSB3Core::MVSUSB3Core ${OpenCV_LIBS} Threads::Threads)
+    target_compile_options(cam_test PRIVATE -Wall -Wextra -Wpedantic)
+    # Supply the standard headers expected by the unchanged streaming source.
+    target_precompile_headers(cam_test PRIVATE <format> <memory> <string> <string_view>)
+    return()
+endif()
+
 find_package(rclcpp REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
