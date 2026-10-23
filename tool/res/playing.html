@@ -553,6 +553,31 @@
             overflow-wrap: anywhere;
         }
 
+        .detection-state[data-state="running"] {
+            color: var(--ok);
+        }
+
+        .detection-state[data-state="running"] .status-dot {
+            background: var(--ok);
+        }
+
+        .detection-state[data-state="starting"] {
+            color: var(--primary);
+        }
+
+        .detection-state[data-state="starting"] .status-dot {
+            background: var(--primary);
+        }
+
+        .detection-state[data-state="error"],
+        .panel-group .detection-message[data-error="true"] {
+            color: var(--danger);
+        }
+
+        .detection-state[data-state="error"] .status-dot {
+            background: var(--danger);
+        }
+
         @media (prefers-reduced-motion: reduce) {
 
             *,
@@ -696,6 +721,16 @@
                     <div class="camera-actual-row"><span>实际值 <strong id="camera-gain-actual">—</strong></span><span class="camera-feedback" id="camera-gain-feedback">等待相机</span></div>
                 </div>
                 <p>拖动实时应用；方向键微调，长按加速。曝光上限 5000 µs，参数仅本次运行有效。</p>
+            </section>
+
+            <section class="panel-group" aria-label="预览识别">
+                <h2>预览识别</h2>
+                <div class="camera-state detection-state" id="detection-state" data-state="idle" role="status">
+                    <span class="status-dot" aria-hidden="true"></span><span id="detection-status">识别未开启</span>
+                </div>
+                <p class="detection-message" id="detection-message" role="status">正在获取识别状态…</p>
+                <button id="detection-button" class="btn btn--primary" type="button" disabled>开始识别</button>
+                <p>默认关闭，仅影响视频预览。需要 AutoAimTunableCapturerComponent。</p>
             </section>
 
             <section class="panel-group">
@@ -852,6 +887,8 @@
         }
         let cameraConnected = false;
         let cameraPid = null;
+        let cameraComponentType = null;
+        let cameraComponentName = null;
         let cameraInFlight = null;
         let cameraControlTimer = null;
         let cameraLastSentAt = -Infinity;
@@ -861,6 +898,100 @@
         let cameraKeyHold = null;
         let contextRequestSerial = 0;
         let lastContextResponseSerial = 0;
+        let detectionState = null;
+        let detectionSupported = null;
+        let detectionError = '';
+        let detectionInFlight = false;
+        let detectionTarget = false;
+        let detectionRevision = 0;
+        let detectionController = null;
+
+        function detectionUnavailableReason() {
+            if (playerAvailable) return '回放模式下无法控制识别。';
+            if (detectionSupported === false) return '当前服务不支持识别控制。';
+            if (detectionSupported === null && !detectionError) return '正在获取识别状态…';
+            if (!cameraConnected) return '请先连接可调参采集组件的相机。';
+            if (cameraComponentType !== 'rmcs::AutoAimTunableCapturerComponent') {
+                return '仅 AutoAimTunableCapturerComponent 支持识别控制。';
+            }
+            if (!detectionState?.available || detectionState.status === 'unavailable') {
+                return detectionState?.error || '识别组件不可用。';
+            }
+            if (detectionState.capturer_component && cameraComponentName
+                && detectionState.capturer_component !== cameraComponentName) {
+                return '识别组件与当前相机不匹配。';
+            }
+            return '';
+        }
+
+        function renderDetectionControls() {
+            const unavailable = detectionUnavailableReason();
+            const enabled = Boolean(detectionState?.enabled)
+                || ['starting', 'running'].includes(detectionState?.status);
+            const button = $('detection-button');
+            button.disabled = stopped || detectionInFlight || Boolean(unavailable);
+            button.textContent = detectionInFlight ? detectionTarget ? '正在启动…' : '正在停止…'
+                : enabled ? '停止识别' : '开始识别';
+            button.classList.toggle('btn--primary', !enabled);
+            button.classList.toggle('is-recording', enabled);
+            button.setAttribute('aria-pressed', String(enabled));
+            const status = unavailable ? 'unavailable' : detectionState?.status || 'idle';
+            $('detection-state').dataset.state = status;
+            $('detection-status').textContent = detectionSupported === null && !detectionError ? '识别未开启'
+                : status === 'unavailable' ? '识别不可用' : status === 'starting' ? '加载模型…'
+                : status === 'running' ? '识别中' : status === 'error' ? '识别错误' : '识别已停止';
+            const error = detectionError || detectionState?.error || '';
+            $('detection-message').textContent = error || unavailable || (status === 'starting'
+                ? '模型正在加载，可以随时停止。' : status === 'running' ? '已在视频预览中开启识别。' : '点击开始识别后加载模型。');
+            $('detection-message').dataset.error = String(Boolean(error));
+        }
+
+        function applyDetection(state, error = '', supported = detectionSupported) {
+            detectionState = state;
+            detectionSupported = supported;
+            detectionError = error;
+            renderDetectionControls();
+        }
+
+        async function toggleDetection() {
+            if (stopped || detectionInFlight || detectionUnavailableReason()) return;
+            detectionTarget = !(detectionState?.enabled || ['starting', 'running'].includes(detectionState?.status));
+            detectionInFlight = true;
+            detectionError = '';
+            detectionRevision++;
+            renderDetectionControls();
+            const controller = new AbortController();
+            detectionController = controller;
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            try {
+                const response = await fetch('/api/detection', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled: detectionTarget}), signal: controller.signal,
+                });
+                const result = await response.json();
+                if (stopped) return;
+                detectionRevision++;
+                if (!response.ok || result.status !== 'ok') {
+                    const message = result.message || result.error || `识别控制失败（HTTP ${response.status}）`;
+                    const unavailable = response.status === 503 || response.status === 504;
+                    const state = result.detection ?? detectionState;
+                    applyDetection(unavailable && state ? {...state, available: false} : state, message, response.status !== 404);
+                } else {
+                    applyDetection(result.detection ?? null, '', true);
+                }
+            } catch (error) {
+                if (stopped) return;
+                detectionRevision++;
+                applyDetection(null, error.name === 'AbortError' ? '识别控制请求超时，正在重新获取状态。'
+                    : '无法连接识别控制服务，正在重试。');
+            } finally {
+                clearTimeout(timeout);
+                if (detectionController === controller) detectionController = null;
+                detectionInFlight = false;
+                if (!stopped) renderDetectionControls();
+            }
+        }
+        $('detection-button').addEventListener('click', toggleDetection);
 
         function validCameraParameter(value) {
             return value && [value.value, value.min, value.max].every(Number.isFinite)
@@ -932,6 +1063,8 @@
             if (!available || (cameraPid !== null && cameraPid !== newPid)) clearCameraPending();
             cameraPid = newPid;
             cameraConnected = available;
+            cameraComponentType = camera?.component_type ?? null;
+            cameraComponentName = camera?.component_name ?? null;
             for (const [parameter, field] of cameraFields) {
                 field.actual = validCameraParameter(camera?.[parameter]) ? camera[parameter] : null;
             }
@@ -941,6 +1074,7 @@
             $('camera-message').textContent = error || (cameraConnected ? '自由采集 · 手动曝光与增益' : '等待可调参采集组件连接。');
             $('camera-message').dataset.error = String(Boolean(error) && !playerAvailable);
             renderCameraControls();
+            renderDetectionControls();
         }
 
         function queueCameraValue(parameter, preservePrecision = false) {
@@ -1233,6 +1367,7 @@
         async function fetchRecordContext() {
             const requestSerial = ++contextRequestSerial;
             const cameraRevisionAtStart = cameraRevision;
+            const detectionRevisionAtStart = detectionRevision;
             try {
                 const response = await fetch('/api/context', {cache: 'no-store'});
                 if (!response.ok) {
@@ -1257,6 +1392,11 @@
                 } else if (cameraRevisionAtStart === cameraRevision && !cameraInFlight) {
                     applyCamera(recordContext.camera ?? null);
                 }
+                if (detectionRevisionAtStart === detectionRevision && !detectionInFlight) {
+                    applyDetection(recordContext.detection ?? null, '', 'detection' in recordContext);
+                } else {
+                    renderDetectionControls();
+                }
             } catch (error) {
                 if (stopped || requestSerial < lastContextResponseSerial) return;
                 lastContextResponseSerial = requestSerial;
@@ -1271,6 +1411,11 @@
                 updateSystemStats(null);
                 if (cameraRevisionAtStart === cameraRevision && !cameraInFlight) {
                     applyCamera(null, '无法获取相机状态，正在重试。');
+                }
+                if (detectionRevisionAtStart === detectionRevision && !detectionInFlight) {
+                    applyDetection(null, '无法获取识别状态，正在重试。');
+                } else {
+                    renderDetectionControls();
                 }
                 console.error('Failed to fetch record context:', error);
             }
@@ -1600,6 +1745,7 @@
         window.addEventListener('beforeunload', () => {
             stopped = true;
             shutdownCameraControls();
+            detectionController?.abort();
             recordingWanted = false;
             if (recorder) {
                 recorder.stop();

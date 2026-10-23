@@ -160,6 +160,49 @@ AUTOAIM_CAMERA_COMPONENT=capturer_main start-streamer
 
 部署时在 `rmcs_auto_aim_v2` 目录沿用 `./tool/install-server.sh local` 或 `./tool/install-server.sh remote host` 更新原网页和 `start-streamer`，随后重启服务。应用组件需要重新构建后使用。
 
+## 网页识别预览
+
+仅在使用 `AutoAimTunableCapturerComponent` 的配置中加入 `rmcs::AutoAimDetectionPreviewComponent`，网页才提供“开始识别 / 停止识别”开关；其他配置保持禁用。识别默认关闭，点击开始后持续识别并在现有视频画面中标注装甲板、绿灯和红蓝能量机关，模型按需加载，原始录像内容不变。
+
+`auto_aim_record_locally_tunable` 已接好识别预览。自定义配置需要在组件列表中加入：
+
+```yaml
+      - rmcs::AutoAimDetectionPreviewComponent -> auto_aim_detection_preview
+```
+
+并将它接在采集器与 streamer 之间：
+
+```yaml
+auto_aim_detection_preview:
+  ros__parameters:
+    capturer_component: "auto_aim_capturer"
+    frame_topic: "/gimbal/auto_aim/camera_frame"
+    output_frame_topic: "/gimbal/auto_aim/detection_preview_frame"
+
+auto_aim_streamer:
+  ros__parameters:
+    frame_topic: "/gimbal/auto_aim/detection_preview_frame"
+    # 保留已有 framerate、monitor_host、monitor_port 和 stream_type。
+```
+
+Recorder 继续订阅原始 `/gimbal/auto_aim/camera_frame`。关闭识别、模型加载中或加载失败时，预览组件直接转发原画面；识别运行时仅处理最新帧，标注只写入自有帧副本。绘制沿用 `Canvas` 的装甲板类别、置信度、轮廓及现有能量机关 R 标、靶心标注；识别范围由当前模型和现有检测器决定。
+
+接口沿用 `AUTOAIM_CAMERA_COMPONENT` 选择采集实例，使用 `/tmp/autoaim/detection/<component_name>/commands` 与 `state.json`，不新增端口。开始前同时验证相机是所选 tunable capturer、相机在线、识别组件状态有效且可用；player 回放时不能开始。停止也经 IPC 确认，允许在模型加载中或相机断连时请求停止。
+
+`GET /api/context` 新增 `context.detection`，报告 `idle`、`starting`、`running`、`error` 或 `unavailable` 状态；缺少组件、过期或进程退出仅影响识别开关。`POST /api/detection` 接受 `{"enabled":true}` 或 `{"enabled":false}`，成功返回 `{"status":"ok","detection":...}`。确认仅表示接受切换，模型加载状态随后更新；加载失败时 `enabled` 为 `false` 并提供具体错误。命令有 1.8 秒有效期，后端通过独立锁串行等待最多 2 秒确认；非法输入、设备拒绝、不可用和超时分别返回 400、500、503、504。
+
+`build-rmcs` 只更新应用与组件，不会安装网页资源；部署时还需沿用 `./tool/install-server.sh local` 或 `./tool/install-server.sh remote host` 更新 `/opt/autoaim` 中的 `start-streamer` 和页面，再重启服务。
+
+已安装推流服务时，也可停止旧 `start-streamer` 后，在 `rmcs_auto_aim_v2` 目录只更新这两个资源：
+
+```sh
+sudo install -m 755 tool/res/start-streamer /opt/autoaim/bin/start-streamer
+sudo install -m 644 tool/res/playing.html /opt/autoaim/res/playing.html
+start-streamer
+```
+
+浏览器访问 `http://<ip>:18080/autoaim`，用 `Ctrl+Shift+R` 刷新后，在“预览识别”面板点击“开始识别”。相机断连或采集关闭时识别自动停止，恢复连接后可重新开启。
+
 ## 录制
 
 除播放页内置录制外，也可通过 FFmpeg 直接录制 RTP 串流：

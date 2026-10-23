@@ -119,7 +119,8 @@ auto range_json(const std::optional<FloatRange>& range) -> std::string {
 class Control {
 public:
     explicit Control(std::string_view component_name)
-        : directory_(fs::path("/tmp/autoaim/camera") / std::string(component_name)) {
+        : directory_(fs::path("/tmp/autoaim/camera") / std::string(component_name))
+        , component_name_(component_name) {
         const auto valid_start = [](unsigned char ch) {
             return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_';
         };
@@ -166,10 +167,13 @@ public:
         next_publish_ = now + 100ms;
         const auto& result = state.last_request;
         const auto json = std::format(
-            "{{\"pid\":{},\"updated_at\":{},\"connected\":{},\"error\":{},"
+            "{{\"pid\":{},\"updated_at\":{},"
+            "\"component_type\":\"rmcs::AutoAimTunableCapturerComponent\","
+            "\"component_name\":{},\"connected\":{},\"error\":{},"
             "\"exposure_us\":{},\"gain\":{},\"last_request\":{{\"id\":{},"
             "\"parameter\":{},\"ok\":{},\"error\":{}}}}}\n",
-            ::getpid(), static_cast<double>(unix_ms()) / 1000.0, state.connected,
+            ::getpid(), static_cast<double>(unix_ms()) / 1000.0,
+            json_string(component_name_), state.connected,
             json_string(state.error), range_json(state.exposure_us), range_json(state.gain),
             json_string(result.id), json_string(result.parameter), result.ok,
             json_string(result.error));
@@ -229,6 +233,7 @@ private:
     }
 
     const fs::path directory_;
+    const std::string component_name_;
     int lock_fd_ = -1;
     int fifo_fd_ = -1;
     bool owns_lock_ = false;
@@ -429,6 +434,8 @@ public:
         const auto imu_topic = get_parameter_or<std::string>("imu_snapshot_topic", "");
         if (!imu_topic.empty()) imu_buffer_ = std::make_unique<ImuSnapshotBuffer>(*this, 1024, imu_topic);
         register_output(topic, frame_output_);
+        register_output(std::format("/{}/tunable_capture_available", get_component_name()),
+            available_output_, false);
         register_input(std::format("/{}/enable", get_component_name()), enable_input_, false);
         control_ = std::make_unique<Control>(get_component_name());
         control_->publish(state_, true);
@@ -448,7 +455,9 @@ public:
 
     auto update() -> void override {
         // Read executor-owned inputs only on its thread; the camera worker consumes this snapshot.
-        capture_enabled_.store(!enable_input_.ready() || *enable_input_, std::memory_order_relaxed);
+        const auto enabled = !enable_input_.ready() || *enable_input_;
+        capture_enabled_.store(enabled, std::memory_order_relaxed);
+        *available_output_ = enabled && camera_connected_.load(std::memory_order_relaxed);
     }
 
 private:
@@ -462,6 +471,7 @@ private:
     auto disconnect(Camera& camera, std::string message) -> void {
         camera.close();
         state_.connected = false;
+        camera_connected_.store(false, std::memory_order_relaxed);
         state_.error = std::move(message);
         next_connect_ = Clock::now() + 1s;
         RCLCPP_WARN(get_logger(), "[CAMERA] %s", state_.error.c_str());
@@ -541,6 +551,7 @@ private:
                         config_.exposure_us = state_.exposure_us->value;
                         config_.gain = state_.gain->value;
                         state_.connected = true;
+                        camera_connected_.store(true, std::memory_order_relaxed);
                         state_.error.clear();
                         last_frame = Clock::now();
                         RCLCPP_INFO(get_logger(), "[CAMERA] Tunable camera connected");
@@ -571,11 +582,13 @@ private:
             }
             camera.close();
             state_.connected = false;
+            camera_connected_.store(false, std::memory_order_relaxed);
             state_.error = "Camera component stopped";
             control_->publish(state_, true);
         } catch (const std::exception& error) {
             camera.close();
             state_.connected = false;
+            camera_connected_.store(false, std::memory_order_relaxed);
             state_.error = error.what();
             RCLCPP_ERROR(get_logger(), "Tunable camera worker stopped: %s", error.what());
             try { control_->publish(state_, true); } catch (...) {}
@@ -590,9 +603,11 @@ private:
     Clock::duration imu_delay_ {};
     Clock::time_point next_connect_ {};
     InputInterface<bool> enable_input_;
+    OutputInterface<bool> available_output_;
     EventOutputInterface<std::shared_ptr<const rmcs_msgs::CameraFrame>> frame_output_;
     rmcs_utility::PooledSharedFactory<rmcs_msgs::CameraFrame> frame_factory_ { 128 };
     std::atomic<bool> capture_enabled_ { true };
+    std::atomic<bool> camera_connected_ { false };
     std::atomic<bool> stop_requested_ { false };
     std::thread worker_;
 };

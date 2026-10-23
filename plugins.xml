@@ -20,4 +20,7 @@
   <class type="rmcs::AutoAimStreamerComponent" base_class_type="rmcs_executor::Component">
     <description>Streams camera frames over RTP without running auto aim.</description>
   </class>
+  <class type="rmcs::AutoAimDetectionPreviewComponent" base_class_type="rmcs_executor::Component">
+    <description>Optionally annotates tunable camera previews using the existing detectors.</description>
+  </class>
 </library>

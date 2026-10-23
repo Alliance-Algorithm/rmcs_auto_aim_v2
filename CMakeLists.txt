@@ -48,6 +48,7 @@ set(AUTO_AIM_COMPONENT
     ${PROJECT_SOURCE_DIR}/src/io/recorder/player.cpp
     ${PROJECT_SOURCE_DIR}/src/io/recorder/video_player.cpp
     ${PROJECT_SOURCE_DIR}/src/io/streamer/streamer.cpp
+    ${PROJECT_SOURCE_DIR}/src/io/streamer/detection_preview.cpp
 )
 
 ## 代码资源搜索
