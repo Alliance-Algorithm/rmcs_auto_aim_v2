@@ -1,6 +1,6 @@
 #include "tracker.hpp"
 
-#include "module/tracker/model/outpost.hpp"
+#include "module/tracker/model/outpost2d.hpp"
 #include "module/tracker/model/robot.hpp"
 #include "module/tracker/model/rune.hpp"
 #include "utility/logging/printer.hpp"
@@ -45,7 +45,7 @@ struct Tracker::Impl {
         };
     } robot_config;
 
-    struct OutpostConfig : OutpostModel::Config, Serializable {
+    struct OutpostConfig : Outpost2dModel::Config, Serializable {
         static constexpr std::tuple metas {
             // clang-format off
             &OutpostConfig::process_noise_xy, "process_noise_xy",
@@ -100,7 +100,7 @@ struct Tracker::Impl {
     std::unordered_map<DeviceId, RobotModel> robot_models;
 
     Timestamp outpost_stamp;
-    std::unique_ptr<OutpostModel> outpost;
+    std::unique_ptr<Outpost2dModel> outpost;
 
     Timestamp rune_stamp, rune_corrected_stamp;
     std::unique_ptr<RuneModel> rune;
@@ -259,25 +259,68 @@ struct Tracker::Impl {
             seen[bar.genre].bars.push_back(bar);
         }
 
-        { // 迭代前哨站 Model
+        // { // 迭代前哨站 Model
+        //     constexpr auto kId = DeviceId::OUTPOST;
+        //     if (seen.contains(kId)) {
+        //         const auto& armors = seen[kId].armor3ds;
+        //         /// @NOTE:
+        //         ///  前哨站为单装甲板输入(120 度，也只能看到一块)，邻侧灯条的信息
+        //         ///  已经在距离优化那个步骤消费掉了，所以这里不需要传入，有时间这
+        //         ///  里也会换成纯 2d 观测，到时候就完全不需要 Armor3d 了
+        //         if (!armors.empty()) {
+        //             if (outpost == nullptr) {
+        //                 outpost = std::make_unique<OutpostModel>(armors.front());
+        //                 outpost->configure(outpost_config);
+        //             } else {
+        //                 const auto dt = std::chrono::duration<double> {
+        //                     timestamp - outpost_stamp,
+        //                 };
+        //                 outpost->predict(dt.count());
+        //                 outpost->correct(armors.front());
+
+        //                 if (outpost->diverged()) {
+        //                     outpost = nullptr;
+        //                     logging.warn("{} is diverged", get_enum_name(kId));
+        //                 }
+        //             }
+        //             outpost_stamp = timestamp;
+        //         }
+        //     }
+        // }
+
+        { //2d前哨站迭代
             constexpr auto kId = DeviceId::OUTPOST;
             if (seen.contains(kId)) {
-                const auto& armors = seen[kId].armor3ds;
+                const auto& armors = seen[kId].armor2ds;
+                const auto& bars = seen[kId].bars;
                 /// @NOTE:
                 ///  前哨站为单装甲板输入(120 度，也只能看到一块)，邻侧灯条的信息
-                ///  已经在距离优化那个步骤消费掉了，所以这里不需要传入，有时间这
-                ///  里也会换成纯 2d 观测，到时候就完全不需要 Armor3d 了
+                ///  已经在距离优化那个步骤消费掉了，所以这里不需要传入，现在先
+                ///  只使用模型给出的装甲板的两个灯条观测，后续再添加门禁加入单根灯条
                 if (!armors.empty()) {
                     if (outpost == nullptr) {
-                        outpost = std::make_unique<OutpostModel>(armors.front());
-                        outpost->configure(outpost_config);
+                        auto model = std::make_unique<Outpost2dModel>(outpost_config);
+                        model->update_camera(std::bit_cast<std::array<double, 9>>(camera.camera_matrix),
+                        camera.distort_coeff);
+                        model->update_transform({
+                            .translation = camera.translation,
+                            .orientation = camera.orientation,
+                        });
+                         if (model->init(armors.front())) {
+                        outpost                 = std::move(model);
+                        logging.info("Init OK with {}", get_enum_name(DeviceId::OUTPOST));
+                        }
                     } else {
                         const auto dt = std::chrono::duration<double> {
                             timestamp - outpost_stamp,
                         };
+                        outpost->update_transform({
+                            .translation = camera.translation,
+                            .orientation = camera.orientation,
+                        });
                         outpost->predict(dt.count());
-                        outpost->correct(armors.front());
-
+                        outpost->correct(armors.front(),bars);
+                        
                         if (outpost->diverged()) {
                             outpost = nullptr;
                             logging.warn("{} is diverged", get_enum_name(kId));
@@ -287,6 +330,7 @@ struct Tracker::Impl {
                 }
             }
         }
+
         { // 迭代大符
             if (!stored.icons.empty() || !stored.bullseyes.empty()) {
                 if (rune == nullptr) {
@@ -396,8 +440,15 @@ struct Tracker::Impl {
 
                         device = DeviceId::OUTPOST;
                     }
-                    std::ranges::copy(outpost->full(), std::back_inserter(addition.tracked3d));
-
+                    std::ranges::copy( // Armor 2d
+                        outpost->addition().armors, std::back_inserter(addition.tracked2d));
+                    std::ranges::copy( // Armor 3d
+                        outpost->full(), std::back_inserter(addition.tracked3d));
+                    std::ranges::copy(
+                        outpost->addition().tracked | std::views::transform([](const auto& item) {
+                            return Addition::Lightbar { item.lightbar_id, item.point };
+                        }),
+                        std::back_inserter(addition.lightbars));
                     const auto a = state.rotation_angle;
                     const auto v = state.rotation_speed;
                     addition.infos.push_back({
