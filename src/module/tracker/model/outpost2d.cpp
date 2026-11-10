@@ -54,12 +54,13 @@ struct Outpost2dModel::Impl {
         Covariance posteriors_covariance = Covariance::Identity();
 
         // 相位、高度始终对应初始化的参考板，切板只改变 current_index。
-        int reference_index     = 0;
-        int current_index       = 0;
-        int direction           = 0;
-        double last_yaw         = 0.0;
-        double score            = 0.0;
-        std::size_t prune_count = 0;
+        int reference_index       = 0;
+        int current_index         = 0;
+        int direction             = 0;
+        double last_yaw           = 0.0;
+        double score              = 0.0;
+        std::size_t prune_count   = 0;
+        std::size_t correct_count = 0;
 
         auto get_state() const noexcept -> State {
             return State {
@@ -628,6 +629,36 @@ struct Outpost2dModel::Impl {
         }
     }
 
+    auto validate_correction(const Hypothesis& model, const Correction& correction,
+        const ObservationVector& points) const -> bool {
+        const auto& prior = model.posteriors_state;
+        const auto& state = correction.state;
+        const auto xy_error =
+            std::hypot(state[kStateX] - prior[kStateX], state[kStateY] - prior[kStateY]);
+        const auto xy_limit = std::hypot(state[kStateX], state[kStateY]) > 5.0 ? 0.20 : 0.10;
+        // 初次校正允许修正 PnP 初值，之后沿用旧前哨站的中心跳变门禁。
+        if (model.correct_count > 0 && xy_error > xy_limit) return false;
+
+        auto projected = observable;
+        projected.update(state.head<3>(), state[kStateA], model.reference_index);
+        const auto innovation = ObservationVector {
+            points - make_observation(projected, correction.index),
+        };
+        if (!innovation.allFinite()) return false;
+
+        // 校正后必须实际拟合完整板，不能只凭马氏距离小就刷新有效观测时间。
+        const auto height = 0.5
+            * ((points.segment<2>(0) - points.segment<2>(6)).norm()
+                + (points.segment<2>(2) - points.segment<2>(4)).norm());
+        // 用灯条像素尺度换算位置容差，门限不随滤波协方差放大。
+        const auto pixel_limit = std::max(3.0, xy_limit * height / kLightBarHeight);
+        for (int i = 0; i < 4; ++i) {
+            if (innovation.segment<2>(i * 2).squaredNorm() > pixel_limit * pixel_limit)
+                return false;
+        }
+        return true;
+    }
+
     auto correct(const Armor2d& armor, std::span<const Lightbar2d> lightbars) noexcept -> void {
         if (hypotheses.empty()) return;
         auto points = ObservationVector { };
@@ -644,6 +675,7 @@ struct Outpost2dModel::Impl {
                 auto correction = evaluate(model, points, i);
                 if (!correction) continue;
                 correct_lightbars(*correction, model, armor, lightbars);
+                if (!validate_correction(model, *correction, points)) continue;
                 if (candidate && correction->cost >= candidate->cost) continue;
                 candidate = correction;
             }
@@ -651,7 +683,7 @@ struct Outpost2dModel::Impl {
             corrections.push_back(candidate);
         }
         addition.tracked.clear();
-        // 全部分支都拒绝的帧不提供剪枝证据，也不能污染相位。
+        // 全部分支都拒绝的帧不提供剪枝证据，也不刷新 since_correct；持续失败由 tracker 重建。
         if (min_cost == std::numeric_limits<double>::max()) {
             update_addition();
             return;
@@ -669,6 +701,7 @@ struct Outpost2dModel::Impl {
             model.posteriors_covariance = correction->covariance;
             model.current_index         = correction->index;
             model.last_yaw              = correction->yaw;
+            model.correct_count += 1;
         }
 
         const auto best_index = static_cast<std::size_t>(&best() - hypotheses.data());
