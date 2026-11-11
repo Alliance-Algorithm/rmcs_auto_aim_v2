@@ -5,6 +5,9 @@
   <class type="rmcs::AutoAimCapturerComponent" base_class_type="rmcs_executor::Component">
     <description>Captures and synchronizes Hikcamera frames for auto aim.</description>
   </class>
+  <class type="rmcs::AutoAimTunableCapturerComponent" base_class_type="rmcs_executor::Component">
+    <description>Captures free-running camera frames with runtime exposure and gain controls.</description>
+  </class>
   <class type="rmcs::AutoAimRecorderComponent" base_class_type="rmcs_executor::Component">
     <description>Records CameraFrame events to raw Bayer and CSV files.</description>
   </class>
@@ -13,5 +16,11 @@
   </class>
   <class type="rmcs::AutoAimVideoPlayerComponent" base_class_type="rmcs_executor::Component">
     <description>Plays CameraFrame events from a regular video file.</description>
+  </class>
+  <class type="rmcs::AutoAimStreamerComponent" base_class_type="rmcs_executor::Component">
+    <description>Streams camera frames over RTP without running auto aim.</description>
+  </class>
+  <class type="rmcs::AutoAimDetectionPreviewComponent" base_class_type="rmcs_executor::Component">
+    <description>Optionally annotates tunable camera previews using the existing detectors.</description>
   </class>
 </library>

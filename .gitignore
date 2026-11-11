@@ -1,6 +1,7 @@
 devel/
 logs/
 build/
+/tool/cxx/build-*/
 bin/
 lib/
 install/
@@ -66,3 +67,10 @@ config/unreal.yaml
 config/unreal.yml
 config/config.override.yaml
 config/config.override.yml
+
+# For Agent Development
+.opencode/
+.claude/
+.codex/
+.mimo/
+CLAUDE.md
