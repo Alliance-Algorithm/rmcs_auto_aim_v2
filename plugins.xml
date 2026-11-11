@@ -14,4 +14,7 @@
   <class type="rmcs::AutoAimVideoPlayerComponent" base_class_type="rmcs_executor::Component">
     <description>Plays CameraFrame events from a regular video file.</description>
   </class>
+  <class type="rmcs::AutoAimStreamerComponent" base_class_type="rmcs_executor::Component">
+    <description>Streams camera frames over RTP without running auto aim.</description>
+  </class>
 </library>
