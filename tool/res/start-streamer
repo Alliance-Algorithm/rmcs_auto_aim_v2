@@ -46,6 +46,8 @@ CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
 CPU_COUNT = os.cpu_count() or 1
 CAMERA_COMPONENT = os.environ.get("AUTOAIM_CAMERA_COMPONENT", "auto_aim_capturer")
 CAMERA_PARAMETERS = ("exposure_us", "gain")
+TUNABLE_CAPTURER_TYPE = "rmcs::AutoAimTunableCapturerComponent"
+DETECTION_STATUSES = ("idle", "starting", "running", "error", "unavailable")
 CONTROL_STATE_MAX_AGE = 2.0
 CONTROL_STATE_MAX_BYTES = 65536
 CONTROL_COMMAND_TIMEOUT = 2.0
@@ -178,6 +180,7 @@ class ControlChannel:
 
 
 CAMERA_CHANNEL = ControlChannel("camera", "/tmp/autoaim/camera")
+DETECTION_CHANNEL = ControlChannel("detection", "/tmp/autoaim/detection")
 
 
 # ── 相机控制 ──────────────────────────────────────────────────────────────────
@@ -271,6 +274,102 @@ def update_camera(parameter: str, value: float) -> dict:
                 validate_connected_camera(camera)
             time.sleep(CONTROL_POLL_INTERVAL)
         raise ControlApiError(504, "Timed out waiting for camera readback", camera)
+
+
+# ── 识别预览控制 ──────────────────────────────────────────────────────────────
+
+
+def unavailable_detection_state(message: str, detection: dict | None = None) -> dict:
+    with DETECTION_CHANNEL.state_lock:
+        snapshot = dict(DETECTION_CHANNEL.last_state or {})
+    if detection is not None:
+        snapshot.update(detection)
+    snapshot.setdefault("pid", 0)
+    snapshot.setdefault("updated_at", 0)
+    snapshot.setdefault("capturer_component", CAMERA_COMPONENT)
+    snapshot.setdefault("last_request", {"id": "", "ok": False, "error": ""})
+    snapshot["available"] = False
+    snapshot["enabled"] = False
+    snapshot["status"] = "unavailable"
+    snapshot["error"] = message
+    return snapshot
+
+
+def validate_detection_fields(detection: dict) -> None:
+    result = detection.get("last_request")
+    if (not isinstance(detection.get("available"), bool)
+            or not isinstance(detection.get("enabled"), bool)
+            or detection.get("status") not in DETECTION_STATUSES
+            or not isinstance(detection.get("error"), str)
+            or not isinstance(result, dict)
+            or not isinstance(result.get("id"), str)
+            or not isinstance(result.get("ok"), bool)
+            or not isinstance(result.get("error"), str)):
+        raise ControlApiError(503, "Invalid detection state", detection)
+    if detection.get("capturer_component") != CAMERA_COMPONENT:
+        raise ControlApiError(503, "Detection capturer component does not match", detection)
+
+
+def require_detection_available(detection: dict) -> None:
+    if not detection["available"]:
+        message = message_or(detection["error"], "Detection preview is unavailable")
+        raise ControlApiError(503, message, detection)
+
+
+def read_detection_state(require_available: bool = True) -> dict:
+    detection = DETECTION_CHANNEL.read_state(validate_detection_fields)
+    with DETECTION_CHANNEL.state_lock:
+        DETECTION_CHANNEL.last_state = dict(detection)
+    if require_available:
+        require_detection_available(detection)
+    return detection
+
+
+def detection_context_state() -> dict:
+    try:
+        return read_detection_state(require_available=False)
+    except ControlApiError as error:
+        return unavailable_detection_state(str(error), error.state)
+
+
+def check_detection_can_start(read_player_paused: Callable[[], bool]) -> None:
+    try:
+        camera = read_camera_state()
+    except ControlApiError as error:
+        # 不附带相机状态，否则会被并入识别状态快照。
+        raise ControlApiError(503, str(error)) from error
+    if (camera.get("component_type") != TUNABLE_CAPTURER_TYPE
+            or camera.get("component_name") != CAMERA_COMPONENT):
+        raise ControlApiError(503, "Detection requires the selected tunable capturer")
+    try:
+        read_player_paused()
+    except OSError:
+        return
+    raise ControlApiError(503, "Detection preview cannot start during player playback")
+
+
+def update_detection(enabled: bool, read_player_paused: Callable[[], bool]) -> dict:
+    with DETECTION_CHANNEL.command_slot() as deadline:
+        if enabled:
+            check_detection_can_start(read_player_paused)
+        detection = read_detection_state(require_available=enabled)
+        pid = detection["pid"]
+        request_id = DETECTION_CHANNEL.write_command(str(int(enabled)))
+        while time.monotonic() < deadline:
+            detection = read_detection_state(require_available=False)
+            if detection["pid"] != pid:
+                raise ControlApiError(
+                    503, "Detection component restarted during the update", detection)
+            result = detection["last_request"]
+            if result["id"] == request_id:
+                if not result["ok"]:
+                    message = message_or(result["error"], "Detection rejected the update")
+                    raise ControlApiError(500, message, detection)
+                return detection
+            if enabled:
+                require_detection_available(detection)
+            time.sleep(CONTROL_POLL_INTERVAL)
+        raise ControlApiError(504, "Timed out waiting for detection acknowledgement", detection)
 
 
 # ── 系统状态采集 ──────────────────────────────────────────────────────────────
@@ -415,6 +514,20 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
             self._json_response(error.code, {"status": "error", "camera": camera,
                                               "message": str(error)})
 
+    def _api_detection(self) -> None:
+        try:
+            payload = self._read_json_payload()
+            if (not isinstance(payload, dict) or set(payload) != {"enabled"}
+                    or not isinstance(payload["enabled"], bool)):
+                raise ControlApiError(400, "Expected an object with a boolean enabled value")
+            detection = update_detection(payload["enabled"], self._read_player_paused)
+            self._json_response(200, {"status": "ok", "detection": detection})
+        except ControlApiError as error:
+            detection = (unavailable_detection_state(str(error), error.state)
+                         if error.code == 503 else error.state)
+            self._json_response(error.code, {"status": "error", "detection": detection,
+                                              "message": str(error)})
+
     def _read_json_payload(self) -> object:
         if self.headers.get("Transfer-Encoding") is not None:
             raise ControlApiError(400, "Transfer-Encoding is not supported")
@@ -495,6 +608,7 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
 
         context["system"] = self._read_system_status()
         context["camera"] = camera_context_state()
+        context["detection"] = detection_context_state()
 
         return context
 
@@ -597,6 +711,7 @@ class AutoAimHandler(SimpleHTTPRequestHandler):
         sys.stderr.write(f"[HTTP] {format % args}\n")
 
     _POST_ROUTES = {
+        "/api/detection": _api_detection,
         "/api/camera": _api_camera,
         "/api/record": _api_record,
         "/api/play_pause": _api_play_pause,
